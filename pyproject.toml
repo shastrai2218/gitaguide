@@ -1,0 +1,40 @@
+# Tooling configuration only - GitaGuide runs from the repo root (no install).
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["."]
+exclude = [".venv", "frontend", "corpus/data"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RUF"]
+ignore = [
+    "E501",    # long lines are allowed in regex tables and prompts
+    "B008",    # FastAPI dependency defaults
+    "RUF001",  # ambiguous unicode (Devanagari verse text)
+    "RUF002",
+    "RUF003",
+    "SIM108",  # ternaries are not always clearer
+    "UP042",   # (str, Enum) is deliberate: pydantic v2 + JSON round-tripping
+    "RUF012",  # ClassVar noise on SQLAlchemy/lexicon tables
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "SLF001", "ANN"]
+"eval/*" = ["S101"]
+"app/pipeline/emotion.py" = ["RUF012"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "corpus", "kg", "eval"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_ignores = false
+warn_redundant_casts = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
+exclude = "(frontend|corpus/data)"
+
+[[tool.mypy.overrides]]
+module = ["tests.*", "eval.*"]
+disallow_untyped_defs = false

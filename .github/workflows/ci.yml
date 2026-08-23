@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Every CI job runs fully offline: no Neo4j, no Postgres, no API keys.
+  GITAGUIDE_MOCK_MODE: "true"
+  PYTHONPATH: "."
+
+jobs:
+  tests:
+    name: unit tests (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install core dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Offline core only - the heavy ML/graph extras are not needed because
+          # mock mode replaces those backends with in-process fakes.
+          pip install fastapi "uvicorn[standard]" pydantic pydantic-settings httpx \
+                      "SQLAlchemy>=2.0" aiosqlite pytest pytest-asyncio pytest-cov ruff
+
+      - name: Lint (ruff)
+        run: ruff check app corpus kg eval tests
+
+      - name: Unit tests
+        run: pytest tests -q --cov=app --cov=corpus --cov=kg --cov-report=term-missing
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.python-version }}
+          path: .coverage
+          if-no-files-found: ignore
+
+  safety-redteam:
+    name: safety red-team (must be 100% recall)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install core dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install fastapi pydantic pydantic-settings httpx pytest pytest-asyncio
+
+      - name: Red-team suite
+        # This job is the release gate: a missed crisis prompt fails the build.
+        run: pytest eval/test_safety_redteam.py -v
+
+  retrieval-eval:
+    name: retrieval metrics (report only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install core dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install fastapi pydantic pydantic-settings httpx
+
+      - name: Recall@5 / MRR on gold pairs (hashing embedder - a floor, not a result)
+        run: |
+          python -m eval.retrieval_eval --k 5 --json eval_results.json
+          echo "--- graph ablation ---"
+          python -m eval.retrieval_eval --k 5 --no-graph
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: retrieval-eval
+          path: eval_results.json
+
+  frontend:
+    name: frontend build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install
+        run: npm install --no-audit --no-fund
+
+      - name: Type-check and build
+        run: npm run build

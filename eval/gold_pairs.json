@@ -1,0 +1,86 @@
+{
+  "description": "Gold (query -> relevant verse) pairs for retrieval evaluation. relevant = verses a domain reader would accept as a correct source for the query; graded[verse] = 2 (primary) or 1 (acceptable). Extend freely - retrieval_eval.py reads any number of pairs.",
+  "corpus": "corpus/data/sample_corpus.json",
+  "pairs": [
+    {
+      "id": "gp-001",
+      "query": "I keep panicking about whether my project will succeed. I cannot stop thinking about the outcome.",
+      "expected_intent": "seek_guidance",
+      "relevant": ["BG-2.47", "BG-2.14"],
+      "graded": { "BG-2.47": 2, "BG-2.14": 1, "BG-2.71": 1 },
+      "note": "Canonical outcome-anxiety case; nishkama karma is the primary answer."
+    },
+    {
+      "id": "gp-002",
+      "query": "My father passed away last month and I cannot stop crying.",
+      "expected_intent": "emotional_support",
+      "relevant": ["BG-2.11", "BG-18.66"],
+      "graded": { "BG-2.11": 2, "BG-18.66": 1, "BG-2.14": 1 },
+      "note": "Bereavement. Must NOT trip the safety gate."
+    },
+    {
+      "id": "gp-003",
+      "query": "My manager took credit for my work in front of the whole team and I am furious.",
+      "expected_intent": "professional_dilemma",
+      "relevant": ["BG-2.62", "AS-2.9.1"],
+      "graded": { "BG-2.62": 2, "AS-2.9.1": 1, "AS-1.7.6": 1 },
+      "note": "Anger at work: the Gita explains the mechanism, the Arthashastra the remedy."
+    },
+    {
+      "id": "gp-004",
+      "query": "Should I quit my stable job to join a startup that my friend is building?",
+      "expected_intent": "professional_dilemma",
+      "relevant": ["BG-3.35", "AS-7.1.2"],
+      "graded": { "BG-3.35": 2, "AS-7.1.2": 1, "BG-2.47": 1 },
+      "note": "Svadharma versus borrowed ambition, plus the six-measures decision frame."
+    },
+    {
+      "id": "gp-005",
+      "query": "I am working sixteen hours a day and I am completely burnt out.",
+      "expected_intent": "professional_dilemma",
+      "relevant": ["AS-1.19.34", "BG-2.14"],
+      "graded": { "AS-1.19.34": 2, "BG-2.14": 1, "BG-6.5": 1 },
+      "note": "Workload structure is an Arthashastra topic before it is a Gita topic."
+    },
+    {
+      "id": "gp-006",
+      "query": "I hate myself for the mistakes I made and I cannot forgive myself.",
+      "expected_intent": "emotional_support",
+      "relevant": ["BG-6.5", "BG-18.66"],
+      "graded": { "BG-6.5": 2, "BG-6.6": 2, "BG-18.66": 1 },
+      "note": "Self-directed hostility; 6.5-6.6 is the two-verse unit."
+    },
+    {
+      "id": "gp-007",
+      "query": "What does the Gita mean when it says to act without attachment to results?",
+      "expected_intent": "scripture_question",
+      "relevant": ["BG-2.47"],
+      "graded": { "BG-2.47": 2, "BG-2.71": 1 },
+      "note": "Exegetical, not personal; the answer should explain rather than advise."
+    },
+    {
+      "id": "gp-008",
+      "query": "How do I decide whom to trust with responsibility in my team?",
+      "expected_intent": "professional_dilemma",
+      "relevant": ["AS-1.9.1", "AS-2.9.1"],
+      "graded": { "AS-1.9.1": 2, "AS-2.9.1": 2 },
+      "note": "Hiring rubric plus the audit principle."
+    },
+    {
+      "id": "gp-009",
+      "query": "A colleague keeps provoking me in meetings and I want to lash out.",
+      "expected_intent": "professional_dilemma",
+      "relevant": ["BG-2.62", "BG-12.15", "AS-1.7.6"],
+      "graded": { "BG-2.62": 2, "AS-1.7.6": 1, "BG-12.15": 1 },
+      "note": "Anger regulation with a workplace object."
+    },
+    {
+      "id": "gp-010",
+      "query": "There is corruption in my department and I am disgusted, but reporting it could cost my job.",
+      "expected_intent": "professional_dilemma",
+      "relevant": ["AS-2.9.1", "AS-7.1.2"],
+      "graded": { "AS-2.9.1": 2, "AS-7.1.2": 1, "BG-3.35": 1 },
+      "note": "Ethics under risk: audit principle plus strategic timing."
+    }
+  ]
+}

@@ -1,0 +1,319 @@
+"""Stage 2 - intent classification over six classes.
+
+Research-pipeline role
+---------------------
+Intent decides *how* the rest of the pipeline behaves:
+
+* ``crisis``               -> the safety gate's model layer trips (no retrieval)
+* ``professional_dilemma`` -> retrieval re-ranking favours the Arthashastra
+* ``emotional_support``    -> re-ranking favours the Gita and emotion edges
+* ``scripture_question``   -> exegesis framing, verse text weighted over advice
+* ``seek_guidance``        -> the default balanced blend
+* ``other``                -> small talk; short answer, minimal retrieval
+
+The production classifier is zero-shot through the LLM wrapper, blended with a
+transparent keyword prior so the system degrades gracefully (and works offline).
+A fine-tuned classifier is future work - see :class:`FineTunedIntentClassifier`.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+from collections.abc import Mapping, Sequence
+
+from app.config import Settings, get_settings
+from app.llm.base import TASK_INTENT, LLMProvider, LLMResponse
+from app.pipeline.schemas import EmotionResult, IntentLabel, IntentResult
+from app.pipeline.textutils import (
+    has_academic_framing,
+    is_negated,
+    is_third_party_past,
+)
+
+logger = logging.getLogger(__name__)
+
+#: How much the LLM's zero-shot distribution counts against the keyword prior.
+LLM_WEIGHT = 0.65
+PRIOR_WEIGHT = 1.0 - LLM_WEIGHT
+
+INTENT_DEFINITIONS: dict[IntentLabel, str] = {
+    IntentLabel.SEEK_GUIDANCE: (
+        "wants direction or a decision on a life situation that is not primarily work"
+    ),
+    IntentLabel.EMOTIONAL_SUPPORT: (
+        "primarily expressing pain, loneliness, grief or anxiety and wanting to be heard"
+    ),
+    IntentLabel.PROFESSIONAL_DILEMMA: (
+        "a work, career, business, money or leadership decision or conflict"
+    ),
+    IntentLabel.SCRIPTURE_QUESTION: (
+        "asking what a text, verse, chapter or concept means, in an exegetical sense"
+    ),
+    IntentLabel.CRISIS: (
+        "at risk of self-harm or suicide, being harmed by someone, or in a medical emergency"
+    ),
+    IntentLabel.OTHER: "greeting, small talk, meta questions about the system, or off-topic",
+}
+
+#: ``(regex, intent, weight)``. Kept flat and readable so it can be reported in
+#: the dissertation as the interpretable baseline.
+INTENT_CUES: tuple[tuple[str, IntentLabel, float], ...] = (
+    # crisis - deliberately overweighted so it dominates after normalisation
+    (r"\b(?:kill(?:ing)? myself|end my life|suicidal|suicide|want to die|self[- ]?harm|"
+     r"cut(?:ting)? myself|better off dead|no reason to live|overdose|"
+     r"threatens? to kill me|(?:beats?|hits?|hurts?) me)\b", IntentLabel.CRISIS, 2.6),
+    # scripture question
+    (r"\b(?:gita|bhagavad|arthashastra|kautilya|chanakya|krishna|arjuna|shloka|sloka|verse|"
+     r"chapter \d+|sanskrit|dharma|karma yoga|moksha)\b", IntentLabel.SCRIPTURE_QUESTION, 0.55),
+    (r"\b(?:what does .* (?:say|mean)|meaning of|explain|interpretation of|commentary on|"
+     r"which verse|teach me about)\b", IntentLabel.SCRIPTURE_QUESTION, 0.5),
+    # professional dilemma
+    (r"\b(?:job|career|boss|manager|promotion|appraisal|resign|resignation|quit my job|"
+     r"salary|raise|team|colleague|coworker|client|startup|business|company|office|"
+     r"deadline|interview|offer letter|layoff|fired|workplace|employee|founder|"
+     r"co[- ]?founder|investor|profit|loss|contract|negotiat)\w*\b",
+     IntentLabel.PROFESSIONAL_DILEMMA, 0.6),
+    (r"\b(?:hire|fire|delegate|micromanage|politics at work|credit for my work|"
+     r"working (?:\w+|\d+) hours|workload|overtime|night shift|report(?:ing)? it)\b",
+     IntentLabel.PROFESSIONAL_DILEMMA, 0.5),
+    # emotional support
+    (r"\b(?:sad|lonely|alone|depressed|anxious|anxiety|grief|grieving|crying|cry|empty|numb|"
+     r"heartbroken|hopeless|worthless|exhausted|burnt ?out|overwhelmed|ashamed|guilty|"
+     r"betrayed|hurt(?:ing)?|miss (?:him|her|them|my))\b", IntentLabel.EMOTIONAL_SUPPORT, 0.55),
+    (r"\b(?:passed away|died|lost my (?:father|mother|mom|dad|wife|husband|son|daughter|"
+     r"friend|brother|sister))\b", IntentLabel.EMOTIONAL_SUPPORT, 0.8),
+    (r"\b(?:panic|panicking|cannot stop (?:thinking|crying)|can(?:no|')?t stop (?:thinking|crying)|"
+     r"obsess\w*|hate myself|blame myself|forgive myself|not good enough)\b",
+     IntentLabel.EMOTIONAL_SUPPORT, 0.6),
+    # seek guidance
+    (r"\b(?:what should i do|should i|how do i|how should i|help me (?:decide|choose)|"
+     r"advice|advise|guide me|what would you do|i (?:am|'m) (?:torn|conflicted|stuck)|"
+     r"can(?:no|')?t decide)\b", IntentLabel.SEEK_GUIDANCE, 0.6),
+    (r"\b(?:marriage|family|parents|relationship|friendship|studies|exam|health|"
+     r"purpose in life|meaning of my life)\b", IntentLabel.SEEK_GUIDANCE, 0.35),
+    # other / small talk
+    (r"^\s*(?:hi|hello|hey|namaste|good (?:morning|evening))\b", IntentLabel.OTHER, 0.9),
+    (r"\b(?:who (?:are|made) you|what can you do|how do you work|thank you|thanks)\b",
+     IntentLabel.OTHER, 0.7),
+)
+
+_COMPILED_CUES: tuple[tuple[re.Pattern[str], IntentLabel, float], ...] = tuple(
+    (re.compile(pattern, re.IGNORECASE), intent, weight)
+    for pattern, intent, weight in INTENT_CUES
+)
+
+#: Emotions that push a borderline turn toward ``emotional_support``.
+SUPPORT_EMOTIONS = frozenset({"grief", "sadness", "remorse", "fear", "disappointment"})
+
+
+def heuristic_intent_scores(text: str) -> dict[str, float]:
+    """Interpretable keyword prior over the six intents (sums to 1.0).
+
+    Also used by :class:`app.llm.fake.FakeLLMProvider` so that offline runs
+    behave like a (weak) zero-shot classifier rather than a constant.
+    """
+    raw: dict[IntentLabel, float] = dict.fromkeys(IntentLabel, 0.0)
+    suppress_crisis_cues = has_academic_framing(text) or is_third_party_past(text)
+    for pattern, intent, weight in _COMPILED_CUES:
+        matches = list(pattern.finditer(text))
+        if intent is IntentLabel.CRISIS:
+            # Identical negation/context rules to the safety gate (textutils), so
+            # "I am not suicidal" does not route the turn to crisis.
+            matches = (
+                []
+                if suppress_crisis_cues
+                else [m for m in matches if not is_negated(text, m.start())]
+            )
+        if matches:
+            raw[intent] += weight * (1.0 + 0.25 * (len(matches) - 1))
+
+    if sum(raw.values()) == 0.0:
+        raw[IntentLabel.OTHER] = 1.0
+    else:
+        # A small floor keeps every class non-zero for reporting.
+        for label in raw:
+            raw[label] += 0.02
+
+    total = sum(raw.values())
+    return {label.value: round(value / total, 4) for label, value in raw.items()}
+
+
+def _blend(
+    prior: Mapping[str, float],
+    llm_scores: Mapping[str, float] | None,
+) -> dict[str, float]:
+    """Weighted blend of the two distributions, renormalised."""
+    if not llm_scores:
+        return dict(prior)
+    blended = {
+        label: PRIOR_WEIGHT * prior.get(label, 0.0) + LLM_WEIGHT * llm_scores.get(label, 0.0)
+        for label in {*prior, *llm_scores}
+        if label in {item.value for item in IntentLabel}
+    }
+    total = sum(blended.values()) or 1.0
+    return {label: round(value / total, 4) for label, value in blended.items()}
+
+
+def build_intent_prompt(text: str, emotion: EmotionResult | None = None) -> str:
+    """Zero-shot prompt; the ``TASK:`` marker routes the fake provider."""
+    taxonomy = "\n".join(
+        f"- {label.value}: {description}" for label, description in INTENT_DEFINITIONS.items()
+    )
+    emotion_line = ""
+    if emotion is not None and emotion.labels:
+        tops = ", ".join(f"{item.emotion}={item.score:.2f}" for item in emotion.labels[:3])
+        emotion_line = f"DETECTED EMOTION: {tops} (intensity {emotion.intensity:.2f})\n"
+
+    return (
+        f"TASK: {TASK_INTENT}\n"
+        "Classify the user message into exactly one intent from this taxonomy:\n"
+        f"{taxonomy}\n\n"
+        "Rules:\n"
+        "- If there is any indication of self-harm, suicide, being harmed by someone, or a "
+        "medical emergency, the intent is crisis.\n"
+        "- Work, money, career and leadership problems are professional_dilemma even when "
+        "they are emotional.\n"
+        "- Return ONLY minified JSON: "
+        '{"intent": "...", "confidence": 0.0-1.0, "scores": {"<intent>": 0.0-1.0, ...}, '
+        '"rationale": "one short sentence"}\n\n'
+        f"{emotion_line}"
+        f"USER MESSAGE: {text}\n"
+    )
+
+
+class IntentClassifier:
+    """Zero-shot LLM classifier blended with the keyword prior.
+
+    Examples
+    --------
+    >>> import asyncio
+    >>> from app.llm.fake import FakeLLMProvider
+    >>> clf = IntentClassifier(llm=FakeLLMProvider())
+    >>> asyncio.run(clf.classify("Should I quit my job for a startup?")).intent
+    <IntentLabel.PROFESSIONAL_DILEMMA: 'professional_dilemma'>
+    """
+
+    def __init__(
+        self,
+        llm: LLMProvider | None = None,
+        settings: Settings | None = None,
+        use_llm: bool = True,
+    ) -> None:
+        self.settings = settings or get_settings()
+        self.llm = llm
+        self.use_llm = use_llm and llm is not None
+
+    async def classify(
+        self,
+        text: str,
+        emotion: EmotionResult | None = None,
+    ) -> IntentResult:
+        """Return the blended intent distribution for one message."""
+        prior = heuristic_intent_scores(text)
+        llm_scores: dict[str, float] | None = None
+        rationale = "keyword prior only"
+        backend = "prior"
+
+        if self.use_llm and self.llm is not None:
+            try:
+                response: LLMResponse = await self.llm.complete(
+                    build_intent_prompt(text, emotion),
+                    max_tokens=300,
+                    temperature=0.0,
+                )
+                payload = response.json(default={})
+                llm_scores = self._normalise_llm_payload(payload)
+                rationale = str(payload.get("rationale", "")) or "zero-shot classification"
+                backend = f"llm:{response.provider}+prior"
+            except Exception:
+                logger.exception("intent LLM call failed; falling back to keyword prior")
+
+        scores = _blend(prior, llm_scores)
+        scores = self._apply_emotion_nudge(scores, emotion)
+        best_label, best_score = max(scores.items(), key=lambda kv: kv[1])
+
+        return IntentResult(
+            intent=IntentLabel(best_label),
+            confidence=round(best_score, 4),
+            scores=scores,
+            rationale=rationale,
+            backend=backend,
+        )
+
+    # ------------------------------------------------------------- helpers
+    @staticmethod
+    def _normalise_llm_payload(payload: Mapping[str, object]) -> dict[str, float]:
+        """Accept either a full ``scores`` map or just ``intent`` + confidence."""
+        valid = {item.value for item in IntentLabel}
+        raw_scores = payload.get("scores")
+        scores: dict[str, float] = {}
+        if isinstance(raw_scores, Mapping):
+            for key, value in raw_scores.items():
+                if key in valid:
+                    try:
+                        scores[key] = max(0.0, min(1.0, float(value)))
+                    except (TypeError, ValueError):
+                        continue
+
+        intent = payload.get("intent")
+        if isinstance(intent, str) and intent in valid:
+            try:
+                confidence = float(payload.get("confidence", 0.8))
+            except (TypeError, ValueError):
+                confidence = 0.8
+            scores[intent] = max(scores.get(intent, 0.0), max(0.5, min(1.0, confidence)))
+
+        total = sum(scores.values())
+        if total <= 0:
+            return {}
+        return {key: value / total for key, value in scores.items()}
+
+    @staticmethod
+    def _apply_emotion_nudge(
+        scores: Mapping[str, float],
+        emotion: EmotionResult | None,
+    ) -> dict[str, float]:
+        """High-intensity negative affect makes ``emotional_support`` likelier.
+
+        The nudge is capped and never touches ``crisis`` - crisis routing is the
+        safety gate's job, not a soft score's.
+        """
+        out = dict(scores)
+        if emotion is None or not emotion.labels:
+            return out
+        if emotion.dominant in SUPPORT_EMOTIONS and emotion.intensity >= 0.6:
+            bonus = 0.12 * emotion.intensity
+            out[IntentLabel.EMOTIONAL_SUPPORT.value] = min(
+                1.0, out.get(IntentLabel.EMOTIONAL_SUPPORT.value, 0.0) + bonus
+            )
+            total = sum(out.values()) or 1.0
+            out = {key: round(value / total, 4) for key, value in out.items()}
+        return out
+
+
+class FineTunedIntentClassifier(IntentClassifier):
+    """FUTURE WORK - fine-tuned encoder classifier for the six intents.
+
+    Planned: label ~2k GitaGuide turns, fine-tune ``distilroberta-base``, export
+    to ONNX INT8 like the emotion model, and report macro-F1 against this
+    zero-shot baseline in the evaluation chapter. Intentionally not implemented.
+    """
+
+    def __init__(self, model_path: str | None = None, **kwargs: object) -> None:
+        raise NotImplementedError(
+            "FineTunedIntentClassifier is future work; use IntentClassifier (zero-shot). "
+            "Training data collection is tracked in the project plan."
+        )
+
+    async def classify(  # pragma: no cover - unreachable stub
+        self,
+        text: str,
+        emotion: EmotionResult | None = None,
+    ) -> IntentResult:
+        raise NotImplementedError
+
+
+def label_names() -> Sequence[str]:
+    """All six intent labels, for the API schema and the frontend."""
+    return [label.value for label in IntentLabel]

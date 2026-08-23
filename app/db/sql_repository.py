@@ -1,0 +1,208 @@
+"""PostgreSQL implementation of :class:`app.db.repository.Repository`.
+
+Imported lazily (see :func:`app.db.build_repository`) so that offline mode never
+requires a database driver to be installed, let alone reachable.
+"""
+
+from __future__ import annotations
+
+import logging
+import uuid
+from collections.abc import Sequence
+from datetime import UTC, datetime
+
+from sqlalchemy import desc, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from app.db.models import ConversationSession, Message, SafetyLog
+from app.db.repository import (
+    MessageRecord,
+    Repository,
+    SafetyLogRecord,
+    SessionRecord,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
+
+
+class SqlAlchemyRepository(Repository):
+    """Async PostgreSQL implementation (also works against SQLite in tests)."""
+
+    backend = "sqlalchemy"
+
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+        self.session_factory = session_factory
+
+    # ------------------------------------------------------------ mapping
+    @staticmethod
+    def _to_session_record(row: ConversationSession) -> SessionRecord:
+        return SessionRecord(
+            id=row.id,
+            title=row.title,
+            locale=row.locale,
+            rolling_summary=row.rolling_summary or "",
+            turn_count=row.turn_count,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
+    @staticmethod
+    def _to_message_record(row: Message) -> MessageRecord:
+        return MessageRecord(
+            id=row.id,
+            session_id=row.session_id,
+            role=row.role,
+            content=row.content,
+            emotion=row.emotion,
+            intent=row.intent,
+            safety=row.safety,
+            retrieval=row.retrieval,
+            generation=row.generation,
+            citations=list(row.citations or []),
+            crisis=row.crisis,
+            latency_ms=row.latency_ms,
+            created_at=row.created_at,
+        )
+
+    @staticmethod
+    def _to_safety_record(row: SafetyLog) -> SafetyLogRecord:
+        return SafetyLogRecord(
+            id=row.id,
+            session_id=row.session_id,
+            message_id=row.message_id,
+            stage=row.stage,
+            blocked=row.blocked,
+            layers=list(row.layers or []),
+            categories=list(row.categories or []),
+            triggers=dict(row.triggers or {}),
+            excerpt=row.excerpt,
+            dominant_emotion=row.dominant_emotion,
+            emotion_intensity=row.emotion_intensity,
+            intent=row.intent,
+            created_at=row.created_at,
+        )
+
+    # ----------------------------------------------------------- sessions
+    async def create_session(self, locale: str = "en-IN", title: str = "") -> SessionRecord:
+        async with self.session_factory() as session:
+            row = ConversationSession(id=str(uuid.uuid4()), locale=locale, title=title)
+            session.add(row)
+            await session.commit()
+            await session.refresh(row)
+            return self._to_session_record(row)
+
+    async def get_session(self, session_id: str) -> SessionRecord | None:
+        async with self.session_factory() as session:
+            row = await session.get(ConversationSession, session_id)
+            return self._to_session_record(row) if row else None
+
+    async def ensure_session(self, session_id: str | None, locale: str = "en-IN") -> SessionRecord:
+        if session_id:
+            existing = await self.get_session(session_id)
+            if existing:
+                return existing
+            async with self.session_factory() as session:
+                row = ConversationSession(id=session_id, locale=locale)
+                session.add(row)
+                await session.commit()
+                await session.refresh(row)
+                return self._to_session_record(row)
+        return await self.create_session(locale=locale)
+
+    async def update_summary(self, session_id: str, summary: str) -> None:
+        async with self.session_factory() as session:
+            row = await session.get(ConversationSession, session_id)
+            if row is None:
+                return
+            row.rolling_summary = summary
+            row.updated_at = _utcnow()
+            await session.commit()
+
+    # ----------------------------------------------------------- messages
+    async def add_message(self, message: MessageRecord) -> MessageRecord:
+        async with self.session_factory() as session:
+            row = Message(
+                id=message.id or str(uuid.uuid4()),
+                session_id=message.session_id,
+                role=message.role,
+                content=message.content,
+                emotion=message.emotion,
+                intent=message.intent,
+                safety=message.safety,
+                retrieval=message.retrieval,
+                generation=message.generation,
+                citations=message.citations,
+                crisis=message.crisis,
+                latency_ms=message.latency_ms,
+            )
+            session.add(row)
+            parent = await session.get(ConversationSession, message.session_id)
+            if parent is not None:
+                parent.turn_count += 1
+                parent.updated_at = _utcnow()
+                if not parent.title and message.role == "user":
+                    parent.title = message.content[:80]
+            await session.commit()
+            await session.refresh(row)
+            return self._to_message_record(row)
+
+    async def get_message(self, message_id: str) -> MessageRecord | None:
+        async with self.session_factory() as session:
+            row = await session.get(Message, message_id)
+            return self._to_message_record(row) if row else None
+
+    async def list_messages(
+        self, session_id: str, limit: int = 20, newest_first: bool = False
+    ) -> list[MessageRecord]:
+        async with self.session_factory() as session:
+            order = desc(Message.created_at) if newest_first else Message.created_at
+            statement = (
+                select(Message)
+                .where(Message.session_id == session_id)
+                .order_by(order)
+                .limit(limit)
+            )
+            rows: Sequence[Message] = (await session.execute(statement)).scalars().all()
+            records = [self._to_message_record(row) for row in rows]
+            return records
+
+    # ------------------------------------------------------------- safety
+    async def log_safety(self, record: SafetyLogRecord) -> SafetyLogRecord:
+        async with self.session_factory() as session:
+            row = SafetyLog(
+                id=record.id or str(uuid.uuid4()),
+                session_id=record.session_id,
+                message_id=record.message_id,
+                stage=record.stage,
+                blocked=record.blocked,
+                layers=record.layers,
+                categories=record.categories,
+                triggers=record.triggers,
+                excerpt=record.excerpt,
+                dominant_emotion=record.dominant_emotion,
+                emotion_intensity=record.emotion_intensity,
+                intent=record.intent,
+            )
+            session.add(row)
+            await session.commit()
+            await session.refresh(row)
+            return self._to_safety_record(row)
+
+    async def list_safety_logs(self, limit: int = 50) -> list[SafetyLogRecord]:
+        async with self.session_factory() as session:
+            statement = select(SafetyLog).order_by(desc(SafetyLog.created_at)).limit(limit)
+            rows: Sequence[SafetyLog] = (await session.execute(statement)).scalars().all()
+            return [self._to_safety_record(row) for row in rows]
+
+    async def health(self) -> bool:
+        try:
+            async with self.session_factory() as session:
+                await session.execute(select(1))
+            return True
+        except Exception:  # pragma: no cover - needs a live database
+            logger.exception("database health check failed")
+            return False

@@ -1,0 +1,105 @@
+# ---------------------------------------------------------------------------
+# Local development stack: api + neo4j + postgres + frontend.
+#
+#   docker compose up api                 # API only, mock mode, no services
+#   docker compose up                     # everything
+#   docker compose run --rm api python -m kg.build_graph --reset
+# ---------------------------------------------------------------------------
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gitaguide-api
+    ports:
+      - "8000:8000"
+    environment:
+      # Flip to false once neo4j/postgres are up and you have an LLM key.
+      GITAGUIDE_MOCK_MODE: "${GITAGUIDE_MOCK_MODE:-true}"
+      GITAGUIDE_LOG_LEVEL: "${GITAGUIDE_LOG_LEVEL:-INFO}"
+      GITAGUIDE_NEO4J_URI: "bolt://neo4j:7687"
+      GITAGUIDE_NEO4J_USERNAME: "neo4j"
+      GITAGUIDE_NEO4J_PASSWORD: "${NEO4J_PASSWORD:-gitaguide123}"
+      GITAGUIDE_POSTGRES_DSN: "postgresql+asyncpg://gitaguide:gitaguide@postgres:5432/gitaguide"
+      GITAGUIDE_LLM_PROVIDER: "${GITAGUIDE_LLM_PROVIDER:-nvidia}"
+      # Read from .env by compose; never inlined here.
+      NVIDIA_API_KEY: "${NVIDIA_API_KEY:-}"
+      GITAGUIDE_NVIDIA_MODEL: "${GITAGUIDE_NVIDIA_MODEL:-nvidia/nemotron-3-super-120b-a12b}"
+      GITAGUIDE_NVIDIA_FALLBACK_MODEL: "${GITAGUIDE_NVIDIA_FALLBACK_MODEL:-nvidia/nemotron-3-nano-30b-a3b}"
+      GITAGUIDE_ANTHROPIC_API_KEY: "${GITAGUIDE_ANTHROPIC_API_KEY:-}"
+      GITAGUIDE_OPENAI_API_KEY: "${GITAGUIDE_OPENAI_API_KEY:-}"
+      GITAGUIDE_CORS_ORIGINS: "http://localhost:5173"
+      HF_HOME: "/models"
+    volumes:
+      - ./app:/app/app
+      - ./corpus:/app/corpus
+      - ./kg:/app/kg
+      - ./eval:/app/eval
+      - model-cache:/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    command: >
+      uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: gitaguide-postgres
+    environment:
+      POSTGRES_USER: gitaguide
+      POSTGRES_PASSWORD: gitaguide
+      POSTGRES_DB: gitaguide
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gitaguide -d gitaguide"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  neo4j:
+    image: neo4j:5.26-community
+    container_name: gitaguide-neo4j
+    environment:
+      NEO4J_AUTH: "neo4j/${NEO4J_PASSWORD:-gitaguide123}"
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_server_memory_heap_max__size: "1G"
+    ports:
+      - "7474:7474"   # browser
+      - "7687:7687"   # bolt
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: gitaguide-frontend
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE_URL: "http://localhost:8000"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/index.html:/app/index.html
+    depends_on:
+      - api
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+
+volumes:
+  postgres-data:
+  neo4j-data:
+  neo4j-logs:
+  model-cache:

@@ -1,0 +1,45 @@
+# ---- python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ---- secrets / config ----
+.env
+.env.local
+*.pem
+
+# ---- build artefacts ----
+corpus/data/gita.json
+corpus/data/arthashastra.json
+corpus/data/corpus.json
+corpus/data/graph_dump.json
+eval/results/
+*.log
+
+# ---- models / caches ----
+.cache/
+models/
+*.onnx
+
+# ---- node / frontend ----
+node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.env
+frontend/.env.local
+
+# ---- editors / os ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ---- typescript build info ----
+*.tsbuildinfo

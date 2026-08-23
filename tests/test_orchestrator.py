@@ -1,0 +1,193 @@
+"""Unit tests for the orchestrator: stage order, short-circuit, memory, logging."""
+
+from __future__ import annotations
+
+import pytest
+
+from app.db.repository import InMemoryRepository
+from app.llm.fake import FakeLLMProvider
+from app.pipeline.memory import ConversationMemory
+from app.pipeline.orchestrator import (
+    STAGE_GENERATION,
+    STAGE_RETRIEVAL,
+    STAGE_SAFETY_INPUT,
+    STAGE_SAFETY_OUTPUT,
+    GuidanceOrchestrator,
+    build_orchestrator,
+)
+from app.pipeline.schemas import UserTurn
+
+WORK_QUERY = "My manager took credit for my project and I am furious. What should I do?"
+CRISIS_QUERY = "I want to end my life tonight"
+
+
+# ------------------------------------------------------------------ happy path
+async def test_full_pipeline_runs_every_stage(orchestrator: GuidanceOrchestrator) -> None:
+    result = await orchestrator.handle_turn(UserTurn(message=WORK_QUERY))
+    assert result.stages_run == [
+        "emotion",
+        "intent",
+        STAGE_SAFETY_INPUT,
+        "memory",
+        STAGE_RETRIEVAL,
+        STAGE_GENERATION,
+        STAGE_SAFETY_OUTPUT,
+        "persist",
+    ]
+    assert not result.crisis
+    assert result.answer
+    assert result.retrieval is not None and result.retrieval.results
+    assert result.generation is not None and result.generation.grounded
+    assert result.citations
+
+
+async def test_safety_runs_before_retrieval_and_generation(
+    orchestrator: GuidanceOrchestrator,
+) -> None:
+    """Rule 4, asserted on the recorded stage order."""
+    result = await orchestrator.handle_turn(UserTurn(message=WORK_QUERY))
+    order = result.stages_run
+    assert order.index(STAGE_SAFETY_INPUT) < order.index(STAGE_RETRIEVAL)
+    assert order.index(STAGE_SAFETY_INPUT) < order.index(STAGE_GENERATION)
+    assert order.index(STAGE_GENERATION) < order.index(STAGE_SAFETY_OUTPUT)
+
+
+async def test_trace_is_persisted_and_explainable(
+    orchestrator: GuidanceOrchestrator,
+) -> None:
+    result = await orchestrator.handle_turn(UserTurn(message=WORK_QUERY))
+    record = await orchestrator.explain(result.message_id)
+    assert record is not None
+    assert record.role == "assistant"
+    assert record.retrieval and record.retrieval["results"]
+    assert record.citations == result.citations
+
+
+# --------------------------------------------------------------- short circuit
+async def test_crisis_short_circuits_before_retrieval(
+    orchestrator: GuidanceOrchestrator,
+) -> None:
+    result = await orchestrator.handle_turn(UserTurn(message=CRISIS_QUERY))
+    assert result.crisis
+    assert result.retrieval is None
+    assert result.generation is None
+    assert STAGE_RETRIEVAL not in result.stages_run
+    assert STAGE_GENERATION not in result.stages_run
+    assert "14416" in result.answer
+
+
+async def test_crisis_never_calls_the_llm(
+    orchestrator: GuidanceOrchestrator, llm: FakeLLMProvider
+) -> None:
+    await orchestrator.handle_turn(UserTurn(message=CRISIS_QUERY))
+    # The intent classifier is the only permitted call on a crisis turn.
+    assert all("intent_classification" in call for call in llm.calls)
+
+
+async def test_crisis_turn_is_flagged_in_storage(
+    orchestrator: GuidanceOrchestrator, repository: InMemoryRepository
+) -> None:
+    result = await orchestrator.handle_turn(UserTurn(message=CRISIS_QUERY))
+    record = await repository.get_message(result.message_id)
+    assert record is not None and record.crisis
+
+
+async def test_safety_triggers_are_written_to_the_log(
+    orchestrator: GuidanceOrchestrator, repository: InMemoryRepository
+) -> None:
+    await orchestrator.handle_turn(UserTurn(message=CRISIS_QUERY))
+    logs = await repository.list_safety_logs()
+    assert logs, "the gate must persist an audit row"
+    assert logs[0].blocked
+    assert logs[0].stage == "input"
+    assert logs[0].categories
+
+
+async def test_clean_turn_writes_no_safety_log(
+    orchestrator: GuidanceOrchestrator, repository: InMemoryRepository
+) -> None:
+    await orchestrator.handle_turn(UserTurn(message="What does BG 2.47 mean?"))
+    assert await repository.list_safety_logs() == []
+
+
+# --------------------------------------------------------------------- session
+async def test_session_is_created_and_reused(orchestrator: GuidanceOrchestrator) -> None:
+    first = await orchestrator.handle_turn(UserTurn(message="I feel stuck in my career"))
+    second = await orchestrator.handle_turn(
+        UserTurn(message="and my family keeps pushing me", session_id=first.session_id)
+    )
+    assert second.session_id == first.session_id
+
+
+async def test_history_reaches_the_prompt(
+    orchestrator: GuidanceOrchestrator, llm: FakeLLMProvider
+) -> None:
+    first = await orchestrator.handle_turn(UserTurn(message="Should I resign from my job?"))
+    llm.calls.clear()
+    await orchestrator.handle_turn(
+        UserTurn(message="What if my parents object?", session_id=first.session_id)
+    )
+    answer_prompts = [call for call in llm.calls if "grounded_answer" in call]
+    assert answer_prompts
+    assert "RECENT TURNS" in answer_prompts[0]
+    assert "resign" in answer_prompts[0]
+
+
+async def test_rolling_summary_is_created_after_enough_turns(
+    orchestrator: GuidanceOrchestrator, repository: InMemoryRepository
+) -> None:
+    result = await orchestrator.handle_turn(UserTurn(message="I am unhappy at work"))
+    session_id = result.session_id
+    for index in range(5):
+        await orchestrator.handle_turn(
+            UserTurn(message=f"another thought number {index} about my career", session_id=session_id)
+        )
+    session = await repository.get_session(session_id)
+    assert session is not None
+    assert session.turn_count >= orchestrator.settings.memory_summary_trigger_turns
+    assert session.rolling_summary, "the summary should have been refreshed"
+
+
+async def test_memory_context_is_empty_for_a_new_session(
+    repository: InMemoryRepository, llm: FakeLLMProvider
+) -> None:
+    memory = ConversationMemory(repository=repository, llm=llm)
+    session = await repository.create_session()
+    context = await memory.load(session.id)
+    assert context.is_empty
+    assert context.render() == ""
+
+
+# -------------------------------------------------------------- output safety
+async def test_unsafe_generation_is_replaced(orchestrator: GuidanceOrchestrator) -> None:
+    """If the model emits unsafe text, the user must not see it."""
+    # Learn a genuinely retrieved id first, so the unsafe answer survives the
+    # citation check and is stopped by the output gate rather than by grounding.
+    baseline = await orchestrator.handle_turn(UserTurn(message=WORK_QUERY))
+    cited = baseline.citations[0]
+    unsafe = f"You deserve this suffering; this is your karma for what you did. {cited}"
+    orchestrator.generator.llm = FakeLLMProvider(scripted=[unsafe, unsafe])
+
+    result = await orchestrator.handle_turn(UserTurn(message=WORK_QUERY))
+    assert result.output_safety.blocked
+    assert "you deserve this suffering" not in result.answer.lower()
+
+
+# ----------------------------------------------------------------- wiring/ops
+def test_default_wiring_is_fully_offline() -> None:
+    orchestrator = build_orchestrator()
+    assert orchestrator.repository.backend == "in-memory"
+    assert orchestrator.retriever.backend == "in-memory-hybrid"
+    assert orchestrator.generator.llm.is_fake
+
+
+async def test_health_reports_backends(orchestrator: GuidanceOrchestrator) -> None:
+    health = await orchestrator.health()
+    assert health["emotion_backend"] == "lexicon"
+    assert health["retrieval_backend"] == "in-memory-hybrid"
+    assert health["mock_mode"] is True
+
+
+async def test_empty_message_is_rejected_by_the_schema() -> None:
+    with pytest.raises(ValueError):
+        UserTurn(message="")
