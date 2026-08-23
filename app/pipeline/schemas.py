@@ -209,6 +209,10 @@ class RetrievalTrace(BaseModel):
     emotions_used: list[str] = Field(default_factory=list)
     themes_used: list[str] = Field(default_factory=list)
     candidates_considered: int = 0
+    #: Records the database returned that could not be parsed into a Verse.
+    #: Non-zero means the query and the parser disagree - see
+    #: ``app.pipeline.retrieval._record_to_dict``.
+    parse_failures: int = 0
     results: list[RetrievedVerse] = Field(default_factory=list)
     backend: str = "unknown"
     latency_ms: float = 0.0

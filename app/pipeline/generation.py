@@ -26,7 +26,7 @@ from __future__ import annotations
 import logging
 import re
 import time
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 
 from app.config import Settings, get_settings
 from app.llm.base import TASK_ANSWER, LLMProvider, LLMResponse
@@ -39,7 +39,7 @@ from app.pipeline.schemas import (
     RetrievalTrace,
     RetrievedVerse,
 )
-from corpus.schemas import extract_verse_ids
+from corpus.schemas import VERSE_ID_RE, extract_verse_ids
 
 logger = logging.getLogger(__name__)
 
@@ -85,13 +85,58 @@ INTENT_FRAMING: dict[IntentLabel, str] = {
 }
 
 
+#: Stands in for a verse id that the model is not allowed to cite.
+FOREIGN_ID_PLACEHOLDER = "a related verse not included here"
+
+
+def mask_foreign_verse_ids(
+    text: str,
+    allowed: Collection[str],
+    placeholder: str = FOREIGN_ID_PLACEHOLDER,
+) -> str:
+    """Replace verse ids that are **not** in ``allowed`` with a placeholder.
+
+    Why this exists
+    ---------------
+    Graph paths are 1-2 hop, so a ``Why retrieved:`` line names the *seed* verse
+    of the hop - and the seed is frequently not itself in the top-k::
+
+        Why retrieved: (BG-3.35) -[:HAS_THEME]-> theme 'duty' <-[:HAS_THEME]- (BG-18.47)
+
+    A model reading that cites ``BG-3.35``, whose text it was never given. The
+    citation enforcer in :class:`GroundedGenerator` catches it, but only by
+    spending a second LLM call on a rewrite - and if the rewrite also strays, the
+    answer degrades to the deterministic template. On a rate-limited endpoint
+    that is the difference between one request per turn and two.
+
+    Masking happens **only** where text is shown to the model or placed in the
+    answer body. :attr:`RetrievedVerse.graph_paths` and
+    :meth:`RetrievedVerse.why` are untouched, so the explanation panel and the
+    stored trace still show the real, complete path.
+
+    >>> mask_foreign_verse_ids("(BG-3.35) -> (BG-2.47)", {"BG-2.47"})
+    '(a related verse not included here) -> (BG-2.47)'
+    """
+    permitted = set(allowed)
+
+    def replace(match: re.Match[str]) -> str:
+        verse_id = match.group(0)
+        return verse_id if verse_id in permitted else placeholder
+
+    return VERSE_ID_RE.sub(replace, text)
+
+
 def format_context_block(results: Sequence[RetrievedVerse]) -> str:
     """Render retrieved verses in the exact shape the parsers expect.
 
     The layout (``[ID] citation`` / ``Text:`` / ``Why retrieved:``) is also what
     :class:`app.llm.fake.FakeLLMProvider` reads, which keeps offline runs
     structurally identical to online ones.
+
+    Every verse id the model can see here is one it may cite: ids reachable only
+    as graph-walk seeds are masked by :func:`mask_foreign_verse_ids`.
     """
+    citable = {item.verse_id for item in results}
     blocks: list[str] = []
     for item in results:
         verse = item.verse
@@ -100,7 +145,7 @@ def format_context_block(results: Sequence[RetrievedVerse]) -> str:
             lines.append(f"Sanskrit: {verse.text_sanskrit.strip()}")
         if verse.themes:
             lines.append(f"Themes: {', '.join(verse.themes)}")
-        lines.append(f"Why retrieved: {item.why()}")
+        lines.append(f"Why retrieved: {mask_foreign_verse_ids(item.why(), citable)}")
         lines.append(
             "Scores: "
             f"vector={item.vector_score:.3f} fulltext={item.fulltext_score:.3f} "
@@ -273,15 +318,23 @@ class GroundedGenerator:
 
     @staticmethod
     def _why_map(retrieval: RetrievalTrace, citations: Sequence[str]) -> dict[str, str]:
-        """``verse_id -> graph-path explanation`` for the cited verses."""
+        """``verse_id -> graph-path explanation`` for the cited verses.
+
+        Paths are masked the same way as the prompt: this text is appended to the
+        **answer**, and naming a verse the reader was never shown reads like a
+        citation they cannot check. The unmasked path stays in
+        ``retrieval.results[].graph_paths`` for the explanation panel.
+        """
         by_id = {item.verse_id: item for item in retrieval.results}
+        citable = set(by_id)
         out: dict[str, str] = {}
         for verse_id in citations:
             item = by_id.get(verse_id)
             if item is None:
                 continue
             channels = "+".join(item.retrieval_channels) or "vector"
-            out[verse_id] = f"{item.why()} [channels: {channels}, score {item.final_score:.3f}]"
+            why = mask_foreign_verse_ids(item.why(), citable)
+            out[verse_id] = f"{why} [channels: {channels}, score {item.final_score:.3f}]"
         return out
 
     @staticmethod
@@ -327,6 +380,8 @@ class GroundedGenerator:
             "and treat the rest as not yet yours to settle."
         )
         lines += ["", WHY_HEADING, ""]
+        citable = {item.verse_id for item in retrieval.results}
         for item in retrieval.results[:3]:
-            lines.append(f"- **{item.verse_id}** - {item.why()}")
+            why = mask_foreign_verse_ids(item.why(), citable)
+            lines.append(f"- **{item.verse_id}** - {why}")
         return "\n".join(lines)

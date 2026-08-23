@@ -126,6 +126,16 @@ RETURN verses, themes, emotions, count(r) AS related_edges
 #: full-text search; this tail performs the 1-2 hop expansion and returns both
 #: the verse payload and the *paths* that justify it. ``$emotions`` is the list
 #: of detected emotion labels, which is how affect steers the graph walk.
+#:
+#: ``$emotions`` is a **required** parameter: Cypher has no defaulting, so a
+#: caller that omits it gets ``ParameterMissing``. Every call site must go
+#: through :data:`app.pipeline.retrieval.DEFAULT_QUERY_PARAMS`, which supplies an
+#: empty list, so the parameter can never be absent.
+#:
+#: The ``metadata`` column exists so that even the library's *default* record
+#: formatter (which does ``content=str(record)``, ``metadata=record.get(
+#: "metadata")``) still yields a machine-readable payload instead of a repr
+#: string with no metadata. See ``verse_result_formatter``.
 HYBRID_RETRIEVAL_QUERY = """
 WITH node AS v, score AS search_score
 OPTIONAL MATCH (v)-[:ADDRESSES_EMOTION]->(e:Emotion)
@@ -151,8 +161,54 @@ RETURN
     themes            AS themes,
     matched_emotions  AS matched_emotions,
     related_via_emotion AS related_via_emotion,
-    search_score      AS search_score
+    search_score      AS search_score,
+    {
+        id: v.id,
+        source: v.source,
+        chapter: v.chapter,
+        verse: v.verse,
+        book: v.book,
+        text_english: v.text_english,
+        text_sanskrit: v.text_sanskrit,
+        transliteration: v.transliteration,
+        commentary: v.commentary,
+        citation: v.citation,
+        themes: themes,
+        matched_emotions: matched_emotions,
+        related_via_emotion: related_via_emotion,
+        search_score: search_score
+    }                 AS metadata
 ORDER BY search_score DESC
+"""
+
+#: Driver-level fallback: the whole hybrid search in one statement.
+#:
+#: Used when the installed ``neo4j-graphrag`` cannot parameterise the retrieval
+#: query (no ``query_params`` on ``search()``). It reproduces the package's
+#: "naive" hybrid ranker - query each index for ``$top_k``, normalise each
+#: channel by its own maximum, then take the per-node maximum - and then runs
+#: the identical tail, so results stay comparable across both paths.
+MANUAL_HYBRID_QUERY = """
+CALL {
+    CALL db.index.vector.queryNodes($vector_index_name, $top_k, $query_vector)
+    YIELD node, score
+    WITH collect({node: node, score: score}) AS hits
+    WITH hits, reduce(m = 0.0, h IN hits | CASE WHEN h.score > m THEN h.score ELSE m END) AS top
+    UNWIND hits AS hit
+    RETURN hit.node AS node,
+           CASE WHEN top > 0 THEN hit.score / top ELSE 0.0 END AS score
+    UNION
+    CALL db.index.fulltext.queryNodes($fulltext_index_name, $query_text, {limit: $top_k})
+    YIELD node, score
+    WITH collect({node: node, score: score}) AS hits
+    WITH hits, reduce(m = 0.0, h IN hits | CASE WHEN h.score > m THEN h.score ELSE m END) AS top
+    UNWIND hits AS hit
+    RETURN hit.node AS node,
+           CASE WHEN top > 0 THEN hit.score / top ELSE 0.0 END AS score
+}
+WITH node, max(score) AS score
+ORDER BY score DESC
+LIMIT $top_k
 """
 
 #: Pure-graph channel: verses reachable from the detected emotions, used to

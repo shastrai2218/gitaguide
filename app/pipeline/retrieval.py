@@ -27,12 +27,16 @@ Two implementations, one interface
 
 from __future__ import annotations
 
+import ast
+import inspect
 import logging
 import math
+import re
 import time
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 from app.config import Settings, get_settings
@@ -407,8 +411,23 @@ def _select_candidates(
 
 
 def _load_default_corpus(settings: Settings) -> Corpus:
-    """Load the bundled sample corpus (offline default)."""
+    """Load the corpus for the in-memory retriever.
+
+    ``settings.corpus_path`` wins when set (tests and ablations pin it); the
+    default order prefers a built corpus and falls back to the bundled sample.
+    """
     from app.config import CORPUS_DATA_DIR, SAMPLE_CORPUS_PATH
+
+    if settings.corpus_path:
+        pinned = Path(settings.corpus_path)
+        if pinned.exists():
+            corpus = Corpus.load(pinned)
+            logger.info("loaded pinned corpus %s (%d verses)", pinned, len(corpus))
+            return corpus
+        logger.error(
+            "GITAGUIDE_CORPUS_PATH=%s does not exist; falling back to the search order",
+            pinned,
+        )
 
     for candidate in (
         CORPUS_DATA_DIR / "corpus.json",
@@ -435,6 +454,94 @@ def _load_default_corpus(settings: Settings) -> Corpus:
 # --------------------------------------------------------------------------- #
 # Neo4j implementation
 # --------------------------------------------------------------------------- #
+class RetrievalError(RuntimeError):
+    """Retrieval failed in a way that must not be mistaken for "no results".
+
+    Raised instead of returning an empty trace when the search call errors, or
+    when the database returned records that could not be parsed at all. An empty
+    result set is a legitimate answer; a broken query or a formatter mismatch is
+    not, and the two must never look the same from the outside.
+    """
+
+
+#: ``$emotions`` is required by :data:`kg.cypher_queries.HYBRID_RETRIEVAL_QUERY`
+#: and Cypher cannot default a missing parameter, so every call site starts from
+#: this dict. Omitting it produces ``ParameterMissing`` at the driver, which is
+#: exactly the failure this constant exists to prevent.
+DEFAULT_QUERY_PARAMS: dict[str, Any] = {"emotions": []}
+
+#: Columns the retrieval query returns; used by the result formatter and to
+#: sanity-check that the query and the parser still agree.
+VERSE_RECORD_KEYS: tuple[str, ...] = (
+    "id",
+    "source",
+    "chapter",
+    "verse",
+    "book",
+    "text_english",
+    "text_sanskrit",
+    "transliteration",
+    "commentary",
+    "citation",
+    "themes",
+    "matched_emotions",
+    "related_via_emotion",
+    "search_score",
+)
+
+
+def verse_result_formatter(record: Any) -> Any:
+    """Turn a ``neo4j.Record`` into a **structured** ``RetrieverResultItem``.
+
+    Why this exists
+    ---------------
+    ``neo4j-graphrag``'s default formatter is
+    ``RetrieverResultItem(content=str(record), metadata=record.get("metadata"))``.
+    With no ``metadata`` column that yields ``content`` as a *repr string* and
+    ``metadata=None`` - unparseable downstream, which is precisely how retrieval
+    came to report ``candidates_considered=0`` while the database was returning
+    good hits. Passing this formatter to the retriever makes ``item.content`` a
+    dict of the query's columns.
+
+    Imported lazily by the retriever, and defensive about the record type so it
+    can be unit-tested with a plain mapping.
+    """
+    from neo4j_graphrag.types import RetrieverResultItem  # lazy: package optional
+
+    if hasattr(record, "data"):
+        payload = dict(record.data())
+    elif isinstance(record, Mapping):
+        payload = dict(record)
+    else:  # pragma: no cover - neo4j always gives one of the above
+        payload = {"raw": str(record)}
+
+    # The query also returns a `metadata` map; flatten it in so a single dict
+    # carries everything regardless of which column the server populated.
+    nested = payload.pop("metadata", None)
+    if isinstance(nested, Mapping):
+        for key, value in nested.items():
+            payload.setdefault(key, value)
+
+    return RetrieverResultItem(content=payload, metadata={"id": payload.get("id")})
+
+
+def _supports_query_params(search_callable: Any) -> bool:
+    """Does this ``neo4j-graphrag`` build accept ``query_params`` on search?
+
+    Verified against the installed package rather than assumed from a version
+    string: 1.18 accepts it, older builds may not, and a silent
+    ``TypeError``-turned-empty-result is the failure mode to avoid.
+    """
+    try:
+        signature = inspect.signature(search_callable)
+    except (TypeError, ValueError):  # pragma: no cover - builtins only
+        return False
+    parameters = signature.parameters
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()):
+        return True
+    return "query_params" in parameters
+
+
 class _Neo4jGraphRAGEmbedderAdapter:
     """Adapt :class:`app.embeddings.Embedder` to the neo4j-graphrag protocol."""
 
@@ -495,6 +602,9 @@ class Neo4jHybridRetriever(HybridRetriever):
                 fulltext_index_name=self.settings.neo4j_fulltext_index,
                 retrieval_query=HYBRID_RETRIEVAL_QUERY,
                 embedder=_Neo4jGraphRAGEmbedderAdapter(self.embedder),
+                #: Without this, item.content is a repr string - see
+                #: verse_result_formatter for the failure it caused.
+                result_formatter=verse_result_formatter,
                 neo4j_database=self.settings.neo4j_database,
             )
         return self._retriever
@@ -522,22 +632,59 @@ class Neo4jHybridRetriever(HybridRetriever):
         expanded = expand_query(query, emotion, intent)
         emotions = emotion.top_emotions(settings.emotion_top_k) if emotion else []
 
-        retriever = self._get_retriever()
-        raw = retriever.search(
-            query_text=expanded,
-            top_k=settings.retrieval_candidate_k,
-            query_params={"emotions": emotions},
-        )
+        # Always a complete parameter set: the retrieval query requires
+        # $emotions and Cypher cannot default it.
+        query_params = {**DEFAULT_QUERY_PARAMS, "emotions": emotions}
+        candidate_k = settings.retrieval_candidate_k
+
+        items = self._search(expanded, candidate_k, query_params)
 
         candidates: list[RetrievedVerse] = []
-        for item in getattr(raw, "items", []) or []:
+        parse_failures = 0
+        for item in items:
             record = _record_to_dict(item)
             if not record.get("id"):
+                parse_failures += 1
                 continue
-            candidates.append(_record_to_retrieved_verse(record, emotions))
+            try:
+                candidates.append(_record_to_retrieved_verse(record, emotions))
+            except (ValueError, KeyError, TypeError):
+                parse_failures += 1
+                logger.exception("could not build a Verse from record %s", _shape_of(record))
+
+        if items and not candidates:
+            # The loud version of the bug this method used to have: records came
+            # back and every single one was discarded. Never report that as "no
+            # results" - it is a query/parser contract break.
+            logger.error(
+                "RETRIEVAL PARSE FAILURE: %d record(s) returned, 0 parsed. "
+                "Expected keys %s; first item was type=%s shape=%s. "
+                "Is result_formatter=verse_result_formatter still wired, and does "
+                "HYBRID_RETRIEVAL_QUERY still return the `id` column?",
+                len(items),
+                [*VERSE_RECORD_KEYS[:6], "..."],
+                type(items[0]).__name__,
+                _shape_of(items[0]),
+            )
+            raise RetrievalError(
+                f"neo4j returned {len(items)} record(s) but none could be parsed "
+                "(see the RETRIEVAL PARSE FAILURE log for the record shape)"
+            )
+        if parse_failures:
+            logger.warning(
+                "retrieval dropped %d/%d unparseable record(s)", parse_failures, len(items)
+            )
 
         intent_label = intent.intent if intent else IntentLabel.SEEK_GUIDANCE
         results = rerank(candidates, intent_label, settings, top_k)
+
+        if not items:
+            logger.info(
+                "retrieval returned 0 records for %r (emotions=%s) - "
+                "empty index, or the query genuinely matches nothing",
+                expanded[:120],
+                emotions,
+            )
 
         return RetrievalTrace(
             query=query,
@@ -545,21 +692,180 @@ class Neo4jHybridRetriever(HybridRetriever):
             emotions_used=emotions,
             themes_used=sorted({theme for item in results for theme in item.verse.themes})[:8],
             candidates_considered=len(candidates),
+            parse_failures=parse_failures,
             results=results,
             backend=self.backend,
             latency_ms=round((time.perf_counter() - started) * 1000, 3),
         )
 
+    # ---------------------------------------------------------------- search
+    def _search(
+        self,
+        query_text: str,
+        top_k: int,
+        query_params: dict[str, Any],
+    ) -> list[Any]:
+        """Run the hybrid search, loudly.
 
-def _record_to_dict(item: Any) -> dict[str, Any]:
-    """``RetrieverResultItem`` -> plain dict (content may be a repr string)."""
+        Prefers the library's parameterised ``search()``. If the installed build
+        cannot pass parameters into the retrieval query, falls back to a
+        driver-level execution of the same Cypher (see
+        :data:`kg.cypher_queries.MANUAL_HYBRID_QUERY`) rather than dropping the
+        ``$emotions`` parameter and letting the query fail.
+        """
+        retriever = self._get_retriever()
+
+        if not _supports_query_params(retriever.search):
+            logger.warning(
+                "installed neo4j-graphrag cannot parameterise the retrieval query; "
+                "using the driver-level hybrid query instead"
+            )
+            return self._manual_search(query_text, top_k, query_params)
+
+        try:
+            raw = retriever.search(
+                query_text=query_text,
+                top_k=top_k,
+                query_params=query_params,
+            )
+        except Exception as exc:
+            logger.error(
+                "RETRIEVAL SEARCH FAILED on %s (vector_index=%s fulltext_index=%s "
+                "db=%s top_k=%d params=%s): %s",
+                self.settings.neo4j_uri,
+                self.settings.neo4j_vector_index,
+                self.settings.neo4j_fulltext_index,
+                self.settings.neo4j_database,
+                top_k,
+                sorted(query_params),
+                exc,
+                exc_info=True,
+            )
+            raise RetrievalError(f"hybrid search failed: {exc}") from exc
+
+        return list(getattr(raw, "items", None) or [])
+
+    def _manual_search(
+        self,
+        query_text: str,
+        top_k: int,
+        query_params: dict[str, Any],
+    ) -> list[Any]:
+        """Driver-level hybrid search + retrieval tail, fully parameterised."""
+        from kg.cypher_queries import (  # lazy: keeps import cheap
+            HYBRID_RETRIEVAL_QUERY,
+            MANUAL_HYBRID_QUERY,
+        )
+
+        cypher = f"{MANUAL_HYBRID_QUERY}\n{HYBRID_RETRIEVAL_QUERY}"
+        parameters = {
+            **query_params,
+            "vector_index_name": self.settings.neo4j_vector_index,
+            "fulltext_index_name": self.settings.neo4j_fulltext_index,
+            "query_text": query_text,
+            "query_vector": self.embedder.embed_one(query_text),
+            "top_k": top_k,
+        }
+        try:
+            records, _, _ = self._get_driver().execute_query(
+                cypher,
+                parameters,
+                database_=self.settings.neo4j_database,
+            )
+        except Exception as exc:
+            logger.error(
+                "RETRIEVAL SEARCH FAILED (driver-level path, params=%s): %s",
+                sorted(parameters),
+                exc,
+                exc_info=True,
+            )
+            raise RetrievalError(f"driver-level hybrid search failed: {exc}") from exc
+
+        return [verse_result_formatter(record) for record in records]
+
+
+def _shape_of(item: Any) -> str:
+    """Short, log-safe description of an unparsed item (keys or a snippet)."""
     content = getattr(item, "content", item)
     if isinstance(content, Mapping):
+        return f"mapping(keys={sorted(content)[:8]})"
+    text = str(content)
+    return f"{type(content).__name__}({text[:160]!r})"
+
+
+def _record_to_dict(item: Any) -> dict[str, Any]:
+    """``RetrieverResultItem`` (or ``neo4j.Record``) -> plain dict.
+
+    Four shapes are accepted, in order of preference:
+
+    1. ``content`` is already a mapping - what
+       :func:`verse_result_formatter` produces (the normal path);
+    2. the item is a ``neo4j.Record`` (``.data()``);
+    3. ``metadata`` carries the payload;
+    4. ``content`` is a **repr string** - the default-formatter shape. Recovered
+       with ``ast.literal_eval`` on a best-effort basis and logged as a warning,
+       because it means the formatter is not wired and precision is being lost.
+
+    Returns ``{}`` only when nothing usable is present; the caller counts those
+    and escalates.
+    """
+    content = getattr(item, "content", item)
+
+    if isinstance(content, Mapping):
         return dict(content)
+
+    data = getattr(item, "data", None)
+    if callable(data):
+        try:
+            record = data()
+        except Exception:  # pragma: no cover - defensive
+            record = None
+        if isinstance(record, Mapping):
+            return dict(record)
+
     metadata = getattr(item, "metadata", None)
     if isinstance(metadata, Mapping) and metadata.get("id"):
         return dict(metadata)
+
+    if isinstance(content, str) and content:
+        recovered = _parse_record_repr(content)
+        if recovered:
+            logger.warning(
+                "recovered a retrieval record from its repr string - the "
+                "result_formatter is not wired (expected verse_result_formatter)"
+            )
+            return recovered
+
     return {}
+
+
+#: ``<Record id='BG-2.47' chapter=2 ...>`` -> the ``key=value`` pairs inside.
+_RECORD_REPR_RE = re.compile(r"^<Record\s+(?P<body>.*)>$", re.DOTALL)
+_RECORD_FIELD_RE = re.compile(r"(\w+)=")
+
+
+def _parse_record_repr(text: str) -> dict[str, Any]:
+    """Best-effort recovery of a ``neo4j.Record`` repr into a dict.
+
+    Only a fallback: :func:`verse_result_formatter` exists so this never runs on
+    the normal path. Values are parsed with :func:`ast.literal_eval`, so node
+    objects and other non-literals are skipped rather than guessed at.
+    """
+    match = _RECORD_REPR_RE.match(text.strip())
+    if not match:
+        return {}
+
+    body = match.group("body")
+    starts = [(m.start(), m.group(1)) for m in _RECORD_FIELD_RE.finditer(body)]
+    out: dict[str, Any] = {}
+    for index, (position, key) in enumerate(starts):
+        end = starts[index + 1][0] if index + 1 < len(starts) else len(body)
+        raw = body[position + len(key) + 1 : end].strip().rstrip(",").strip()
+        try:
+            out[key] = ast.literal_eval(raw)
+        except (ValueError, SyntaxError):
+            continue
+    return out if out.get("id") else {}
 
 
 def _record_to_retrieved_verse(record: Mapping[str, Any], emotions: Sequence[str]) -> RetrievedVerse:

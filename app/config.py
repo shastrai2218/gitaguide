@@ -86,6 +86,13 @@ class Settings(BaseSettings):
     embedding_model_id: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_dim: int = 384
 
+    # ------------------------------------------------------------------ corpus
+    #: Explicit corpus file for the in-memory retriever. ``None`` uses the
+    #: search order in ``retrieval._load_default_corpus`` (built corpus first,
+    #: bundled sample last). Tests pin this so results do not depend on which
+    #: corpus files happen to exist on the machine.
+    corpus_path: str | None = None
+
     # -------------------------------------------------------------------- llm
     llm_provider: LLMProviderName = LLMProviderName.FAKE
     llm_fallback_provider: LLMProviderName | None = None
