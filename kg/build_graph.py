@@ -44,6 +44,7 @@ from kg.cypher_queries import (
     CONSTRAINTS,
     CREATE_FULLTEXT_INDEX,
     CREATE_VECTOR_INDEX,
+    DELETE_ORPHAN_LABELS,
     DELETE_RELATED_EDGES,
     DROP_ALL,
     GRAPH_STATS,
@@ -188,6 +189,11 @@ class GraphBuilder:
         for verse in corpus:
             self._run(MERGE_VERSE, **_verse_params(verse, embeddings[verse.id]))
 
+        orphans = self._run(DELETE_ORPHAN_LABELS)
+        orphan_count = int(orphans[0]["deleted"]) if orphans else 0
+        if orphan_count:
+            logger.info("removed %d orphan label node(s) left by re-tagging", orphan_count)
+
         related_count, suppressed = self._link_related(min_shared)
 
         self._create_indexes()
@@ -212,6 +218,7 @@ class GraphBuilder:
                 "verses_with_book": int(row.get("verses_with_book", 0)),
                 "hub_max_fraction": self.hub_max_fraction,
                 "hub_labels_suppressed": suppressed,
+                "orphan_labels_removed": orphan_count,
             },
         )
         logger.info("graph build complete: %s", stats.as_dict())

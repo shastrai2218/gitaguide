@@ -45,12 +45,21 @@ DEFAULT_TRANSLATION_URL = (
     "https://raw.githubusercontent.com/gita/gita/main/data/translation.json"
 )
 
-#: Translations to prefer, best first (public-domain or permissively licensed).
+#: Translations to prefer, best first.
+#:
+#: Shri Purohit Swami (d. 1941) leads on **licensing**, not style: his
+#: translation is public domain in India (life+60, so since 2001) and in the
+#: UK/EU (life+70, since 2011), which makes the corpus commercially usable in
+#: every target jurisdiction. Swami Sivananda (d. 1963) is public domain in
+#: India only since 2024 and not in the UK/EU until 2033, so he is a fallback.
+#: The upstream repo's Unlicense covers its compilation, not the underlying
+#: translations - a dataset cannot dedicate a third party's work to the public
+#: domain, so the translator's own death date is what governs.
 PREFERRED_AUTHORS: tuple[str, ...] = (
+    "Shri Purohit Swami",
     "Swami Sivananda",
     "Swami Gambirananda",
     "Dr. S. Sankaranarayan",
-    "Shri Purohit Swami",
 )
 
 HTTP_TIMEOUT = 30

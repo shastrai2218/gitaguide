@@ -76,21 +76,26 @@ SET v.source          = $source,
     v.embedding       = $embedding
 MERGE (v)-[:PART_OF]->(s)
 WITH v
-CALL {
-    WITH v
+// Label edges are fully derived from the weak labels, so clear them before
+// rewriting. MERGE alone only ever adds: re-tagging a verse (e.g. after a
+// translation swap) would otherwise leave every previous label attached, and
+// the graph would keep asserting tags the tagger no longer produces.
+CALL (v) {
+    MATCH (v)-[old:HAS_THEME|ADDRESSES_EMOTION|MENTIONS]->()
+    DELETE old
+}
+CALL (v) {
     UNWIND $themes AS theme
     MERGE (t:Theme {name: theme})
     MERGE (v)-[:HAS_THEME]->(t)
 }
-CALL {
-    WITH v
+CALL (v) {
     UNWIND $emotions AS emotion
     MERGE (e:Emotion {name: emotion})
     MERGE (v)-[r:ADDRESSES_EMOTION]->(e)
     SET r.weight = 1.0
 }
-CALL {
-    WITH v
+CALL (v) {
     UNWIND $concepts AS concept
     MERGE (c:Concept {name: concept})
     MERGE (v)-[:MENTIONS]->(c)
@@ -133,6 +138,16 @@ WITH x, count(v) AS df
 WHERE df > $max_df
 RETURN labels(x)[0] AS label, x.name AS name, df
 ORDER BY df DESC
+"""
+
+#: A label that lost its last verse (a re-tag can do that - "gunas" went from 44
+#: verses to 1 when the translation changed) would otherwise linger as an
+#: orphan node and inflate the node counts.
+DELETE_ORPHAN_LABELS = """
+MATCH (n)
+WHERE (n:Theme OR n:Emotion OR n:Concept) AND NOT (n)<-[]-()
+DELETE n
+RETURN count(n) AS deleted
 """
 
 #: RELATED_TO is fully derived, so a rebuild must clear it first - otherwise
