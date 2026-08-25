@@ -121,10 +121,12 @@ class GraphBuilder:
         embedder: Embedder | None = None,
         dry_run: bool = False,
         driver: Any | None = None,
+        allow_offline_embeddings: bool = False,
     ) -> None:
         self.settings = settings or get_settings()
         self.embedder = embedder or build_embedder(self.settings)
         self.dry_run = dry_run or not self.settings.neo4j_enabled
+        self.allow_offline_embeddings = allow_offline_embeddings
         self._driver = driver
 
     # ------------------------------------------------------------- plumbing
@@ -159,6 +161,7 @@ class GraphBuilder:
         dump_path: Path | None = None,
     ) -> BuildStats:
         """Create schema, write nodes/edges, then build both indexes."""
+        self._check_embedder_is_safe()
         embeddings = self._embed(corpus)
 
         if self.dry_run:
@@ -188,14 +191,43 @@ class GraphBuilder:
             verses=int(row.get("verses", len(corpus))),
             themes=int(row.get("themes", 0)),
             emotions=int(row.get("emotions", 0)),
-            concepts=0,
+            # Was hardcoded to 0, which made every real build report
+            # "concepts: 0" no matter how many Concept nodes it had just
+            # written. Only the --dry-run branch counted them, so the bug hid
+            # behind sample-corpus runs.
+            concepts=int(row.get("concepts", 0)),
             related_edges=int(row.get("related_edges", related_count)),
             embedded=len(embeddings),
             backend="neo4j",
-            extra={"uri": self.settings.neo4j_uri, "database": self.settings.neo4j_database},
+            extra={
+                "uri": self.settings.neo4j_uri,
+                "database": self.settings.neo4j_database,
+                "verses_with_book": int(row.get("verses_with_book", 0)),
+            },
         )
         logger.info("graph build complete: %s", stats.as_dict())
         return stats
+
+    def _check_embedder_is_safe(self) -> None:
+        """Refuse to write offline vectors into a real vector index.
+
+        ``GITAGUIDE_MOCK_MODE=true`` selects the deterministic hashing embedder.
+        Writing those vectors into a database whose index was built with MiniLM
+        does not fail - it silently poisons the index with two incompatible
+        embedding spaces, and retrieval quietly degrades to noise. Fail loud
+        instead; ``--allow-offline-embeddings`` is the deliberate override.
+        """
+        if self.dry_run or self.allow_offline_embeddings:
+            return
+        if self.embedder.name == "hashing-offline":
+            raise ValueError(
+                "refusing to write hashing-offline embeddings into Neo4j: they are "
+                "not comparable with MiniLM vectors, and mixing the two silently "
+                "breaks vector search. Set GITAGUIDE_MOCK_MODE=false to use "
+                f"{self.settings.embedding_model_id}, or pass "
+                "--allow-offline-embeddings if you really mean it."
+            )
+        logger.info("embedding with %s (dim=%s)", self.embedder.name, self.embedder.dim)
 
     def _create_indexes(self) -> None:
         vector_name = _validate_index_name(self.settings.neo4j_vector_index)
@@ -341,6 +373,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--reset", action="store_true", help="delete all nodes first")
     parser.add_argument("--dry-run", action="store_true", help="write a JSON dump instead")
+    parser.add_argument(
+        "--allow-offline-embeddings",
+        action="store_true",
+        help="permit writing hashing-offline vectors into Neo4j (normally refused)",
+    )
     parser.add_argument("--min-shared", type=int, default=DEFAULT_MIN_SHARED)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--dump", default=None, help="path for the dry-run JSON dump")
@@ -352,7 +389,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.limit:
         corpus = Corpus(verses=list(corpus)[: args.limit])
 
-    builder = GraphBuilder(dry_run=args.dry_run)
+    builder = GraphBuilder(
+        dry_run=args.dry_run,
+        allow_offline_embeddings=args.allow_offline_embeddings,
+    )
     try:
         stats = builder.build(
             corpus,

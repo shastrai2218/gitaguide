@@ -35,7 +35,7 @@ import urllib.request
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 
-from app.config import CORPUS_DATA_DIR, SAMPLE_CORPUS_PATH
+from app.config import CORPUS_DATA_DIR, PROJECT_ROOT, SAMPLE_CORPUS_PATH
 from corpus.schemas import Corpus, ScriptureSource, Verse, make_arthashastra_id
 from corpus.tagging import coverage_report, tag_all
 
@@ -55,6 +55,11 @@ WIKI_MARKUP_RE = re.compile(
 )
 FOOTNOTE_RE = re.compile(r"\[\d+\]")
 ROMAN_VALUES = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100, "D": 500, "M": 1000}
+
+#: Where ``scripts/download_arthashastra.py`` writes ``book_1.txt``..``book_15.txt``.
+DEFAULT_RAW_DIR = PROJECT_ROOT / "data" / "arthashastra_raw"
+#: One file per book; the number in the filename is authoritative for the id.
+BOOK_FILE_RE = re.compile(r"^book_(\d+)\.txt$", re.IGNORECASE)
 
 #: Paragraphs shorter than this are treated as headings/noise.
 MIN_SUTRA_CHARS = 60
@@ -114,8 +119,19 @@ def split_long_paragraph(paragraph: str, max_chars: int = MAX_SUTRA_CHARS) -> li
     return [chunk for chunk in chunks if chunk]
 
 
-def iter_sutras(text: str, default_book: int = 1) -> Iterator[tuple[int, int, int, str]]:
-    """Yield ``(book, chapter, sutra, text)`` tuples from the cleaned prose."""
+def iter_sutras(
+    text: str,
+    default_book: int = 1,
+    force_book: bool = False,
+) -> Iterator[tuple[int, int, int, str]]:
+    """Yield ``(book, chapter, sutra, text)`` tuples from the cleaned prose.
+
+    ``force_book`` pins the book number to ``default_book`` and ignores any
+    ``BOOK ...`` line in the text. Directory mode uses it because the filename
+    (``book_7.txt``) is authoritative: several Wikisource book pages open with a
+    title line naming the book in prose, and a stray match there would silently
+    mis-number every id in the file.
+    """
     book = default_book
     chapter = 0
     sutra = 0
@@ -125,7 +141,7 @@ def iter_sutras(text: str, default_book: int = 1) -> Iterator[tuple[int, int, in
         if not line:
             continue
 
-        book_match = BOOK_RE.match(line)
+        book_match = None if force_book else BOOK_RE.match(line)
         if book_match:
             book = roman_to_int(book_match.group(1))
             chapter = 0
@@ -149,10 +165,15 @@ def iter_sutras(text: str, default_book: int = 1) -> Iterator[tuple[int, int, in
             yield book, chapter, sutra, chunk
 
 
-def build_corpus_from_text(text: str, default_book: int = 1, limit: int | None = None) -> Corpus:
+def build_corpus_from_text(
+    text: str,
+    default_book: int = 1,
+    limit: int | None = None,
+    force_book: bool = False,
+) -> Corpus:
     """Parse cleaned prose into schema-valid :class:`Verse` objects."""
     verses: list[Verse] = []
-    for book, chapter, sutra, body in iter_sutras(clean_text(text), default_book):
+    for book, chapter, sutra, body in iter_sutras(clean_text(text), default_book, force_book):
         labels = tag_all(body)
         verses.append(
             Verse(
@@ -173,17 +194,71 @@ def build_corpus_from_text(text: str, default_book: int = 1, limit: int | None =
     return Corpus(verses=verses)
 
 
+def load_arthashastra_dir(directory: str | Path, limit: int | None = None) -> Corpus:
+    """Parse a directory of ``book_<n>.txt`` files into one corpus.
+
+    This is the normal path: ``scripts/download_arthashastra.py`` writes one file
+    per book, and the book number comes from the filename rather than from the
+    text (see ``force_book`` in :func:`iter_sutras`).
+    """
+    path = Path(directory)
+    if not path.is_dir():
+        raise FileNotFoundError(f"no such directory: {path}")
+
+    files: list[tuple[int, Path]] = []
+    for candidate in path.iterdir():
+        match = BOOK_FILE_RE.match(candidate.name)
+        if match:
+            files.append((int(match.group(1)), candidate))
+    if not files:
+        raise FileNotFoundError(
+            f"{path} contains no book_<n>.txt files "
+            "(run: python -m scripts.download_arthashastra)"
+        )
+    files.sort()
+
+    corpus = Corpus()
+    for book, file_path in files:
+        text = file_path.read_text(encoding="utf-8", errors="replace")
+        book_corpus = build_corpus_from_text(text, default_book=book, force_book=True)
+        logger.info(
+            "%s -> book %d: %d sutra(s), %d chapter(s)",
+            file_path.name,
+            book,
+            len(book_corpus),
+            len({verse.chapter for verse in book_corpus}),
+        )
+        if not len(book_corpus):
+            raise ValueError(
+                f"{file_path.name} produced no sutras - the cleaning and the parser "
+                "disagree (expected 'CHAPTER ...' heading lines)"
+            )
+        corpus.extend(book_corpus)
+        if limit is not None and len(corpus) >= limit:
+            return Corpus(verses=list(corpus)[:limit])
+    return corpus
+
+
 def load_arthashastra(
     input_path: str | None = None,
     url: str | None = None,
     offline: bool = False,
     default_book: int = 1,
     limit: int | None = None,
+    input_dir: str | Path | None = None,
 ) -> Corpus:
-    """Load from a local file, a URL, or fall back to the bundled sample."""
+    """Load from a directory, a single file, a URL, or the bundled sample.
+
+    Precedence: ``offline`` -> ``input_path`` -> ``input_dir`` (when it exists)
+    -> ``url``. So a bare ``python -m corpus.build_arthashastra`` builds from
+    ``data/arthashastra_raw/`` once it has been downloaded.
+    """
     if offline:
         logger.info("offline mode: using bundled sample corpus")
         return _sample_arthashastra()
+
+    if not input_path and input_dir and Path(input_dir).is_dir():
+        return load_arthashastra_dir(input_dir, limit)
 
     if input_path:
         path = Path(input_path)
@@ -216,6 +291,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         description="Parse the Shamasastry Arthashastra into Book/Chapter/Sutra JSON"
     )
     parser.add_argument("--input", default=None, help="local text/wikitext file")
+    parser.add_argument(
+        "--input-dir",
+        default=str(DEFAULT_RAW_DIR),
+        help="directory of book_<n>.txt files (default: data/arthashastra_raw)",
+    )
     parser.add_argument("--url", default=None, help="source url (Wikisource ?action=raw)")
     parser.add_argument("--offline", action="store_true")
     parser.add_argument("--book", type=int, default=1, help="book number if headings are absent")
@@ -231,6 +311,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         offline=args.offline,
         default_book=args.book,
         limit=args.limit,
+        input_dir=args.input_dir,
     )
     path = corpus.save(args.out)
     logger.info("wrote %d sutras to %s", len(corpus), path)

@@ -14,6 +14,10 @@ pydantic-settings==2.7.1
 python-multipart==0.0.20
 httpx==0.28.1
 
+# ---- corpus acquisition (scripts/download_arthashastra.py) ----------------
+requests==2.34.2
+beautifulsoup4==4.15.0
+
 # ---- persistence ----------------------------------------------------------
 SQLAlchemy==2.0.36
 asyncpg==0.30.0            # PostgreSQL async driver

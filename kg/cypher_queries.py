@@ -109,12 +109,16 @@ SET r.shared = shared, r.score = toFloat(shared) / 5.0
 RETURN count(r) AS created
 """
 
+#: Post-build counts. Written as COUNT{} subqueries so that a label with zero
+#: nodes reports 0 instead of eliminating the whole row - the chained-MATCH
+#: version silently returned nothing when any single label was empty.
 GRAPH_STATS = """
-MATCH (v:Verse) WITH count(v) AS verses
-MATCH (t:Theme) WITH verses, count(t) AS themes
-MATCH (e:Emotion) WITH verses, themes, count(e) AS emotions
-OPTIONAL MATCH ()-[r:RELATED_TO]->()
-RETURN verses, themes, emotions, count(r) AS related_edges
+RETURN count { MATCH (v:Verse) RETURN v }                   AS verses,
+       count { MATCH (t:Theme) RETURN t }                   AS themes,
+       count { MATCH (e:Emotion) RETURN e }                 AS emotions,
+       count { MATCH (c:Concept) RETURN c }                 AS concepts,
+       count { MATCH (:Verse)-[r:RELATED_TO]->(:Verse) RETURN r } AS related_edges,
+       count { MATCH (v:Verse) WHERE v.book IS NOT NULL RETURN v } AS verses_with_book
 """
 
 # --------------------------------------------------------------------------- #
