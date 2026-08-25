@@ -52,6 +52,8 @@ class QueryResult:
     predicted_intent: str
     relevant: list[str]
     retrieved: list[str]
+    #: Stratum from the gold set (emotional / professional / statecraft / ...).
+    category: str = ""
     hits: list[str] = field(default_factory=list)
     reciprocal_rank: float = 0.0
     recall_at_k: float = 0.0
@@ -64,6 +66,7 @@ class QueryResult:
             "query": self.query,
             "expected_intent": self.expected_intent,
             "predicted_intent": self.predicted_intent,
+            "category": self.category,
             "relevant": self.relevant,
             "retrieved": self.retrieved,
             "hits": self.hits,
@@ -108,6 +111,25 @@ class EvalReport:
             1 for item in self.queries if item.predicted_intent == item.expected_intent
         )
         return correct / len(self.queries)
+
+    def by_category(self) -> dict[str, dict[str, float]]:
+        """Metrics grouped by the gold set's ``category`` stratum."""
+        groups: dict[str, list[QueryResult]] = {}
+        for item in self.queries:
+            groups.setdefault(item.category or "uncategorised", []).append(item)
+        out: dict[str, dict[str, float]] = {}
+        for name, items in sorted(groups.items()):
+            out[name] = {
+                "n": len(items),
+                "hit_rate": _mean([1.0 if i.hits else 0.0 for i in items]),
+                "recall_at_k": _mean([i.recall_at_k for i in items]),
+                "mrr": _mean([i.reciprocal_rank for i in items]),
+                "ndcg_at_k": _mean([i.ndcg_at_k for i in items]),
+                "intent_accuracy": _mean(
+                    [1.0 if i.predicted_intent == i.expected_intent else 0.0 for i in items]
+                ),
+            }
+        return out
 
     @property
     def hit_rate(self) -> float:
@@ -169,6 +191,65 @@ def load_gold(path: Path = GOLD_PATH) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _load_gold_corpus(gold: dict[str, Any]) -> Corpus | None:
+    """Load the corpus file(s) the gold set was written against.
+
+    Accepts a single path or a list, so a gold set can span both scriptures.
+    """
+    declared = gold.get("corpus")
+    if not declared:
+        return None
+    paths = [declared] if isinstance(declared, str) else list(declared)
+    corpus = Corpus()
+    for raw in paths:
+        path = Path(raw)
+        if path.exists():
+            corpus.extend(Corpus.load(path))
+        else:
+            logger.warning("gold set declares corpus %s, which does not exist", path)
+    return corpus if len(corpus) else None
+
+
+def fingerprint_of(text: str, words: int = 8) -> str:
+    """First ``words`` words of a verse, lowercased - the staleness key.
+
+    Verse ids are addresses, not identities: Arthashastra sutra numbers are
+    *positional*, so re-segmenting the corpus silently moves them (three of the
+    five AS ids in the original gold set ended up pointing at different sutras,
+    and one vanished). A fingerprint of the text the id pointed at when the gold
+    entry was written turns that silent rot into a loud warning.
+    """
+    return " ".join(str(text).lower().split()[:words])
+
+
+def check_gold_staleness(
+    gold: dict[str, Any],
+    corpus: Corpus,
+    words: int = 8,
+) -> list[str]:
+    """Compare every gold id's stored fingerprint against the live corpus."""
+    by_id = {verse.id: verse for verse in corpus}
+    problems: list[str] = []
+    for pair in gold.get("pairs", []):
+        prints = pair.get("fingerprints") or {}
+        for verse_id in pair.get("relevant", []):
+            verse = by_id.get(verse_id)
+            if verse is None:
+                problems.append(f"{pair.get('id')}: {verse_id} NO LONGER EXISTS in the corpus")
+                continue
+            expected = prints.get(verse_id)
+            if not expected:
+                problems.append(f"{pair.get('id')}: {verse_id} has no stored fingerprint")
+                continue
+            actual = fingerprint_of(verse.text_english, words)
+            if actual != fingerprint_of(expected, words):
+                problems.append(
+                    f"{pair.get('id')}: {verse_id} MOVED - gold fingerprint "
+                    f"{expected!r} but corpus now says {actual!r}"
+                )
+    return problems
+
+
 def dcg(gains: Sequence[float]) -> float:
     return sum(gain / math.log2(index + 2) for index, gain in enumerate(gains))
 
@@ -205,6 +286,7 @@ def evaluate_one(
         query=str(pair.get("query", "")),
         expected_intent=str(pair.get("expected_intent", "")),
         predicted_intent=predicted_intent,
+        category=str(pair.get("category", "")),
         relevant=relevant,
         retrieved=top,
         hits=hits,
@@ -235,12 +317,22 @@ async def run_evaluation(
         ablations["intent_boost"] = "disabled"
 
     gold = load_gold(gold_path)
-    corpus_path = gold.get("corpus")
-    corpus = (
-        Corpus.load(corpus_path)
-        if corpus_path and Path(corpus_path).exists()
-        else None
-    )
+    corpus = _load_gold_corpus(gold)
+
+    if corpus is not None and len(corpus):
+        problems = check_gold_staleness(gold, corpus)
+        if problems:
+            logger.error(
+                "GOLD SET STALENESS: %d gold id(s) no longer match the corpus they "
+                "were written against. Metrics computed against them are not "
+                "comparable with earlier runs:\n  %s",
+                len(problems),
+                "\n  ".join(problems),
+            )
+        else:
+            logger.info(
+                "gold set fingerprints verified against %d corpus verses", len(corpus)
+            )
 
     if retriever is None:
         retriever = (

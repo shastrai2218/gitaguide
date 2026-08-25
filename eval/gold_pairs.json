@@ -1,86 +1,949 @@
 {
-  "description": "Gold (query -> relevant verse) pairs for retrieval evaluation. relevant = verses a domain reader would accept as a correct source for the query; graded[verse] = 2 (primary) or 1 (acceptable). Extend freely - retrieval_eval.py reads any number of pairs.",
-  "corpus": "corpus/data/sample_corpus.json",
+  "description": "GitaGuide retrieval gold set. 40 queries stratified by intent; 2-5 acceptable verse ids each, graded 2 (primary) or 1 (acceptable). A query counts as a hit if ANY acceptable id is retrieved - near-synonymous verses are common (BG-2.47 and BG-3.19 teach the same thing), so single-id grading measured wording luck rather than retrieval. Each id carries a text fingerprint; the eval harness warns when a rebuilt corpus moves an id out from under it. No crisis queries: those short-circuit at the safety gate before retrieval.",
+  "corpus": [
+    "corpus/data/gita.json",
+    "corpus/data/arthashastra.json"
+  ],
   "pairs": [
     {
       "id": "gp-001",
-      "query": "I keep panicking about whether my project will succeed. I cannot stop thinking about the outcome.",
+      "category": "emotional",
+      "query": "I feel like a failure after my exam results",
       "expected_intent": "seek_guidance",
-      "relevant": ["BG-2.47", "BG-2.14"],
-      "graded": { "BG-2.47": 2, "BG-2.14": 1, "BG-2.71": 1 },
-      "note": "Canonical outcome-anxiety case; nishkama karma is the primary answer."
+      "relevant": [
+        "BG-2.47",
+        "BG-2.38",
+        "BG-18.47",
+        "BG-6.5"
+      ],
+      "graded": {
+        "BG-2.47": 2,
+        "BG-2.38": 2,
+        "BG-18.47": 1,
+        "BG-6.5": 1
+      },
+      "fingerprints": {
+        "BG-2.47": "But you have only the right to work,",
+        "BG-2.38": "Look upon pleasure and pain, victory and defeat,",
+        "BG-18.47": "It is better to do one's own duty,",
+        "BG-6.5": "Let him seek liberation with the help of"
+      },
+      "note": "Outcome vs effort; equanimity in victory and defeat."
     },
     {
       "id": "gp-002",
-      "query": "My father passed away last month and I cannot stop crying.",
+      "category": "emotional",
+      "query": "My father passed away last month and I cannot stop crying",
       "expected_intent": "emotional_support",
-      "relevant": ["BG-2.11", "BG-18.66"],
-      "graded": { "BG-2.11": 2, "BG-18.66": 1, "BG-2.14": 1 },
-      "note": "Bereavement. Must NOT trip the safety gate."
+      "relevant": [
+        "BG-2.11",
+        "BG-2.20",
+        "BG-2.13",
+        "BG-18.66"
+      ],
+      "graded": {
+        "BG-2.11": 2,
+        "BG-2.20": 2,
+        "BG-2.13": 1,
+        "BG-18.66": 1
+      },
+      "fingerprints": {
+        "BG-2.11": "Lord Shri Krishna said: Why grieve for those",
+        "BG-2.20": "It was not born; it will never die,",
+        "BG-2.13": "As the soul experiences infancy, youth, and old",
+        "BG-18.66": "Give up your earthly duties, surrender yourself to"
+      },
+      "note": "The canonical bereavement passage of chapter 2."
     },
     {
       "id": "gp-003",
-      "query": "My manager took credit for my work in front of the whole team and I am furious.",
-      "expected_intent": "professional_dilemma",
-      "relevant": ["BG-2.62", "AS-2.9.1"],
-      "graded": { "BG-2.62": 2, "AS-2.9.1": 1, "AS-1.7.6": 1 },
-      "note": "Anger at work: the Gita explains the mechanism, the Arthashastra the remedy."
+      "category": "emotional",
+      "query": "I am anxious all the time about my future and cannot sleep",
+      "expected_intent": "emotional_support",
+      "relevant": [
+        "BG-2.47",
+        "BG-6.35",
+        "BG-6.34",
+        "BG-2.48"
+      ],
+      "graded": {
+        "BG-2.47": 2,
+        "BG-6.35": 2,
+        "BG-6.34": 1,
+        "BG-2.48": 1
+      },
+      "fingerprints": {
+        "BG-2.47": "But you have only the right to work,",
+        "BG-6.35": "Lord Shri Krishna replied: Doubtless, O Mighty One,",
+        "BG-6.34": "My Lord! Verily, the mind is fickle and",
+        "BG-2.48": "Revised: Perform all your actions with your mind"
+      },
+      "note": "Anticipatory anxiety: outcome-detachment plus the restless-mind exchange."
     },
     {
       "id": "gp-004",
-      "query": "Should I quit my stable job to join a startup that my friend is building?",
-      "expected_intent": "professional_dilemma",
-      "relevant": ["BG-3.35", "AS-7.1.2"],
-      "graded": { "BG-3.35": 2, "AS-7.1.2": 1, "BG-2.47": 1 },
-      "note": "Svadharma versus borrowed ambition, plus the six-measures decision frame."
+      "category": "emotional",
+      "query": "I hate myself for the mistakes I have made",
+      "expected_intent": "emotional_support",
+      "relevant": [
+        "BG-6.5",
+        "BG-6.6",
+        "BG-18.66"
+      ],
+      "graded": {
+        "BG-6.5": 2,
+        "BG-6.6": 2,
+        "BG-18.66": 1
+      },
+      "fingerprints": {
+        "BG-6.5": "Let him seek liberation with the help of",
+        "BG-6.6": "To one who has conquered their lower nature",
+        "BG-18.66": "Give up your earthly duties, surrender yourself to"
+      },
+      "note": "Self as friend or enemy; surrender and absolution."
     },
     {
       "id": "gp-005",
-      "query": "I am working sixteen hours a day and I am completely burnt out.",
-      "expected_intent": "professional_dilemma",
-      "relevant": ["AS-1.19.34", "BG-2.14"],
-      "graded": { "AS-1.19.34": 2, "BG-2.14": 1, "BG-6.5": 1 },
-      "note": "Workload structure is an Arthashastra topic before it is a Gita topic."
+      "category": "emotional",
+      "query": "Nothing I do seems to matter. What is the point of any of this?",
+      "expected_intent": "seek_guidance",
+      "relevant": [
+        "BG-3.35",
+        "BG-2.47",
+        "BG-3.9",
+        "BG-16.8"
+      ],
+      "graded": {
+        "BG-3.35": 2,
+        "BG-2.47": 2,
+        "BG-3.9": 1,
+        "BG-16.8": 1
+      },
+      "fingerprints": {
+        "BG-3.35": "It is better to do one's own duty,",
+        "BG-2.47": "But you have only the right to work,",
+        "BG-3.9": "In this world, people are fettered by their",
+        "BG-16.8": "They say the universe is an accident with"
+      },
+      "note": "Meaninglessness; BG-16.8 states the nihilist position the text answers."
     },
     {
       "id": "gp-006",
-      "query": "I hate myself for the mistakes I made and I cannot forgive myself.",
+      "category": "emotional",
+      "query": "I am jealous of my friends who are doing better than me",
       "expected_intent": "emotional_support",
-      "relevant": ["BG-6.5", "BG-18.66"],
-      "graded": { "BG-6.5": 2, "BG-6.6": 2, "BG-18.66": 1 },
-      "note": "Self-directed hostility; 6.5-6.6 is the two-verse unit."
+      "relevant": [
+        "BG-4.22",
+        "BG-3.35",
+        "BG-2.38"
+      ],
+      "graded": {
+        "BG-4.22": 2,
+        "BG-3.35": 2,
+        "BG-2.38": 1
+      },
+      "fingerprints": {
+        "BG-4.22": "Content with what comes to him without any",
+        "BG-3.35": "It is better to do one's own duty,",
+        "BG-2.38": "Look upon pleasure and pain, victory and defeat,"
+      },
+      "note": "Contentment with what comes unbidden; one's own path over another's."
     },
     {
       "id": "gp-007",
-      "query": "What does the Gita mean when it says to act without attachment to results?",
-      "expected_intent": "scripture_question",
-      "relevant": ["BG-2.47"],
-      "graded": { "BG-2.47": 2, "BG-2.71": 1 },
-      "note": "Exegetical, not personal; the answer should explain rather than advise."
+      "category": "emotional",
+      "query": "How do I stop worrying about things I cannot control?",
+      "expected_intent": "seek_guidance",
+      "relevant": [
+        "BG-2.47",
+        "BG-3.19",
+        "BG-2.48"
+      ],
+      "graded": {
+        "BG-2.47": 2,
+        "BG-3.19": 2,
+        "BG-2.48": 1
+      },
+      "fingerprints": {
+        "BG-2.47": "But you have only the right to work,",
+        "BG-3.19": "Therefore, do your duty perfectly, without worrying about",
+        "BG-2.48": "Revised: Perform all your actions with your mind"
+      },
+      "note": "The core nishkama-karma cluster."
     },
     {
       "id": "gp-008",
-      "query": "How do I decide whom to trust with responsibility in my team?",
-      "expected_intent": "professional_dilemma",
-      "relevant": ["AS-1.9.1", "AS-2.9.1"],
-      "graded": { "AS-1.9.1": 2, "AS-2.9.1": 2 },
-      "note": "Hiring rubric plus the audit principle."
+      "category": "emotional",
+      "query": "I feel restless and my mind never settles",
+      "expected_intent": "seek_guidance",
+      "relevant": [
+        "BG-6.34",
+        "BG-6.35",
+        "BG-6.26",
+        "BG-6.24"
+      ],
+      "graded": {
+        "BG-6.34": 2,
+        "BG-6.35": 2,
+        "BG-6.26": 1,
+        "BG-6.24": 1
+      },
+      "fingerprints": {
+        "BG-6.34": "My Lord! Verily, the mind is fickle and",
+        "BG-6.35": "Lord Shri Krishna replied: Doubtless, O Mighty One,",
+        "BG-6.26": "When the volatile and wavering mind wanders, let",
+        "BG-6.24": "Renouncing every desire that can be imagined, controlling"
+      },
+      "note": "Arjuna's own complaint about the fickle mind, and the reply."
     },
     {
       "id": "gp-009",
-      "query": "A colleague keeps provoking me in meetings and I want to lash out.",
-      "expected_intent": "professional_dilemma",
-      "relevant": ["BG-2.62", "BG-12.15", "AS-1.7.6"],
-      "graded": { "BG-2.62": 2, "AS-1.7.6": 1, "BG-12.15": 1 },
-      "note": "Anger regulation with a workplace object."
+      "category": "emotional",
+      "query": "I am afraid of dying",
+      "expected_intent": "emotional_support",
+      "relevant": [
+        "BG-2.20",
+        "BG-2.13",
+        "BG-2.11"
+      ],
+      "graded": {
+        "BG-2.20": 2,
+        "BG-2.13": 2,
+        "BG-2.11": 1
+      },
+      "fingerprints": {
+        "BG-2.20": "It was not born; it will never die,",
+        "BG-2.13": "As the soul experiences infancy, youth, and old",
+        "BG-2.11": "Lord Shri Krishna said: Why grieve for those"
+      },
+      "note": "Continuity of the self through death."
     },
     {
       "id": "gp-010",
-      "query": "There is corruption in my department and I am disgusted, but reporting it could cost my job.",
+      "category": "emotional",
+      "query": "I keep chasing success but I never feel satisfied",
+      "expected_intent": "seek_guidance",
+      "relevant": [
+        "BG-2.47",
+        "BG-4.22",
+        "BG-2.48",
+        "BG-16.21"
+      ],
+      "graded": {
+        "BG-2.47": 2,
+        "BG-4.22": 2,
+        "BG-2.48": 1,
+        "BG-16.21": 1
+      },
+      "fingerprints": {
+        "BG-2.47": "But you have only the right to work,",
+        "BG-4.22": "Content with what comes to him without any",
+        "BG-2.48": "Revised: Perform all your actions with your mind",
+        "BG-16.21": "The gates of hell are three: lust, wrath,"
+      },
+      "note": "Craving as the engine of dissatisfaction."
+    },
+    {
+      "id": "gp-011",
+      "category": "emotional",
+      "query": "How do I find peace when everything around me is chaotic?",
+      "expected_intent": "seek_guidance",
+      "relevant": [
+        "BG-2.64",
+        "BG-2.65",
+        "BG-6.15",
+        "BG-18.62"
+      ],
+      "graded": {
+        "BG-2.64": 2,
+        "BG-2.65": 2,
+        "BG-6.15": 1,
+        "BG-18.62": 1
+      },
+      "fingerprints": {
+        "BG-2.64": "But the self-controlled soul, who moves among sense",
+        "BG-2.65": "Having attained peace, he becomes free from misery;",
+        "BG-6.15": "Thus, keeping his mind always in communion with",
+        "BG-18.62": "With all your strength, fly to Him and"
+      },
+      "note": "Peace as an inner state reached through self-control."
+    },
+    {
+      "id": "gp-012",
+      "category": "emotional",
+      "query": "I feel alone even when I am surrounded by people",
+      "expected_intent": "emotional_support",
+      "relevant": [
+        "BG-6.30",
+        "BG-9.29",
+        "BG-9.4"
+      ],
+      "graded": {
+        "BG-6.30": 2,
+        "BG-9.29": 2,
+        "BG-9.4": 1
+      },
+      "fingerprints": {
+        "BG-6.30": "He who sees Me in everything and everything",
+        "BG-9.29": "I am the same to all beings; I",
+        "BG-9.4": "The whole world is pervaded by Me, yet"
+      },
+      "note": "The devotional answer to isolation: never forsaken, present in all."
+    },
+    {
+      "id": "gp-013",
+      "category": "professional",
+      "query": "My manager takes credit for my work and plays politics",
       "expected_intent": "professional_dilemma",
-      "relevant": ["AS-2.9.1", "AS-7.1.2"],
-      "graded": { "AS-2.9.1": 2, "AS-7.1.2": 1, "BG-3.35": 1 },
-      "note": "Ethics under risk: audit principle plus strategic timing."
+      "relevant": [
+        "BG-2.47",
+        "AS-2.8.20",
+        "AS-2.9.1",
+        "AS-2.8.13"
+      ],
+      "graded": {
+        "BG-2.47": 2,
+        "AS-2.8.20": 1,
+        "AS-2.9.1": 1,
+        "AS-2.8.13": 1
+      },
+      "fingerprints": {
+        "BG-2.47": "But you have only the right to work,",
+        "AS-2.8.20": "When a government servant has been proved to",
+        "AS-2.9.1": "THOSE who are possessed of ministerial qualifications shall,",
+        "AS-2.8.13": "There are about forty ways of embezzlement: what"
+      },
+      "note": "Gita for the grievance, Arthashastra for misappropriation and audit."
+    },
+    {
+      "id": "gp-014",
+      "category": "professional",
+      "query": "Should I quit my stable job to join a startup?",
+      "expected_intent": "professional_dilemma",
+      "relevant": [
+        "BG-3.35",
+        "BG-18.47",
+        "BG-2.47"
+      ],
+      "graded": {
+        "BG-3.35": 2,
+        "BG-18.47": 2,
+        "BG-2.47": 1
+      },
+      "fingerprints": {
+        "BG-3.35": "It is better to do one's own duty,",
+        "BG-18.47": "It is better to do one's own duty,",
+        "BG-2.47": "But you have only the right to work,"
+      },
+      "note": "Svadharma: one's own imperfect work over another's done well."
+    },
+    {
+      "id": "gp-015",
+      "category": "professional",
+      "query": "I am working sixteen hours a day and I am burnt out",
+      "expected_intent": "professional_dilemma",
+      "relevant": [
+        "AS-1.19.2",
+        "AS-1.19.3",
+        "AS-2.7.8"
+      ],
+      "graded": {
+        "AS-1.19.2": 2,
+        "AS-1.19.3": 2,
+        "AS-2.7.8": 1
+      },
+      "fingerprints": {
+        "AS-1.19.2": "He shall divide both the day and the",
+        "AS-1.19.3": "Of these divisions, during the first one-eighth part",
+        "AS-2.7.8": "The work of 354 days and nights is"
+      },
+      "note": "Kautilya's division of the day and night into eight parts each."
+    },
+    {
+      "id": "gp-016",
+      "category": "professional",
+      "query": "A colleague keeps provoking me in meetings and I want to lash out",
+      "expected_intent": "professional_dilemma",
+      "relevant": [
+        "BG-2.62",
+        "BG-16.21",
+        "BG-5.23",
+        "AS-1.6.1"
+      ],
+      "graded": {
+        "BG-2.62": 2,
+        "BG-16.21": 2,
+        "BG-5.23": 1,
+        "AS-1.6.1": 1
+      },
+      "fingerprints": {
+        "BG-2.62": "When a person dwells on the objects of",
+        "BG-16.21": "The gates of hell are three: lust, wrath,",
+        "BG-5.23": "He who, before leaving his body, learns to",
+        "AS-1.6.1": "RESTRAINT of the organs of sense, on which"
+      },
+      "note": "The attachment-desire-anger chain, and restraint of the senses."
+    },
+    {
+      "id": "gp-017",
+      "category": "professional",
+      "query": "There is corruption in my department but reporting it could cost my job",
+      "expected_intent": "professional_dilemma",
+      "relevant": [
+        "AS-2.8.13",
+        "AS-2.8.20",
+        "AS-2.5.17",
+        "AS-2.9.1"
+      ],
+      "graded": {
+        "AS-2.8.13": 2,
+        "AS-2.8.20": 2,
+        "AS-2.5.17": 1,
+        "AS-2.9.1": 1
+      },
+      "fingerprints": {
+        "AS-2.8.13": "There are about forty ways of embezzlement: what",
+        "AS-2.8.20": "When a government servant has been proved to",
+        "AS-2.5.17": "In all departments, whoever, whether as an officer",
+        "AS-2.9.1": "THOSE who are possessed of ministerial qualifications shall,"
+      },
+      "note": "The forty ways of embezzlement and what follows from proof."
+    },
+    {
+      "id": "gp-018",
+      "category": "professional",
+      "query": "I did not get the promotion I deserved",
+      "expected_intent": "professional_dilemma",
+      "relevant": [
+        "BG-2.47",
+        "BG-2.38",
+        "BG-4.22",
+        "BG-3.35"
+      ],
+      "graded": {
+        "BG-2.47": 2,
+        "BG-2.38": 2,
+        "BG-4.22": 1,
+        "BG-3.35": 1
+      },
+      "fingerprints": {
+        "BG-2.47": "But you have only the right to work,",
+        "BG-2.38": "Look upon pleasure and pain, victory and defeat,",
+        "BG-4.22": "Content with what comes to him without any",
+        "BG-3.35": "It is better to do one's own duty,"
+      },
+      "note": "Entitlement to effort, not to outcome."
+    },
+    {
+      "id": "gp-019",
+      "category": "professional",
+      "query": "How do I decide whom to trust with responsibility in my team?",
+      "expected_intent": "professional_dilemma",
+      "relevant": [
+        "AS-1.9.1",
+        "AS-2.9.1",
+        "AS-1.8.6",
+        "AS-1.16.1"
+      ],
+      "graded": {
+        "AS-1.9.1": 2,
+        "AS-2.9.1": 2,
+        "AS-1.8.6": 1,
+        "AS-1.16.1": 1
+      },
+      "fingerprints": {
+        "AS-1.9.1": "NATIVE, born of high family, influential, well trained",
+        "AS-2.9.1": "THOSE who are possessed of ministerial qualifications shall,",
+        "AS-1.8.6": "\"No,\" says Kaunapadanta, \"for such persons are devoid",
+        "AS-1.16.1": "Whoever possesses ministerial qualifications is a chargé-d'affaires (nisrishtárthah)."
+      },
+      "note": "The amatya-sampat qualification list."
+    },
+    {
+      "id": "gp-020",
+      "category": "professional",
+      "query": "My boss micromanages every small thing I do",
+      "expected_intent": "professional_dilemma",
+      "relevant": [
+        "BG-3.35",
+        "AS-2.9.1",
+        "AS-1.16.1"
+      ],
+      "graded": {
+        "BG-3.35": 2,
+        "AS-2.9.1": 1,
+        "AS-1.16.1": 1
+      },
+      "fingerprints": {
+        "BG-3.35": "It is better to do one's own duty,",
+        "AS-2.9.1": "THOSE who are possessed of ministerial qualifications shall,",
+        "AS-1.16.1": "Whoever possesses ministerial qualifications is a chargé-d'affaires (nisrishtárthah)."
+      },
+      "note": "Delegation by capacity; doing one's own assigned work."
+    },
+    {
+      "id": "gp-021",
+      "category": "professional",
+      "query": "Should I take a job that pays more but bores me?",
+      "expected_intent": "professional_dilemma",
+      "relevant": [
+        "BG-3.35",
+        "BG-18.47",
+        "BG-2.47"
+      ],
+      "graded": {
+        "BG-3.35": 2,
+        "BG-18.47": 2,
+        "BG-2.47": 1
+      },
+      "fingerprints": {
+        "BG-3.35": "It is better to do one's own duty,",
+        "BG-18.47": "It is better to do one's own duty,",
+        "BG-2.47": "But you have only the right to work,"
+      },
+      "note": "Same svadharma cluster as gp-014, different framing."
+    },
+    {
+      "id": "gp-022",
+      "category": "professional",
+      "query": "I made a costly mistake at work and I am terrified of the consequences",
+      "expected_intent": "professional_dilemma",
+      "relevant": [
+        "BG-2.38",
+        "BG-18.66",
+        "BG-6.5",
+        "BG-2.47"
+      ],
+      "graded": {
+        "BG-2.38": 2,
+        "BG-18.66": 2,
+        "BG-6.5": 1,
+        "BG-2.47": 1
+      },
+      "fingerprints": {
+        "BG-2.38": "Look upon pleasure and pain, victory and defeat,",
+        "BG-18.66": "Give up your earthly duties, surrender yourself to",
+        "BG-6.5": "Let him seek liberation with the help of",
+        "BG-2.47": "But you have only the right to work,"
+      },
+      "note": "Fear of consequence; absolution and self-rescue."
+    },
+    {
+      "id": "gp-023",
+      "category": "professional",
+      "query": "My team keeps missing deadlines and I do not know how to fix it",
+      "expected_intent": "professional_dilemma",
+      "relevant": [
+        "AS-3.14.1",
+        "AS-3.14.3",
+        "AS-1.19.2",
+        "AS-2.9.1"
+      ],
+      "graded": {
+        "AS-3.14.1": 2,
+        "AS-3.14.3": 2,
+        "AS-1.19.2": 1,
+        "AS-2.9.1": 1
+      },
+      "fingerprints": {
+        "AS-3.14.1": "A servant neglecting or unreasonably putting off work",
+        "AS-3.14.3": "An employer not taking work from his labourer",
+        "AS-1.19.2": "He shall divide both the day and the",
+        "AS-2.9.1": "THOSE who are possessed of ministerial qualifications shall,"
+      },
+      "note": "Kautilya on work not done for wages received."
+    },
+    {
+      "id": "gp-024",
+      "category": "professional",
+      "query": "I have to dismiss someone from my team for the first time",
+      "expected_intent": "professional_dilemma",
+      "relevant": [
+        "AS-2.8.20",
+        "AS-3.14.1",
+        "AS-2.9.1",
+        "AS-1.9.1"
+      ],
+      "graded": {
+        "AS-2.8.20": 2,
+        "AS-3.14.1": 1,
+        "AS-2.9.1": 1,
+        "AS-1.9.1": 1
+      },
+      "fingerprints": {
+        "AS-2.8.20": "When a government servant has been proved to",
+        "AS-3.14.1": "A servant neglecting or unreasonably putting off work",
+        "AS-2.9.1": "THOSE who are possessed of ministerial qualifications shall,",
+        "AS-1.9.1": "NATIVE, born of high family, influential, well trained"
+      },
+      "note": "Proof before penalty; fitness for the post."
+    },
+    {
+      "id": "gp-025",
+      "category": "statecraft",
+      "query": "How should a leader choose ministers and advisers?",
+      "expected_intent": "professional_dilemma",
+      "relevant": [
+        "AS-1.9.1",
+        "AS-1.8.6",
+        "AS-1.8.8",
+        "AS-1.16.1"
+      ],
+      "graded": {
+        "AS-1.9.1": 2,
+        "AS-1.8.6": 2,
+        "AS-1.8.8": 1,
+        "AS-1.16.1": 1
+      },
+      "fingerprints": {
+        "AS-1.9.1": "NATIVE, born of high family, influential, well trained",
+        "AS-1.8.6": "\"No,\" says Kaunapadanta, \"for such persons are devoid",
+        "AS-1.8.8": "\"No,\" says the son of Báhudantí (a woman);",
+        "AS-1.16.1": "Whoever possesses ministerial qualifications is a chargé-d'affaires (nisrishtárthah)."
+      },
+      "note": "The debate between the schools on how to appoint ministers."
+    },
+    {
+      "id": "gp-026",
+      "category": "statecraft",
+      "query": "How do I audit the people who handle money in my organisation?",
+      "expected_intent": "professional_dilemma",
+      "relevant": [
+        "AS-2.8.13",
+        "AS-2.8.20",
+        "AS-2.5.17",
+        "AS-2.9.10"
+      ],
+      "graded": {
+        "AS-2.8.13": 2,
+        "AS-2.8.20": 2,
+        "AS-2.5.17": 1,
+        "AS-2.9.10": 1
+      },
+      "fingerprints": {
+        "AS-2.8.13": "There are about forty ways of embezzlement: what",
+        "AS-2.8.20": "When a government servant has been proved to",
+        "AS-2.5.17": "In all departments, whoever, whether as an officer",
+        "AS-2.9.10": "Whoever spends the revenue (without bringing in any"
+      },
+      "note": "Embezzlement detection and departmental accounting."
+    },
+    {
+      "id": "gp-027",
+      "category": "statecraft",
+      "query": "When should I make peace with a rival instead of fighting?",
+      "expected_intent": "professional_dilemma",
+      "relevant": [
+        "AS-7.1.5",
+        "AS-7.3.16",
+        "AS-7.17.2",
+        "AS-6.2.3"
+      ],
+      "graded": {
+        "AS-7.1.5": 2,
+        "AS-7.3.16": 2,
+        "AS-7.17.2": 1,
+        "AS-6.2.3": 1
+      },
+      "fingerprints": {
+        "AS-7.1.5": "Whoever is inferior to another shall make peace",
+        "AS-7.3.16": "Thus it is that the six forms of",
+        "AS-7.17.2": "My teacher says that peace, depended upon honesty",
+        "AS-6.2.3": "Absence of disturbance to the enjoyment of the"
+      },
+      "note": "Shadgunya: the inferior makes peace, the superior makes war."
+    },
+    {
+      "id": "gp-028",
+      "category": "statecraft",
+      "query": "How should a ruler divide and organise his working day?",
+      "expected_intent": "professional_dilemma",
+      "relevant": [
+        "AS-1.19.2",
+        "AS-1.19.3",
+        "AS-1.19.5"
+      ],
+      "graded": {
+        "AS-1.19.2": 2,
+        "AS-1.19.3": 2,
+        "AS-1.19.5": 2
+      },
+      "fingerprints": {
+        "AS-1.19.2": "He shall divide both the day and the",
+        "AS-1.19.3": "Of these divisions, during the first one-eighth part",
+        "AS-1.19.5": "During the first one-eighth part of the night,"
+      },
+      "note": "The eight nalikas of day and of night."
+    },
+    {
+      "id": "gp-029",
+      "category": "statecraft",
+      "query": "How do I detect and handle a conspiracy inside my own camp?",
+      "expected_intent": "professional_dilemma",
+      "relevant": [
+        "AS-1.16.10",
+        "AS-11.1.4",
+        "AS-1.14.2"
+      ],
+      "graded": {
+        "AS-1.16.10": 2,
+        "AS-11.1.4": 2,
+        "AS-1.14.2": 1
+      },
+      "fingerprints": {
+        "AS-1.16.10": "He shall, through the agency of ascetic and",
+        "AS-11.1.4": "Spies, gaining access to all these corporations and",
+        "AS-1.14.2": "Those who are deluded with false promise of"
+      },
+      "note": "Spies among corporations; seditious parties."
+    },
+    {
+      "id": "gp-030",
+      "category": "statecraft",
+      "query": "What makes a treaty or an alliance worth entering?",
+      "expected_intent": "professional_dilemma",
+      "relevant": [
+        "AS-7.17.2",
+        "AS-7.1.5",
+        "AS-7.3.16"
+      ],
+      "graded": {
+        "AS-7.17.2": 2,
+        "AS-7.1.5": 2,
+        "AS-7.3.16": 1
+      },
+      "fingerprints": {
+        "AS-7.17.2": "My teacher says that peace, depended upon honesty",
+        "AS-7.1.5": "Whoever is inferior to another shall make peace",
+        "AS-7.3.16": "Thus it is that the six forms of"
+      },
+      "note": "Peace resting on honesty or oath versus on a surety."
+    },
+    {
+      "id": "gp-031",
+      "category": "statecraft",
+      "query": "How should punishment be applied so it is neither too harsh nor too lenient?",
+      "expected_intent": "professional_dilemma",
+      "relevant": [
+        "AS-7.5.16",
+        "AS-4.11.16",
+        "AS-3.18.1"
+      ],
+      "graded": {
+        "AS-7.5.16": 2,
+        "AS-4.11.16": 1,
+        "AS-3.18.1": 1
+      },
+      "fingerprints": {
+        "AS-7.5.16": "by not punishing the guilty and severely punishing",
+        "AS-4.11.16": "Any person who insults the king, betrays the",
+        "AS-3.18.1": "CALUMNY, contemptuous talk, or intimidation constitutes defamation."
+      },
+      "note": "Mis-application of danda as a cause of disaffection. Thin coverage."
+    },
+    {
+      "id": "gp-032",
+      "category": "statecraft",
+      "query": "How do I gather reliable information about what is really happening?",
+      "expected_intent": "professional_dilemma",
+      "relevant": [
+        "AS-1.16.10",
+        "AS-1.10.3",
+        "AS-11.1.4",
+        "AS-1.10.5"
+      ],
+      "graded": {
+        "AS-1.16.10": 2,
+        "AS-1.10.3": 1,
+        "AS-11.1.4": 1,
+        "AS-1.10.5": 1
+      },
+      "fingerprints": {
+        "AS-1.16.10": "He shall, through the agency of ascetic and",
+        "AS-1.10.3": "Then the dismissed priest shall, through the medium",
+        "AS-11.1.4": "Spies, gaining access to all these corporations and",
+        "AS-1.10.5": "A commander of the army, dismissed from service"
+      },
+      "note": "The spy apparatus as an intelligence system."
+    },
+    {
+      "id": "gp-033",
+      "category": "relationship",
+      "query": "My parents want me to marry someone I do not love",
+      "expected_intent": "seek_guidance",
+      "relevant": [
+        "BG-3.35",
+        "BG-18.47",
+        "AS-1.3.8"
+      ],
+      "graded": {
+        "BG-3.35": 2,
+        "BG-18.47": 1,
+        "AS-1.3.8": 1
+      },
+      "fingerprints": {
+        "BG-3.35": "It is better to do one's own duty,",
+        "BG-18.47": "It is better to do one's own duty,",
+        "AS-1.3.8": "The duty of a householder is earning livelihood"
+      },
+      "note": "Weak corpus coverage: no direct teaching, only svadharma by analogy."
+    },
+    {
+      "id": "gp-034",
+      "category": "relationship",
+      "query": "I had a bitter fight with my brother over family property",
+      "expected_intent": "seek_guidance",
+      "relevant": [
+        "AS-3.5.4",
+        "AS-3.1.5",
+        "BG-2.62",
+        "BG-16.21"
+      ],
+      "graded": {
+        "AS-3.5.4": 2,
+        "AS-3.1.5": 1,
+        "BG-2.62": 1,
+        "BG-16.21": 1
+      },
+      "fingerprints": {
+        "AS-3.5.4": "If a man has no male issue, his",
+        "AS-3.1.5": "Those agreements which relate to the division of",
+        "BG-2.62": "When a person dwells on the objects of",
+        "BG-16.21": "The gates of hell are three: lust, wrath,"
+      },
+      "note": "Inheritance rules plus the anger chain."
+    },
+    {
+      "id": "gp-035",
+      "category": "relationship",
+      "query": "My wife and I keep arguing about money",
+      "expected_intent": "seek_guidance",
+      "relevant": [
+        "AS-3.2.4",
+        "BG-2.62",
+        "BG-16.21"
+      ],
+      "graded": {
+        "AS-3.2.4": 2,
+        "BG-2.62": 1,
+        "BG-16.21": 1
+      },
+      "fingerprints": {
+        "AS-3.2.4": "Means of subsistence (vritti) or jewellery (ábadhya) constitutes",
+        "BG-2.62": "When a person dwells on the objects of",
+        "BG-16.21": "The gates of hell are three: lust, wrath,"
+      },
+      "note": "Stridhana; the corpus is legalistic here, not counselling."
+    },
+    {
+      "id": "gp-036",
+      "category": "relationship",
+      "query": "How do I care for my ageing parents without resenting them?",
+      "expected_intent": "seek_guidance",
+      "relevant": [
+        "BG-2.13",
+        "BG-3.35",
+        "AS-1.5.6"
+      ],
+      "graded": {
+        "BG-2.13": 2,
+        "BG-3.35": 1,
+        "AS-1.5.6": 1
+      },
+      "fingerprints": {
+        "BG-2.13": "As the soul experiences infancy, youth, and old",
+        "BG-3.35": "It is better to do one's own duty,",
+        "AS-1.5.6": "In view of maintaining efficient discipline, he shall"
+      },
+      "note": "Weakest entry: the corpus has no filial-care teaching. Kept as an honest negative - if retrieval scores well here it is luck."
+    },
+    {
+      "id": "gp-037",
+      "category": "hinglish",
+      "query": "mujhe lagta hai sab kuch meri galti hai, I can't focus on anything",
+      "expected_intent": "emotional_support",
+      "relevant": [
+        "BG-6.5",
+        "BG-6.6",
+        "BG-18.66"
+      ],
+      "graded": {
+        "BG-6.5": 2,
+        "BG-6.6": 2,
+        "BG-18.66": 1
+      },
+      "fingerprints": {
+        "BG-6.5": "Let him seek liberation with the help of",
+        "BG-6.6": "To one who has conquered their lower nature",
+        "BG-18.66": "Give up your earthly duties, surrender yourself to"
+      },
+      "note": "Hinglish twin of gp-004 (self-blame)."
+    },
+    {
+      "id": "gp-038",
+      "category": "hinglish",
+      "query": "office mein sab log politics karte hain, main kya karun",
+      "expected_intent": "professional_dilemma",
+      "relevant": [
+        "BG-2.47",
+        "AS-2.8.20",
+        "AS-2.9.1"
+      ],
+      "graded": {
+        "BG-2.47": 2,
+        "AS-2.8.20": 1,
+        "AS-2.9.1": 1
+      },
+      "fingerprints": {
+        "BG-2.47": "But you have only the right to work,",
+        "AS-2.8.20": "When a government servant has been proved to",
+        "AS-2.9.1": "THOSE who are possessed of ministerial qualifications shall,"
+      },
+      "note": "Hinglish twin of gp-013 (office politics)."
+    },
+    {
+      "id": "gp-039",
+      "category": "hinglish",
+      "query": "papa chahte hain main unka business sambhalun but mera mann nahi hai",
+      "expected_intent": "seek_guidance",
+      "relevant": [
+        "BG-3.35",
+        "BG-18.47",
+        "BG-2.47"
+      ],
+      "graded": {
+        "BG-3.35": 2,
+        "BG-18.47": 2,
+        "BG-2.47": 1
+      },
+      "fingerprints": {
+        "BG-3.35": "It is better to do one's own duty,",
+        "BG-18.47": "It is better to do one's own duty,",
+        "BG-2.47": "But you have only the right to work,"
+      },
+      "note": "Hinglish twin of gp-014/gp-033 (svadharma vs family expectation)."
+    },
+    {
+      "id": "gp-040",
+      "category": "hinglish",
+      "query": "bahut tension hai exam ka, neend nahi aati raat ko",
+      "expected_intent": "emotional_support",
+      "relevant": [
+        "BG-2.47",
+        "BG-6.35",
+        "BG-2.38"
+      ],
+      "graded": {
+        "BG-2.47": 2,
+        "BG-6.35": 2,
+        "BG-2.38": 1
+      },
+      "fingerprints": {
+        "BG-2.47": "But you have only the right to work,",
+        "BG-6.35": "Lord Shri Krishna replied: Doubtless, O Mighty One,",
+        "BG-2.38": "Look upon pleasure and pain, victory and defeat,"
+      },
+      "note": "Hinglish twin of gp-003 (exam anxiety, sleeplessness)."
     }
   ]
 }
