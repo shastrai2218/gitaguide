@@ -131,6 +131,14 @@ class Settings(BaseSettings):
     nvidia_retry_base_delay: float = 1.0
     nvidia_retry_max_delay: float = 20.0
 
+    # ---------------------------------------------------------- knowledge graph
+    #: Labels (Theme/Concept) attached to more than this fraction of the corpus
+    #: are ignored when building RELATED_TO edges. A label on a quarter of the
+    #: corpus carries no signal about relatedness but generates a quadratic
+    #: number of pairs; 0.08 sits at the observed knee of the distribution
+    #: (governance 9.3% -> hiring 5.9%).
+    kg_hub_label_max_fraction: float = 0.08
+
     # -------------------------------------------------------------- retrieval
     retrieval_top_k: int = 5
     retrieval_candidate_k: int = 20

@@ -44,8 +44,10 @@ from kg.cypher_queries import (
     CONSTRAINTS,
     CREATE_FULLTEXT_INDEX,
     CREATE_VECTOR_INDEX,
+    DELETE_RELATED_EDGES,
     DROP_ALL,
     GRAPH_STATS,
+    HUB_LABELS,
     LINK_RELATED_VERSES,
     MERGE_SCRIPTURE,
     MERGE_VERSE,
@@ -122,8 +124,14 @@ class GraphBuilder:
         dry_run: bool = False,
         driver: Any | None = None,
         allow_offline_embeddings: bool = False,
+        hub_max_fraction: float | None = None,
     ) -> None:
         self.settings = settings or get_settings()
+        self.hub_max_fraction = (
+            self.settings.kg_hub_label_max_fraction
+            if hub_max_fraction is None
+            else hub_max_fraction
+        )
         self.embedder = embedder or build_embedder(self.settings)
         self.dry_run = dry_run or not self.settings.neo4j_enabled
         self.allow_offline_embeddings = allow_offline_embeddings
@@ -180,8 +188,7 @@ class GraphBuilder:
         for verse in corpus:
             self._run(MERGE_VERSE, **_verse_params(verse, embeddings[verse.id]))
 
-        related = self._run(LINK_RELATED_VERSES, min_shared=min_shared)
-        related_count = int(related[0]["created"]) if related else 0
+        related_count, suppressed = self._link_related(min_shared)
 
         self._create_indexes()
         stats_rows = self._run(GRAPH_STATS)
@@ -203,10 +210,42 @@ class GraphBuilder:
                 "uri": self.settings.neo4j_uri,
                 "database": self.settings.neo4j_database,
                 "verses_with_book": int(row.get("verses_with_book", 0)),
+                "hub_max_fraction": self.hub_max_fraction,
+                "hub_labels_suppressed": suppressed,
             },
         )
         logger.info("graph build complete: %s", stats.as_dict())
         return stats
+
+    def _link_related(self, min_shared: int) -> tuple[int, list[str]]:
+        """Rebuild RELATED_TO with hub labels suppressed.
+
+        Existing edges are deleted first: RELATED_TO is fully derived, so a
+        rebuild under a stricter threshold must not leave the previous run's
+        hub edges behind.
+        """
+        verse_count = int(
+            self._run("MATCH (v:Verse) RETURN count(v) AS c")[0]["c"]
+        )
+        max_df = max(1, int(self.hub_max_fraction * verse_count))
+
+        suppressed = [
+            f"{row['name']} ({row['df']})"
+            for row in self._run(HUB_LABELS, max_df=max_df)
+        ]
+        if suppressed:
+            logger.info(
+                "hub suppression: ignoring %d label(s) on >%d/%d verses (>%.0f%%): %s",
+                len(suppressed),
+                max_df,
+                verse_count,
+                self.hub_max_fraction * 100,
+                ", ".join(suppressed),
+            )
+
+        self._run(DELETE_RELATED_EDGES)
+        rows = self._run(LINK_RELATED_VERSES, min_shared=min_shared, max_df=max_df)
+        return (int(rows[0]["created"]) if rows else 0), suppressed
 
     def _check_embedder_is_safe(self) -> None:
         """Refuse to write offline vectors into a real vector index.
@@ -379,6 +418,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="permit writing hashing-offline vectors into Neo4j (normally refused)",
     )
     parser.add_argument("--min-shared", type=int, default=DEFAULT_MIN_SHARED)
+    parser.add_argument(
+        "--hub-max-fraction",
+        type=float,
+        default=None,
+        help=(
+            "ignore Theme/Concept labels attached to more than this fraction of "
+            "the corpus when building RELATED_TO (default: "
+            "GITAGUIDE_KG_HUB_LABEL_MAX_FRACTION, 0.08)"
+        ),
+    )
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--dump", default=None, help="path for the dry-run JSON dump")
     args = parser.parse_args(argv)
@@ -392,6 +441,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     builder = GraphBuilder(
         dry_run=args.dry_run,
         allow_offline_embeddings=args.allow_offline_embeddings,
+        hub_max_fraction=args.hub_max_fraction,
     )
     try:
         stats = builder.build(

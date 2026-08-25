@@ -98,8 +98,24 @@ CALL {
 RETURN v.id AS id
 """
 
-#: Verses that share at least ``$min_shared`` themes/concepts become siblings.
+#: Verses that share at least ``$min_shared`` *non-hub* themes/concepts become
+#: siblings.
+#:
+#: Hub suppression (the ``$max_df`` clause) is IDF thinking applied to the graph:
+#: a label carried by a quarter of the corpus ("relationships": 966/3836) says
+#: nothing about whether two verses belong together, but it generates ~466k
+#: candidate pairs on its own. Without the clause a 3,836-verse corpus produced
+#: 269,247 RELATED_TO edges (max degree 1,088); with ``$max_df`` at 8% of the
+#: corpus it produces 3,126, and every one of them means something.
+#:
+#: ``$max_df`` is *document frequency*, in verses, not a fraction - the caller
+#: multiplies :attr:`app.config.Settings.kg_hub_label_max_fraction` by the live
+#: verse count so the threshold scales with the corpus.
 LINK_RELATED_VERSES = """
+MATCH (x)<-[:HAS_THEME|MENTIONS]-(v:Verse)
+WHERE x:Theme OR x:Concept
+WITH x, count(v) AS df
+WHERE df <= $max_df
 MATCH (a:Verse)-[:HAS_THEME|MENTIONS]->(x)<-[:HAS_THEME|MENTIONS]-(b:Verse)
 WHERE a.id < b.id
 WITH a, b, count(DISTINCT x) AS shared
@@ -107,6 +123,23 @@ WHERE shared >= $min_shared
 MERGE (a)-[r:RELATED_TO]->(b)
 SET r.shared = shared, r.score = toFloat(shared) / 5.0
 RETURN count(r) AS created
+"""
+
+#: Labels excluded by the hub filter, for the build report.
+HUB_LABELS = """
+MATCH (x)<-[:HAS_THEME|MENTIONS]-(v:Verse)
+WHERE x:Theme OR x:Concept
+WITH x, count(v) AS df
+WHERE df > $max_df
+RETURN labels(x)[0] AS label, x.name AS name, df
+ORDER BY df DESC
+"""
+
+#: RELATED_TO is fully derived, so a rebuild must clear it first - otherwise
+#: yesterday's hub edges survive today's stricter threshold.
+DELETE_RELATED_EDGES = """
+MATCH ()-[r:RELATED_TO]->()
+CALL (r) { DELETE r } IN TRANSACTIONS OF 10000 ROWS
 """
 
 #: Post-build counts. Written as COUNT{} subqueries so that a label with zero

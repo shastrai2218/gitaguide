@@ -292,3 +292,103 @@ async def test_template_fallback_is_also_clean(settings: Settings) -> None:
 
     assert LEAKY_SEED not in result.answer
     assert set(extract_verse_ids(result.answer)) <= set(trace.verse_ids)
+
+
+# --------------------------------------------------------------------------- #
+# Arthashastra ids are three-part (AS-<book>.<chapter>.<sutra>) while Gita ids
+# are two-part (BG-<chapter>.<verse>). The citation regex and the masker were
+# written when only BG existed, so both forms are pinned here explicitly.
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("cite AS-1.2.3 here", ["AS-1.2.3"]),
+        ("AS-15.1.39 and BG-2.47", ["AS-15.1.39", "BG-2.47"]),
+        ("(AS-7.1.2)", ["AS-7.1.2"]),
+        ("AS-1.19.34.", ["AS-1.19.34"]),
+        ("AS-2.36.29 mid-sentence", ["AS-2.36.29"]),
+        ("not an id: AS-1", []),
+    ],
+)
+def test_extract_verse_ids_handles_three_part_as_ids(text: str, expected: list[str]) -> None:
+    assert extract_verse_ids(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "allowed", "expected"),
+    [
+        # A suppressed AS id is masked, a permitted one survives.
+        (
+            "(AS-1.9.1) -[:HAS_THEME]-> theme 'hiring' <-[:HAS_THEME]- (AS-2.9.1)",
+            {"AS-2.9.1"},
+            f"({FOREIGN_ID_PLACEHOLDER}) -[:HAS_THEME]-> theme 'hiring' "
+            "<-[:HAS_THEME]- (AS-2.9.1)",
+        ),
+        # Mixed corpora in one line.
+        (
+            "AS-2.9.1 and BG-2.47 are fine; AS-15.1.39 is not",
+            {"AS-2.9.1", "BG-2.47"},
+            f"AS-2.9.1 and BG-2.47 are fine; {FOREIGN_ID_PLACEHOLDER} is not",
+        ),
+        # Book number must not be confused with a chapter: AS-1.9.1 != AS-9.1.
+        ("AS-1.9.1", {"AS-9.1"}, FOREIGN_ID_PLACEHOLDER),
+        ("AS-1.9.1", {"AS-1.9.1"}, "AS-1.9.1"),
+    ],
+)
+def test_mask_foreign_verse_ids_handles_as_ids(
+    text: str, allowed: set[str], expected: str
+) -> None:
+    assert mask_foreign_verse_ids(text, allowed) == expected
+
+
+def _leaky_as_trace() -> RetrievalTrace:
+    """An Arthashastra trace whose graph path names a non-retrieved AS seed."""
+    kept = Verse(
+        id="AS-2.9.1",
+        source=ScriptureSource.ARTHASHASTRA,
+        book=2,
+        chapter=9,
+        verse=1,
+        text_english="Superintendents shall be appointed with regard to their work, and audited often.",
+        themes=["accountability", "hiring"],
+    )
+    path = GraphPath(
+        nodes=["AS-1.9.1", "hiring", "AS-2.9.1"],
+        relationships=["HAS_THEME", "HAS_THEME"],
+        description=(
+            "(AS-1.9.1) -[:HAS_THEME]-> theme 'hiring' <-[:HAS_THEME]- (AS-2.9.1)"
+        ),
+        hops=2,
+    )
+    return RetrievalTrace(
+        query="whom should I trust with responsibility",
+        results=[
+            RetrievedVerse(
+                verse=kept,
+                vector_score=0.7,
+                graph_score=0.5,
+                final_score=0.8,
+                retrieval_channels=["vector", "graph"],
+                graph_paths=[path],
+            )
+        ],
+    )
+
+
+def test_as_prompt_exposes_only_citable_ids() -> None:
+    trace = _leaky_as_trace()
+    prompt = build_answer_prompt("whom should I trust", trace)
+    assert "AS-1.9.1" not in prompt, "AS graph-walk seed leaked into the prompt"
+    assert set(extract_verse_ids(prompt)) == {"AS-2.9.1"}
+
+
+async def test_as_citation_survives_enforcement(
+    llm: FakeLLMProvider, settings: Settings
+) -> None:
+    """A three-part AS id must pass the citation check, not be stripped."""
+    trace = _leaky_as_trace()
+    result = await GroundedGenerator(llm, settings).generate("whom should I trust", trace)
+    assert result.grounded
+    assert result.citations == ["AS-2.9.1"]
+    assert result.hallucinated_citations == []
+    assert len(llm.calls) == 1, "no corrective retry should be needed"
