@@ -27,10 +27,11 @@ import math
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from app.config import Settings, get_settings
+from app.config import PROJECT_ROOT, Settings, get_settings
 from app.llm.factory import build_llm_provider
 from app.pipeline.emotion import EmotionDetector
 from app.pipeline.intent import IntentClassifier
@@ -86,6 +87,10 @@ class EvalReport:
     embedder: str
     queries: list[QueryResult] = field(default_factory=list)
     ablations: dict[str, Any] = field(default_factory=dict)
+    #: backend, embedder, corpus size, timestamp, git commit. A metrics table
+    #: without these five is unquotable: the same harness produces
+    #: non-comparable numbers depending on which retriever ran.
+    provenance: dict[str, Any] = field(default_factory=dict)
 
     @property
     def recall_at_k(self) -> float:
@@ -143,6 +148,7 @@ class EvalReport:
             "k": self.k,
             "backend": self.backend,
             "embedder": self.embedder,
+            "provenance": self.provenance,
             "ablations": self.ablations,
             "n_queries": len(self.queries),
             "recall_at_k": round(self.recall_at_k, 4),
@@ -160,6 +166,9 @@ class EvalReport:
             f"Retrieval evaluation (k={self.k})",
             f"  backend      : {self.backend}",
             f"  embedder     : {self.embedder}",
+            f"  corpus       : {self.provenance.get('corpus_size', '?')} verses",
+            f"  commit       : {self.provenance.get('git_commit', '?')}",
+            f"  measured     : {self.provenance.get('timestamp', '?')}",
             f"  ablations    : {self.ablations or 'none'}",
             f"  queries      : {len(self.queries)}",
             "",
@@ -189,6 +198,90 @@ def _mean(values: Sequence[float]) -> float:
 
 def load_gold(path: Path = GOLD_PATH) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def git_commit() -> str:
+    """Short SHA of the working tree, or an explicit marker if unavailable."""
+    import subprocess
+
+    try:
+        sha = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=10, check=True,
+        ).stdout.strip()
+    except Exception:
+        return "unknown"
+    dirty = subprocess.run(
+        ["git", "status", "--porcelain"], capture_output=True, text=True, timeout=10
+    ).stdout.strip()
+    return f"{sha}-dirty" if dirty else sha
+
+
+#: Delimiters for the block this harness owns inside the review document.
+RESULTS_BEGIN = "<!-- eval-results:begin -->"
+RESULTS_END = "<!-- eval-results:end -->"
+
+
+def render_results_markdown(report: EvalReport) -> str:
+    """The provenance + metrics block written into the review document."""
+    p = report.provenance
+    lines = [
+        RESULTS_BEGIN,
+        "## Latest evaluation run",
+        "",
+        "| field | value |",
+        "| --- | --- |",
+        f"| backend | `{p.get('backend', '?')}` |",
+        f"| embedder | `{p.get('embedder', '?')}` |",
+        f"| corpus size | {p.get('corpus_size', '?')} verses |",
+        f"| measured | {p.get('timestamp', '?')} |",
+        f"| git commit | `{p.get('git_commit', '?')}` |",
+        f"| k | {report.k} |",
+        f"| ablations | {report.ablations or 'none'} |",
+        "",
+        "| metric | value |",
+        "| --- | --- |",
+        f"| hit rate | {report.hit_rate:.3f} |",
+        f"| Recall@{report.k} | {report.recall_at_k:.3f} |",
+        f"| MRR | {report.mrr:.3f} |",
+        f"| nDCG@{report.k} | {report.ndcg_at_k:.3f} |",
+        f"| Precision@{report.k} | {report.precision_at_k:.3f} |",
+        f"| intent accuracy | {report.intent_accuracy:.3f} |",
+        "",
+        "| category | n | hit | recall | MRR | nDCG | intent |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for name, m in report.by_category().items():
+        lines.append(
+            f"| {name} | {int(m['n'])} | {m['hit_rate']:.2f} | {m['recall_at_k']:.3f} | "
+            f"{m['mrr']:.3f} | {m['ndcg_at_k']:.3f} | {m['intent_accuracy']:.2f} |"
+        )
+    lines += [
+        "",
+        "A metrics table without backend, embedder, corpus size, timestamp and commit "
+        "is unquotable - the same harness produces non-comparable numbers depending on "
+        "which retriever ran. See `docs/kg_measurements.md` section 3.",
+        RESULTS_END,
+    ]
+    return "\n".join(lines)
+
+
+def record_results_markdown(report: EvalReport, path: Path) -> None:
+    """Insert or replace the harness-owned results block in a markdown file."""
+    block = render_results_markdown(report)
+    if path.exists():
+        text = path.read_text(encoding="utf-8")
+        if RESULTS_BEGIN in text and RESULTS_END in text:
+            head, rest = text.split(RESULTS_BEGIN, 1)
+            _, tail = rest.split(RESULTS_END, 1)
+            text = f"{head}{block}{tail}"
+        else:
+            text = f"{text.rstrip()}\n\n{block}\n"
+    else:
+        text = f"{block}\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    logger.info("recorded evaluation provenance in %s", path)
 
 
 def _load_gold_corpus(gold: dict[str, Any]) -> Corpus | None:
@@ -336,7 +429,9 @@ async def run_evaluation(
 
     if retriever is None:
         retriever = (
-            build_retriever(settings, corpus=corpus)
+            # strict: a measurement must never silently swap which system it
+            # measured. The application path keeps the graceful fallback.
+            build_retriever(settings, corpus=corpus, strict=True)
             if settings.neo4j_enabled
             else InMemoryHybridRetriever(corpus=corpus, settings=settings)
         )
@@ -359,6 +454,13 @@ async def run_evaluation(
         embedder=embedder_name,
         queries=results,
         ablations=ablations,
+        provenance={
+            "backend": retriever.backend,
+            "embedder": embedder_name,
+            "corpus_size": len(corpus) if corpus is not None else 0,
+            "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
+            "git_commit": git_commit(),
+        },
     )
 
 
@@ -371,6 +473,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--no-intent-boost", action="store_true", help="ablate the scripture prior"
     )
     parser.add_argument("--json", dest="json_out", default=None, help="write metrics as JSON")
+    parser.add_argument(
+        "--record-md",
+        default=str(PROJECT_ROOT / "docs" / "gold_set_review.md"),
+        help="markdown file to record the provenance + metrics block in",
+    )
+    parser.add_argument(
+        "--no-record", action="store_true", help="do not touch the markdown record"
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.WARNING, format="%(levelname)-8s %(message)s")
@@ -390,6 +500,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             json.dumps(report.as_dict(), indent=2), encoding="utf-8"
         )
         print(f"\nwrote {args.json_out}")
+
+    if not args.no_record:
+        record_results_markdown(report, Path(args.record_md))
+        print(f"recorded provenance + metrics in {args.record_md}")
     return 0
 
 

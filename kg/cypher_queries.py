@@ -107,11 +107,15 @@ RETURN v.id AS id
 #: siblings.
 #:
 #: Hub suppression (the ``$max_df`` clause) is IDF thinking applied to the graph:
-#: a label carried by a quarter of the corpus ("relationships": 966/3836) says
-#: nothing about whether two verses belong together, but it generates ~466k
-#: candidate pairs on its own. Without the clause a 3,836-verse corpus produced
-#: 269,247 RELATED_TO edges (max degree 1,088); with ``$max_df`` at 8% of the
-#: corpus it produces 3,126, and every one of them means something.
+#: a label carried by a quarter of the corpus ("relationships": 969/3836) says
+#: nothing about whether two verses belong together, but it generates a
+#: quadratic number of pairs on its own. Without the clause the 3,836-verse
+#: corpus derives 269,649 RELATED_TO edges (max degree 1,092); with ``$max_df``
+#: at 8% of the corpus it derives 2,546 - suppression removes 99.06% of the
+#: derived edges, and every survivor means something.
+#: (Purohit labels, measured 2 Sep 2026. These figures move whenever tagging
+#: changes - see docs/kg_measurements.md, and re-measure after semantic
+#: re-tagging.)
 #:
 #: ``$max_df`` is *document frequency*, in verses, not a fraction - the caller
 #: multiplies :attr:`app.config.Settings.kg_hub_label_max_fraction` by the live

@@ -933,8 +933,20 @@ def build_retriever(
     settings: Settings | None = None,
     embedder: Embedder | None = None,
     corpus: Corpus | None = None,
+    strict: bool = False,
 ) -> HybridRetriever:
-    """Neo4j retriever when configured, otherwise the in-memory one."""
+    """Neo4j retriever when configured, otherwise the in-memory one.
+
+    ``strict=True`` refuses the fallback and re-raises. Measurement callers must
+    use it: the two backends have different retrieval semantics (Neo4j annotates
+    the vector/full-text hits, the in-memory retriever expands the candidate set
+    through the graph), so silently swapping one for the other changes *what was
+    measured* without changing the number's appearance. A crashed eval is
+    recoverable; a number attributed to the wrong system is not.
+
+    The application path keeps ``strict=False`` on purpose - serving should
+    degrade rather than go down.
+    """
     settings = settings or get_settings()
     if settings.neo4j_enabled:
         try:
@@ -942,6 +954,21 @@ def build_retriever(
             retriever.warmup()
             logger.info("using Neo4j hybrid retriever at %s", settings.neo4j_uri)
             return retriever
-        except Exception:  # pragma: no cover - depends on a live database
+        except Exception as exc:  # pragma: no cover - depends on a live database
+            if strict:
+                logger.error(
+                    "RETRIEVER UNAVAILABLE (strict): Neo4j at %s could not be reached, "
+                    "and falling back to the in-memory retriever would silently change "
+                    "which system is being measured: %s",
+                    settings.neo4j_uri,
+                    exc,
+                    exc_info=True,
+                )
+                raise RetrievalError(
+                    f"strict build_retriever: Neo4j at {settings.neo4j_uri} is "
+                    f"unavailable ({exc}). Refusing to fall back to the in-memory "
+                    "retriever - it has different retrieval semantics, so the "
+                    "resulting metrics would not be production numbers."
+                ) from exc
             logger.exception("Neo4j unavailable; falling back to in-memory retriever")
     return InMemoryHybridRetriever(corpus=corpus, embedder=embedder, settings=settings)
