@@ -80,6 +80,37 @@ def load_local_json(path: str | Path) -> Any:
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
+#: Editorial marker left in the upstream dataset, not part of the translation.
+#: BG-2.48's Purohit entry literally begins ``"Revised:\n"`` before the verse.
+#:
+#: Deliberately a literal, case-sensitive, anchored match rather than a general
+#: ``^\w+:`` rule: verses legitimately open with a speaker attribution
+#: ("Lord Shri Krishna said:", "Arjuna asked:"), and a loose prefix rule would
+#: silently eat those. As of the 2026-09 dataset this fires on exactly 1 verse
+#: of 701, which is why it logs - if the count ever grows, the upstream data has
+#: changed and we want to hear about it rather than quietly cleaning more text.
+SOURCE_ARTIFACT_PREFIXES: tuple[str, ...] = ("Revised:",)
+
+
+def strip_source_artifacts(text: str, verse_ref: str = "") -> str:
+    """Remove known upstream editorial prefixes from a translation.
+
+    Logs a warning on every hit so the scope of the cleaning stays visible.
+    """
+    cleaned = text
+    for prefix in SOURCE_ARTIFACT_PREFIXES:
+        if cleaned.lstrip().startswith(prefix):
+            stripped = cleaned.lstrip()[len(prefix) :].lstrip()
+            logger.warning(
+                "stripped source artifact %r from BG-%s (upstream dataset "
+                "editorial marker, not verse text)",
+                prefix,
+                verse_ref or "?",
+            )
+            cleaned = stripped
+    return cleaned
+
+
 def _as_records(payload: Any) -> list[dict[str, Any]]:
     """Accept a bare list or ``{"rows"|"data"|"verses": [...]}``."""
     if isinstance(payload, list):
@@ -146,6 +177,7 @@ def build_verses(
             except (TypeError, ValueError):
                 english = ""
         english = english or str(record.get("translation") or "").strip()
+        english = strip_source_artifacts(english, f"{chapter}.{number}")
         if not english:
             skipped += 1
             continue
