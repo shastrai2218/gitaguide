@@ -250,9 +250,38 @@ class GraphBuilder:
                 ", ".join(suppressed),
             )
 
+        before = int(
+            self._run("MATCH ()-[r:RELATED_TO]->() RETURN count(r) AS c")[0]["c"]
+        )
+        # This layer is GLOBAL, whatever --corpus was passed. Say so out loud:
+        # a one-verse build silently rewriting every RELATED_TO edge is exactly
+        # the kind of thing that should not be discovered later, and after
+        # deployment it would rewrite a production layer with no signal at all.
+        logger.warning(
+            "RELATED_TO re-derivation is GLOBAL: deleting all %d existing edge(s) "
+            "and re-deriving from all %d verses in the database, regardless of the "
+            "--corpus scope passed to this build "
+            "(hub_max_fraction=%.3f -> max_df=%d, min_shared=%d)",
+            before,
+            verse_count,
+            self.hub_max_fraction,
+            max_df,
+            min_shared,
+        )
+
         self._run(DELETE_RELATED_EDGES)
         rows = self._run(LINK_RELATED_VERSES, min_shared=min_shared, max_df=max_df)
-        return (int(rows[0]["created"]) if rows else 0), suppressed
+        created = int(rows[0]["created"]) if rows else 0
+
+        # Always logged, including a delta of 0, so that "re-derived and nothing
+        # changed" is distinguishable from "the step was skipped".
+        logger.warning(
+            "RELATED_TO re-derivation complete: %d -> %d edges (delta %+d)",
+            before,
+            created,
+            created - before,
+        )
+        return created, suppressed
 
     def _check_embedder_is_safe(self) -> None:
         """Refuse to write offline vectors into a real vector index.
