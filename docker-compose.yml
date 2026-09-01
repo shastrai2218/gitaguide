@@ -48,6 +48,10 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: gitaguide-postgres
+    # Stateful service: must come back after a host reboot without
+    # manual intervention. The container previously exited 255 (daemon
+    # terminated it at shutdown) and stayed down for 30 hours.
+    restart: unless-stopped
     environment:
       POSTGRES_USER: gitaguide
       POSTGRES_PASSWORD: gitaguide
@@ -65,6 +69,10 @@ services:
   neo4j:
     image: neo4j:5.26-community
     container_name: gitaguide-neo4j
+    # Stateful service: must come back after a host reboot without manual
+    # intervention. Same reasoning as postgres above - both were found down
+    # after a host restart on 1 Sep 2026.
+    restart: unless-stopped
     environment:
       NEO4J_AUTH: "neo4j/${NEO4J_PASSWORD:-gitaguide123}"
       NEO4J_PLUGINS: '["apoc"]'
