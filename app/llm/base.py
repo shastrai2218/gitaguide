@@ -118,15 +118,21 @@ class FallbackLLMProvider(LLMProvider):
         stop: Sequence[str] | None = None,
     ) -> LLMResponse:
         last_error: Exception | None = None
-        for provider in self.providers:
+        for step, provider in enumerate(self.providers):
             try:
-                return await provider.complete(
+                response = await provider.complete(
                     prompt,
                     system=system,
                     max_tokens=max_tokens,
                     temperature=temperature,
                     stop=stop,
                 )
+                # How far down the chain the answer came from. 0 = the primary
+                # answered; anything higher means degradation the caller needs
+                # to be able to see per-turn, not just infer from the chain
+                # string printed at startup.
+                response.raw["fallback_steps"] = step
+                return response
             except Exception as exc:  # pragma: no cover - needs live providers
                 last_error = exc
                 logger.warning("provider %s failed (%s); trying next", provider.name, exc)

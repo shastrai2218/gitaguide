@@ -267,6 +267,17 @@ class GroundedGenerator:
         why_map = self._why_map(retrieval, citations)
         answer = self._ensure_why_section(answer, why_map)
 
+        fallback_steps = int(response.raw.get("fallback_steps", 0) or 0)
+        if response.provider.startswith("fake"):
+            # Not a graceful degradation: a deterministic template answer has
+            # just been handed to a user as guidance. Loud on purpose.
+            logger.warning(
+                "FAKE PROVIDER ANSWERED a live turn (fallback_steps=%d). The real "
+                "providers were unreachable or unconfigured; this answer is a "
+                "deterministic template, not a generated one.",
+                fallback_steps,
+            )
+
         return GenerationResult(
             answer=answer.strip(),
             citations=citations,
@@ -274,6 +285,8 @@ class GroundedGenerator:
             grounded=bool(citations) and not hallucinated,
             hallucinated_citations=hallucinated,
             provider=response.provider,
+            model=response.model,
+            fallback_steps=fallback_steps,
             prompt_tokens=response.prompt_tokens,
             completion_tokens=response.completion_tokens,
             latency_ms=round((time.perf_counter() - started) * 1000, 2),

@@ -29,13 +29,32 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+def _describe_bind(session_factory: async_sessionmaker[AsyncSession]) -> str:
+    """``postgresql+asyncpg`` / ``sqlite+aiosqlite`` - read from the live engine.
+
+    The label used to be the hardcoded string ``"sqlalchemy"``, which is equally
+    true of a PostgreSQL and a SQLite deployment. ``/health`` therefore could not
+    answer the one question it was being asked - *which database am I actually
+    talking to* - so the dialect is now read from the bound engine's URL rather
+    than asserted.
+    """
+    bind = session_factory.kw.get("bind")
+    url = getattr(bind, "url", None)
+    if url is None:  # pragma: no cover - a session factory with no bind
+        return "sqlalchemy(unbound)"
+    driver = url.get_driver_name()
+    return f"{url.get_backend_name()}+{driver}" if driver else url.get_backend_name()
+
+
 class SqlAlchemyRepository(Repository):
     """Async PostgreSQL implementation (also works against SQLite in tests)."""
 
+    #: Overwritten per instance in __init__ with the dialect actually connected.
     backend = "sqlalchemy"
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self.session_factory = session_factory
+        self.backend = _describe_bind(session_factory)
 
     # ------------------------------------------------------------ mapping
     @staticmethod

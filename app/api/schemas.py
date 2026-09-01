@@ -95,7 +95,12 @@ class ChatResponse(BaseModel):
     memory_summary: str = ""
     stages_run: list[str] = Field(default_factory=list)
     total_latency_ms: float = 0.0
+    #: Which provider/model actually produced this answer, and how far down the
+    #: fallback chain it came from (0 = primary). fallback_steps > 0 means the
+    #: answer is degraded; provider "fake" means it is not generated at all.
     llm_provider: str = ""
+    llm_model: str = ""
+    llm_fallback_steps: int = 0
 
     @classmethod
     def from_result(cls, result: GuidanceResult) -> ChatResponse:
@@ -153,6 +158,8 @@ class ChatResponse(BaseModel):
             stages_run=result.stages_run,
             total_latency_ms=result.total_latency_ms,
             llm_provider=generation.provider if generation else "",
+            llm_model=generation.model if generation else "",
+            llm_fallback_steps=generation.fallback_steps if generation else 0,
         )
 
 

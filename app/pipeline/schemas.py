@@ -231,7 +231,13 @@ class GenerationResult(BaseModel):
     why_this_verse: dict[str, str] = Field(default_factory=dict)
     grounded: bool = True
     hallucinated_citations: list[str] = Field(default_factory=list)
+    #: The provider and model that actually produced this answer, and how far
+    #: down the fallback chain it came from (0 = primary). The startup chain
+    #: string cannot distinguish "fake is configured as a last resort" from
+    #: "fake answered this turn"; these fields can.
     provider: str = "unknown"
+    model: str = ""
+    fallback_steps: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
     latency_ms: float = 0.0
