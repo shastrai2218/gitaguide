@@ -28,6 +28,7 @@ from app.db import build_repository
 from app.embeddings import build_embedder
 from app.llm.factory import build_llm_provider
 from app.pipeline.emotion import EmotionDetector
+from app.pipeline.gate_selftest import run_gate_self_test
 from app.pipeline.orchestrator import build_orchestrator
 from app.pipeline.retrieval import build_retriever
 from app.telemetry import build_telemetry
@@ -63,6 +64,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         settings.mock_mode,
         settings.resolved_llm_provider.value,
     )
+
+    # Before anything expensive, and before the first request can arrive:
+    # prove the deterministic safety layer is armed. Raising here means the
+    # process does not start, which is the point - a GitaGuide with silently
+    # disabled crisis rules must not be deployable.
+    run_gate_self_test()
 
     repository = await build_repository(settings)
     embedder = build_embedder(settings)
