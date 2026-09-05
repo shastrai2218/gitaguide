@@ -1,5 +1,6 @@
 import { SHOW_META } from '../api.js'
 import Commentary from './Commentary.jsx'
+import FeedbackControl from './FeedbackControl.jsx'
 import MetaLine from './MetaLine.jsx'
 import VerseLeaf from './VerseLeaf.jsx'
 
@@ -40,6 +41,7 @@ export default function AssistantTurn({ turn }) {
         ))}
       </div>
       {SHOW_META && <MetaLine turn={turn} />}
+      <FeedbackControl messageId={turn.messageId} />
     </div>
   )
 }

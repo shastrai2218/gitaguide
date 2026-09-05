@@ -64,6 +64,18 @@ class MessageRecord:
 
 
 @dataclass(slots=True)
+class FeedbackRecord:
+    """A tester's rating of one assistant turn."""
+
+    id: str
+    message_id: str
+    session_id: str | None
+    rating: str
+    comment: str = ""
+    created_at: datetime = field(default_factory=_utcnow)
+
+
+@dataclass(slots=True)
 class SafetyLogRecord:
     id: str
     session_id: str | None
@@ -118,6 +130,14 @@ class Repository(ABC):
         self, session_id: str, limit: int = 20, newest_first: bool = False
     ) -> list[MessageRecord]: ...
 
+    # feedback ------------------------------------------------------------
+    @abstractmethod
+    async def upsert_feedback(self, record: FeedbackRecord) -> FeedbackRecord:
+        """Store a rating, replacing any earlier one for the same message."""
+
+    @abstractmethod
+    async def get_feedback(self, message_id: str) -> FeedbackRecord | None: ...
+
     # safety --------------------------------------------------------------
     @abstractmethod
     async def log_safety(self, record: SafetyLogRecord) -> SafetyLogRecord: ...
@@ -144,6 +164,8 @@ class InMemoryRepository(Repository):
         self.sessions: dict[str, SessionRecord] = {}
         self.messages: dict[str, MessageRecord] = {}
         self.safety_logs: list[SafetyLogRecord] = []
+        #: message_id -> the tester's current verdict on that turn.
+        self.feedback: dict[str, FeedbackRecord] = {}
 
     async def create_session(self, locale: str = "en-IN", title: str = "") -> SessionRecord:
         record = SessionRecord(id=str(uuid.uuid4()), locale=locale, title=title)
@@ -199,6 +221,15 @@ class InMemoryRepository(Repository):
         if newest_first:
             return items[:limit]
         return items[-limit:]
+
+    async def upsert_feedback(self, record: FeedbackRecord) -> FeedbackRecord:
+        if not record.id:
+            record.id = str(uuid.uuid4())
+        self.feedback[record.message_id] = record
+        return record
+
+    async def get_feedback(self, message_id: str) -> FeedbackRecord | None:
+        return self.feedback.get(message_id)
 
     async def log_safety(self, record: SafetyLogRecord) -> SafetyLogRecord:
         if not record.id:

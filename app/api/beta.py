@@ -18,12 +18,16 @@ Contract::
       -> {reply, blocked,
           emotion {label, score},
           intent  {label, crisis_score},
+          message_id,
           citations [{source, ref, text}],
           memory  {turn_count, summary_included, recent_turns_injected},
           meta    {provider, model, latency_ms, stage_latency_ms}}
 
     POST /api/consent {session_id, version}
       -> {session_id, consent_version, consent_at}
+
+    POST /api/feedback {message_id, rating, comment}
+      -> {message_id, rating, comment}
 
     GET /api/sessions/{session_id}/messages
       -> {session_id, messages: [{id, role, content, blocked, created_at}]}
@@ -39,13 +43,14 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
 from app.api.ratelimit import RATE_LIMITED_MESSAGE, RateLimiter
 from app.api.routes import OrchestratorDep
+from app.db.repository import FeedbackRecord
 from app.pipeline.orchestrator import GuidanceOrchestrator
 from app.pipeline.schemas import GuidanceResult, UserTurn
 
@@ -106,6 +111,8 @@ class BetaMeta(BaseModel):
 
 
 class BetaChatResponse(BaseModel):
+    #: Needed by the UI to attach feedback to this specific turn.
+    message_id: str = ""
     reply: str
     blocked: bool = False
     emotion: BetaEmotion = Field(default_factory=BetaEmotion)
@@ -143,6 +150,25 @@ class BetaConsentResponse(BaseModel):
 
 #: Sent with the 409 so the UI can tell "consent needed" apart from a real error.
 CONSENT_REQUIRED_CODE = "consent_required"
+
+
+class BetaFeedbackRequest(BaseModel):
+    """``POST /api/feedback`` body.
+
+    The comment is capped short on purpose. It is a reaction to one turn, not a
+    bug report, and a long free-text field invites testers to paste the personal
+    detail the consent notice asked them not to enter.
+    """
+
+    message_id: str = Field(min_length=1, max_length=36)
+    rating: Literal["up", "down"]
+    comment: str = Field(default="", max_length=500)
+
+
+class BetaFeedbackResponse(BaseModel):
+    message_id: str
+    rating: str
+    comment: str = ""
 
 
 # --------------------------------------------------------------------------- #
@@ -288,6 +314,7 @@ async def beta_chat(
 
     generation = result.generation
     return BetaChatResponse(
+        message_id=result.message_id,
         reply=result.answer,
         blocked=result.crisis,
         emotion=BetaEmotion(
@@ -339,6 +366,47 @@ async def beta_consent(
         session_id=record.id,
         consent_version=record.consent_version or payload.version,
         consent_at=record.consent_at or datetime.now(UTC),
+    )
+
+
+@router.post("/feedback", response_model=BetaFeedbackResponse)
+async def beta_feedback(
+    payload: BetaFeedbackRequest, orchestrator: OrchestratorDep
+) -> BetaFeedbackResponse:
+    """Record a tester's verdict on one assistant turn.
+
+    The message must exist and must be an assistant turn: feedback on a
+    user's own message, or on an id that was never served, is a bug in the
+    caller and is rejected rather than stored as noise.
+
+    Not rate limited. It costs one small write, no model call, and a tester
+    whose vote is refused simply stops voting - which loses the signal the beta
+    exists to collect.
+    """
+    record = await orchestrator.repository.get_message(payload.message_id)
+    if record is None or record.role != "assistant":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="no assistant turn with that id",
+        )
+
+    stored = await orchestrator.repository.upsert_feedback(
+        FeedbackRecord(
+            id="",
+            message_id=payload.message_id,
+            session_id=record.session_id,
+            rating=payload.rating,
+            comment=payload.comment.strip(),
+        )
+    )
+    logger.info(
+        "feedback: message=%s rating=%s comment_chars=%d",
+        stored.message_id,
+        stored.rating,
+        len(stored.comment),
+    )
+    return BetaFeedbackResponse(
+        message_id=stored.message_id, rating=stored.rating, comment=stored.comment
     )
 
 

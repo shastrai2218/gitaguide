@@ -375,6 +375,84 @@ textarea {
   color: var(--hair);
 }
 
+/* ------------------------------------------------------------- feedback --- */
+
+.feedback {
+  margin-top: 0.7rem;
+  padding-left: 1.15rem;
+}
+
+.feedback-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.feedback-button {
+  background: none;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 0.15rem 0.75rem;
+}
+
+.feedback-button:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--page);
+}
+
+.feedback-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.feedback-button.is-chosen {
+  background: var(--accent);
+  color: var(--page);
+}
+
+.feedback-thanks {
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  margin: 0.4rem 0 0;
+}
+
+.feedback-row .feedback-thanks {
+  margin: 0;
+}
+
+.feedback-error {
+  color: var(--accent);
+  font-size: 0.8rem;
+  margin: 0.4rem 0 0;
+}
+
+.feedback-comment {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.feedback-comment input {
+  flex: 1;
+  min-width: 0;
+  background: var(--field);
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.65rem;
+}
+
+.feedback-comment input::placeholder {
+  color: var(--ink-soft);
+}
+
 /* -------------------------------------------------------------- waiting --- */
 
 .waiting {
@@ -569,6 +647,7 @@ textarea {
   .commentary,
   .meta,
   .waiting,
+  .feedback,
   .error-turn {
     padding-left: 0.85rem;
   }

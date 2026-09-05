@@ -36,6 +36,7 @@ function restoredEntry(record) {
   return {
     kind: 'assistant',
     turn: {
+      messageId: record.id ?? null,
       reply: record.content ?? '',
       blocked: record.blocked === true,
       emotion: { label: null, score: null },

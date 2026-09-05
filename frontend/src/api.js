@@ -16,6 +16,7 @@
  *         meta    {provider, model, latency_ms, stage_latency_ms}}
  *
  *   POST /api/consent {session_id, version} -> {session_id, consent_version, consent_at}
+ *   POST /api/feedback {message_id, rating, comment} -> {message_id, rating, comment}
  *
  *   GET /api/sessions/{id}/messages -> {session_id, messages: [...]}
  *     Optional: the UI degrades gracefully when it is absent (404/501).
@@ -68,6 +69,9 @@ function normaliseTurn(body) {
   const blocked = body.blocked === true
 
   return {
+    // Identifies this turn for feedback. Absent on a restored turn, which is
+    // why the control renders nothing without it rather than guessing.
+    messageId: typeof body.message_id === 'string' ? body.message_id : null,
     reply: typeof body.reply === 'string' ? body.reply : '',
     blocked,
     emotion: {
@@ -225,6 +229,26 @@ export async function recordConsentOnServer(sessionId) {
 }
 
 /**
+ * Record a verdict on one assistant turn.
+ *
+ * Called once on the vote itself and again if a comment follows; the server
+ * replaces the row, so one turn keeps one unambiguous verdict.
+ */
+export async function sendFeedback(messageId, rating, comment = '') {
+  if (MOCK) return true
+  const response = await fetch(`${API_BASE}/feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message_id: messageId, rating, comment }),
+  })
+  if (!response.ok) {
+    const failure = await readFailure(response)
+    throw new ApiError(failure.message, response.status, null, failure.code)
+  }
+  return true
+}
+
+/**
  * Optional history endpoint. Returns `null` — not an error — when the backend
  * does not implement it, so the caller can simply skip restoring history.
  */
@@ -316,6 +340,7 @@ async function postChatMock(sessionId, message, signal) {
       label: crisis ? 'crisis' : 'workplace_conflict',
       crisis_score: crisis ? 0.94 : 0.02,
     },
+    message_id: `mock-${Date.now()}`,
     citations: crisis ? [] : MOCK_CITATIONS,
     memory: { turn_count: 2, summary_included: false, recent_turns_injected: 2 },
     meta: {

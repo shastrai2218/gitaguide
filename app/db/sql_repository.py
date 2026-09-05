@@ -14,8 +14,9 @@ from datetime import UTC, datetime
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.db.models import ConversationSession, Message, SafetyLog
+from app.db.models import ConversationSession, Feedback, Message, SafetyLog
 from app.db.repository import (
+    FeedbackRecord,
     MessageRecord,
     Repository,
     SafetyLogRecord,
@@ -157,6 +158,49 @@ class SqlAlchemyRepository(Repository):
             row.rolling_summary = summary
             row.updated_at = _utcnow()
             await session.commit()
+
+    # ----------------------------------------------------------- feedback
+    @staticmethod
+    def _to_feedback_record(row: Feedback) -> FeedbackRecord:
+        return FeedbackRecord(
+            id=row.id,
+            message_id=row.message_id,
+            session_id=row.session_id,
+            rating=row.rating,
+            comment=row.comment or "",
+            created_at=row.created_at,
+        )
+
+    async def upsert_feedback(self, record: FeedbackRecord) -> FeedbackRecord:
+        """Replace this message's verdict, so one turn has at most one row.
+
+        A tester who changes their mind, or adds a comment after voting, should
+        leave one unambiguous verdict rather than a stack of them.
+        """
+        async with self.session_factory() as session:
+            row = await session.scalar(
+                select(Feedback).where(Feedback.message_id == record.message_id)
+            )
+            if row is None:
+                row = Feedback(
+                    id=record.id or str(uuid.uuid4()),
+                    message_id=record.message_id,
+                    session_id=record.session_id,
+                )
+                session.add(row)
+            row.rating = record.rating
+            row.comment = record.comment
+            row.updated_at = _utcnow()
+            await session.commit()
+            await session.refresh(row)
+            return self._to_feedback_record(row)
+
+    async def get_feedback(self, message_id: str) -> FeedbackRecord | None:
+        async with self.session_factory() as session:
+            row = await session.scalar(
+                select(Feedback).where(Feedback.message_id == message_id)
+            )
+            return self._to_feedback_record(row) if row else None
 
     # ----------------------------------------------------------- messages
     async def add_message(self, message: MessageRecord) -> MessageRecord:

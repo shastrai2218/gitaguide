@@ -113,6 +113,35 @@ class Message(Base):
     __table_args__ = (Index("ix_messages_session_created", "session_id", "created_at"),)
 
 
+class Feedback(Base):
+    """One tester's verdict on one assistant turn (the table is ``feedback``).
+
+    A new table rather than columns on ``messages``: feedback arrives seconds or
+    minutes after the turn, is optional, and is written by a different actor.
+    ``create_all`` adds a missing table on its own, so no additive-column entry
+    is needed here.
+
+    At most one row per message - a tester changing their mind replaces their
+    verdict rather than stacking a second one, so counting is unambiguous.
+    """
+
+    __tablename__ = "feedback"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid_str)
+    message_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("messages.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    session_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    #: "up" or "down". Kept as text, not a bool, so a third option later does not
+    #: need a migration.
+    rating: Mapped[str] = mapped_column(String(16))
+    comment: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+
 class SafetyLog(Base):
     """One safety-gate trigger (input or output layer)."""
 
