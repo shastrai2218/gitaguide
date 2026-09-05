@@ -23,7 +23,10 @@ export default function MetaLine({ turn }) {
   }
 
   const memoryBits = []
-  if (turn.memory.turnCount !== null) memoryBits.push(`turn ${turn.memory.turnCount}`)
+  // "msg", not "turn": the backend counts persisted messages, so one exchange
+  // advances it by two (2n-1 at exchange n). Labelling it "turn" read as though
+  // memory were an exchange behind.
+  if (turn.memory.turnCount !== null) memoryBits.push(`msg ${turn.memory.turnCount}`)
   if (turn.memory.recentTurnsInjected !== null) {
     memoryBits.push(`${turn.memory.recentTurnsInjected} recent`)
   }
