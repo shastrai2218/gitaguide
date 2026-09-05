@@ -21,7 +21,16 @@ from app.main import create_app
 
 @pytest.fixture(scope="module")
 def client() -> Iterator[TestClient]:
-    app = create_app(Settings(mock_mode=True, environment="test"))
+    """Adapter tests, with rate limiting off.
+
+    The limiter is deliberately disabled here: this module sends more turns in a
+    few seconds than the global budget allows in a minute, and it is testing the
+    projection, not the limiter. Rate limiting has its own tests in
+    ``tests/test_ratelimit.py``.
+    """
+    app = create_app(
+        Settings(mock_mode=True, environment="test", rate_limit_enabled=False)
+    )
     with TestClient(app) as test_client:
         yield test_client
 

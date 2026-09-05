@@ -93,7 +93,12 @@ export default function App() {
           error instanceof ApiError
             ? error.message
             : 'Something went wrong on the way to GitaGuide.'
-        setEntries((current) => [...current, { kind: 'error', text, message }])
+        const retryAfterSeconds =
+          error instanceof ApiError ? error.retryAfterSeconds : null
+        setEntries((current) => [
+          ...current,
+          { kind: 'error', text, message, retryAfterSeconds },
+        ])
       } finally {
         abortRef.current = null
         setBusy(false)
@@ -147,6 +152,7 @@ export default function App() {
             <ErrorTurn
               key={index}
               message={entry.message}
+              retryAfterSeconds={entry.retryAfterSeconds}
               disabled={busy}
               onRetry={() => send(entry.text, { replaceLast: true })}
             />

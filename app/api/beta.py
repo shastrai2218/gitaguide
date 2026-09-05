@@ -32,9 +32,10 @@ import logging
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
+from app.api.ratelimit import RATE_LIMITED_MESSAGE, RateLimiter
 from app.api.routes import OrchestratorDep
 from app.pipeline.schemas import GuidanceResult, UserTurn
 
@@ -150,11 +151,56 @@ def _citations_for(result: GuidanceResult) -> list[BetaCitation]:
 
 
 # --------------------------------------------------------------------------- #
+# Rate limiting
+# --------------------------------------------------------------------------- #
+def _client_ip(request: Request) -> str | None:
+    """Best-effort client address.
+
+    ``X-Forwarded-For`` is honoured because the beta will sit behind a proxy,
+    but only its first hop and only as a *rate-limit key* - it is never trusted
+    for anything security-relevant, since a client can set it freely.
+    """
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip() or None
+    return request.client.host if request.client else None
+
+
+def _enforce_rate_limit(request: Request, session_id: str | None) -> None:
+    """Raise 429 with ``Retry-After`` when a bucket is empty."""
+    settings = getattr(request.app.state, "settings", None)
+    limiter: RateLimiter | None = getattr(request.app.state, "rate_limiter", None)
+    if limiter is None or (settings is not None and not settings.rate_limit_enabled):
+        return
+
+    decision = limiter.check(session_id, _client_ip(request))
+    if decision.allowed:
+        return
+
+    wait = decision.retry_after_seconds
+    logger.info(
+        "rate limited: scope=%s retry_after=%ss session=%s",
+        decision.scope,
+        wait,
+        session_id or "-",
+    )
+    raise HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail={
+            "message": RATE_LIMITED_MESSAGE,
+            "retry_after_seconds": wait,
+            "scope": decision.scope,
+        },
+        headers={"Retry-After": str(wait)},
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Routes
 # --------------------------------------------------------------------------- #
 @router.post("/chat", response_model=BetaChatResponse)
 async def beta_chat(
-    payload: BetaChatRequest, orchestrator: OrchestratorDep
+    payload: BetaChatRequest, orchestrator: OrchestratorDep, request: Request
 ) -> BetaChatResponse:
     """Run one turn and return it in the beta UI's envelope.
 
@@ -162,6 +208,8 @@ async def beta_chat(
     which is what :attr:`GuidanceResult.crisis` records: that path returns
     before retrieval and generation run.
     """
+    _enforce_rate_limit(request, payload.session_id)
+
     turn = UserTurn(message=payload.message, session_id=payload.session_id)
     try:
         result = await orchestrator.handle_turn(turn)

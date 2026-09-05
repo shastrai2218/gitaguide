@@ -21,6 +21,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.beta import router as beta_router
+from app.api.ratelimit import build_rate_limiter
 from app.api.routes import router
 from app.config import Settings, get_settings
 from app.db import build_repository
@@ -44,8 +45,15 @@ def configure_logging(settings: Settings) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Build the pipeline once, warm the models, tear down cleanly."""
-    settings = get_settings()
+    """Build the pipeline once, warm the models, tear down cleanly.
+
+    Settings come from ``app.state`` when :func:`create_app` was given some.
+    Reading ``get_settings()`` here instead meant the factory argument silently
+    configured only CORS while the pipeline, and now the rate limiter, used the
+    environment - so a test that passed explicit settings was not testing what
+    it appeared to be testing.
+    """
+    settings: Settings = getattr(app.state, "settings", None) or get_settings()
     configure_logging(settings)
     logger.info(
         "starting %s v%s (mock_mode=%s, llm=%s)",
@@ -75,6 +83,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     app.state.settings = settings
     app.state.orchestrator = orchestrator
+    app.state.rate_limiter = build_rate_limiter(settings)
+    if settings.rate_limit_enabled:
+        logger.info(
+            "rate limits: session=%.0f/min(burst %.0f) ip=%.0f/min(burst %.0f) "
+            "global=%.0f/min(burst %.0f) - in-process counters, single worker only",
+            settings.rate_limit_session_per_minute,
+            settings.rate_limit_session_burst,
+            settings.rate_limit_ip_per_minute,
+            settings.rate_limit_ip_burst,
+            settings.rate_limit_global_per_minute,
+            settings.rate_limit_global_burst,
+        )
+    else:
+        logger.warning("RATE LIMITING IS DISABLED; the NIM budget is unprotected")
     logger.info("pipeline ready: %s", await orchestrator.health())
 
     try:
@@ -103,6 +125,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # Read back by the lifespan handler, so one settings object configures
+    # the whole app rather than only the parts create_app touches.
+    app.state.settings = settings
     app.include_router(router)
     # The beta UI's flat envelope, served alongside the research surface.
     app.include_router(beta_router)

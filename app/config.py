@@ -169,6 +169,25 @@ class Settings(BaseSettings):
     memory_summary_max_chars: int = 1200
 
     # -------------------------------------------------------------------- api
+    # ------------------------------------------------------------ rate limits
+    #: NIM free tier is ~40 req/min *per model* and one normal turn spends two
+    #: calls on the primary model (intent + generation), ~2.05 with the
+    #: malformed-intent retry. That caps the whole deployment near 19 turns/min,
+    #: so the global bucket is the one that actually protects the budget -
+    #: per-session and per-IP limits only stop one tester monopolising it.
+    rate_limit_enabled: bool = True
+    #: Per session: comfortable for a person thinking between messages.
+    rate_limit_session_per_minute: float = 5.0
+    rate_limit_session_burst: float = 3.0
+    #: Per IP, set well above the session limit because testers in one office
+    #: share a NAT address and must not rate-limit each other.
+    rate_limit_ip_per_minute: float = 20.0
+    rate_limit_ip_burst: float = 8.0
+    #: Global: 16/min against a ~19/min ceiling leaves headroom for retries and
+    #: the occasional summary call.
+    rate_limit_global_per_minute: float = 16.0
+    rate_limit_global_burst: float = 6.0
+
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
 
     @field_validator("cors_origins", mode="before")

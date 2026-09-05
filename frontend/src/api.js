@@ -28,10 +28,12 @@ export const MOCK = import.meta.env.VITE_MOCK === '1'
 export const SHOW_META = import.meta.env.VITE_SHOW_META !== '0'
 
 export class ApiError extends Error {
-  constructor(message, status) {
+  constructor(message, status, retryAfterSeconds = null) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    /** Seconds to wait, from a 429. Null for every other failure. */
+    this.retryAfterSeconds = retryAfterSeconds
   }
 }
 
@@ -126,20 +128,42 @@ async function postChatLive(sessionId, message, signal) {
   }
 
   if (!response.ok) {
-    const detail = await readDetail(response)
-    throw new ApiError(detail, response.status)
+    const failure = await readFailure(response)
+    throw new ApiError(failure.message, response.status, failure.retryAfterSeconds)
   }
   return normaliseTurn(await response.json())
 }
 
-async function readDetail(response) {
+/**
+ * Turn a failed response into a message and, for a 429, the wait.
+ *
+ * The rate limiter returns a structured detail object; every other error
+ * returns a plain string. Both shapes are handled here so no other module has
+ * to know the difference.
+ */
+async function readFailure(response) {
+  const headerWait = Number.parseInt(response.headers.get('Retry-After') || '', 10)
+  let retryAfterSeconds = Number.isFinite(headerWait) ? headerWait : null
+
+  let body
   try {
-    const body = await response.json()
-    if (typeof body?.detail === 'string') return body.detail
+    body = await response.json()
   } catch {
-    /* body was not JSON; fall through to the status text */
+    body = null
   }
-  return `The server returned ${response.status}.`
+
+  const detail = body?.detail
+  if (detail && typeof detail === 'object') {
+    if (typeof detail.retry_after_seconds === 'number') {
+      retryAfterSeconds = detail.retry_after_seconds
+    }
+    if (typeof detail.message === 'string') {
+      return { message: detail.message, retryAfterSeconds }
+    }
+  }
+  if (typeof detail === 'string') return { message: detail, retryAfterSeconds }
+
+  return { message: `The server returned ${response.status}.`, retryAfterSeconds }
 }
 
 /**
@@ -209,6 +233,15 @@ async function postChatMock(sessionId, message, signal) {
 
   if (text.includes('error-test')) {
     throw new ApiError('Mock failure, as requested by "error-test".', 500)
+  }
+
+  if (text.includes('limit-test')) {
+    throw new ApiError(
+      'GitaGuide is thinking for someone else right now. '
+        + 'Please wait a moment and send it again.',
+      429,
+      12,
+    )
   }
 
   const crisis = text.includes('crisis-test')
