@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from app.config import Settings, get_settings
 from app.db.repository import MessageRecord, Repository
 from app.llm.base import TASK_SUMMARY, LLMProvider
+from app.pipeline.schemas import MemoryTrace
 from app.pipeline.textutils import truncate
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,20 @@ class MemoryContext:
     @property
     def is_empty(self) -> bool:
         return not self.summary and not self.recent_turns
+
+    def trace(self) -> MemoryTrace:
+        """The observable record of what this context contributes to the prompt.
+
+        Built here rather than by a caller so that every consumer - the API, the
+        persisted message row, the evaluation harness - reads the same numbers
+        from the object that was actually rendered into the prompt.
+        """
+        return MemoryTrace(
+            turn_count=self.turn_count,
+            summary_included=bool(self.summary),
+            recent_turns_injected=len(self.recent_turns),
+            loaded=True,
+        )
 
 
 class ConversationMemory:

@@ -52,6 +52,7 @@ from app.pipeline.schemas import (
     GenerationResult,
     GuidanceResult,
     IntentResult,
+    MemoryTrace,
     RetrievalTrace,
     UserTurn,
 )
@@ -128,6 +129,7 @@ class GuidanceOrchestrator:
         if input_verdict.blocked:
             return await self._crisis_short_circuit(
                 session_id=session.id,
+                turn_count=session.turn_count,
                 emotion=emotion,
                 intent=intent,
                 verdict=input_verdict,
@@ -137,6 +139,7 @@ class GuidanceOrchestrator:
 
         # ---- stage 4: memory ---------------------------------------------
         memory_context = await self.memory.load(session.id)
+        memory_trace = memory_context.trace()
         stages.append(STAGE_MEMORY)
 
         # ---- stage 5: hybrid retrieval -----------------------------------
@@ -172,6 +175,7 @@ class GuidanceOrchestrator:
                 safety=output_verdict.model_dump(mode="json"),
                 retrieval=retrieval.model_dump(mode="json"),
                 generation=generation.model_dump(mode="json"),
+                memory=memory_trace.model_dump(mode="json"),
                 citations=list(generation.citations),
                 crisis=False,
                 latency_ms=round((time.perf_counter() - started) * 1000, 2),
@@ -194,6 +198,7 @@ class GuidanceOrchestrator:
             output_safety=output_verdict,
             retrieval=retrieval,
             generation=generation,
+            memory=memory_trace,
             memory_summary=summary or memory_context.summary,
             stages_run=stages,
             total_latency_ms=round((time.perf_counter() - started) * 1000, 2),
@@ -203,14 +208,22 @@ class GuidanceOrchestrator:
     async def _crisis_short_circuit(
         self,
         session_id: str,
+        turn_count: int,
         emotion: EmotionResult,
         intent: IntentResult,
         verdict: SafetyVerdict,
         stages: list[str],
         started: float,
     ) -> GuidanceResult:
-        """Return the crisis response without touching retrieval or the LLM."""
+        """Return the crisis response without touching retrieval or the LLM.
+
+        The memory stage sits *after* the gate, so it genuinely does not run
+        here. The trace says so: ``loaded=False`` with nothing injected. The
+        session's ``turn_count`` is still reported because it is a fact about
+        the session, not a claim about what reached the prompt.
+        """
         answer = self.safety_gate.crisis_response(verdict)
+        memory_trace = MemoryTrace(turn_count=turn_count, loaded=False)
         assistant_message = await self.repository.add_message(
             MessageRecord(
                 id=str(uuid.uuid4()),
@@ -220,6 +233,7 @@ class GuidanceOrchestrator:
                 emotion=emotion.model_dump(mode="json"),
                 intent=intent.model_dump(mode="json"),
                 safety=verdict.model_dump(mode="json"),
+                memory=memory_trace.model_dump(mode="json"),
                 crisis=True,
                 latency_ms=round((time.perf_counter() - started) * 1000, 2),
             )
@@ -237,6 +251,7 @@ class GuidanceOrchestrator:
             safety=verdict,
             retrieval=None,
             generation=None,
+            memory=memory_trace,
             stages_run=stages,
             total_latency_ms=round((time.perf_counter() - started) * 1000, 2),
         )

@@ -18,6 +18,7 @@ from app.pipeline.schemas import (
     GraphPath,
     GuidanceResult,
     IntentResult,
+    MemoryTrace,
     SafetyVerdict,
 )
 
@@ -92,6 +93,9 @@ class ChatResponse(BaseModel):
     citations: list[str] = Field(default_factory=list)
     why_this_verse: dict[str, str] = Field(default_factory=dict)
     grounded: bool = True
+    #: What the memory stage injected into this turn's prompt. Produced by the
+    #: pipeline, not recomputed here - see :class:`MemoryTrace`.
+    memory: MemoryTrace = Field(default_factory=MemoryTrace)
     memory_summary: str = ""
     stages_run: list[str] = Field(default_factory=list)
     total_latency_ms: float = 0.0
@@ -154,6 +158,7 @@ class ChatResponse(BaseModel):
             citations=list(generation.citations) if generation else [],
             why_this_verse=dict(generation.why_this_verse) if generation else {},
             grounded=generation.grounded if generation else False,
+            memory=result.memory,
             memory_summary=result.memory_summary,
             stages_run=result.stages_run,
             total_latency_ms=result.total_latency_ms,
@@ -178,6 +183,8 @@ class ExplainResponse(BaseModel):
     safety: dict[str, Any] | None = None
     retrieval: dict[str, Any] | None = None
     generation: dict[str, Any] | None = None
+    #: Null on rows written before memory observability existed.
+    memory: dict[str, Any] | None = None
     latency_ms: float = 0.0
 
 

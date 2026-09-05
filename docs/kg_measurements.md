@@ -319,10 +319,9 @@ otherwise. This is the day's most transferable finding.
 | `grounded` | `true` on a templated answer | format compliance, not faithfulness (section 5) |
 | `memory_summary` | `""` on a working session | memory was working via the last-N-turns channel; the summary only refreshes every 8 turns |
 
-Three of the four are now fixed (dialect from the engine URL; per-turn
+Three of the four were fixed on Day 1 (dialect from the engine URL; per-turn
 `llm_provider`/`llm_model`/`llm_fallback_steps` persisted with the turn; the grounded
-caveat documented). The memory one is outstanding: a working session and a broken one
-are still indistinguishable at turn 2.
+caveat documented). **The fourth is now closed too — see section 8.**
 
 **Why this matters more than the individual bugs:** once testers are on the system,
 these fields are the only visibility there is. Every one of these would have been read
@@ -346,3 +345,39 @@ reported `finish_reason=stop`. The retired fallback was replaced with the live-t
 approximately **21.1 s**. Remaining operational risk: Super intermittently returned
 HTTP 503 during the repeated run. In-provider retries recovered, but the failures add
 variable latency and may force use of the substantially slower fallback.
+
+---
+
+## 8. Day 2 — memory observability (measured 5 Sep 2026)
+
+*(Live stack: ONNX INT8 GoEmotions, `neo4j-hybrid-cypher`, NIM
+`nvidia/nemotron-3-super-120b-a12b`, `postgresql+asyncpg`. Fresh session, two turns.)*
+
+Section 6 recorded that an empty `memory_summary` at turn 2 could not be told apart
+from a broken memory channel. The memory stage now emits a `MemoryTrace`
+(`turn_count`, `summary_included`, `recent_turns_injected`, `loaded`), returned on both
+API surfaces and persisted on the assistant message row.
+
+| turn | `turn_count` | `summary_included` | `recent_turns_injected` | `rolling_summary` in DB |
+| --- | --- | --- | --- | --- |
+| 1 | 1 | false | 1 | empty |
+| 2 | **3** | **false** | **3** | **empty (length 0)** |
+
+This is the measurement that resolves the ambiguity: at turn 2 the summary is genuinely
+empty *and* three turns were injected. The session was working the whole time through
+the last-N-turns channel; only the summary channel was idle, because
+`memory_summary_trigger_turns` is 8 and the session had reached 4.
+
+**`turn_count` counts messages, not exchanges.** The repository increments it once per
+persisted message, and the user's own message is written before the memory stage runs,
+so exchange *n* reports `2n - 1`. Reported as stored rather than halved, because that is
+the number the `sessions` row holds. State the unit whenever quoting it.
+
+**A blocked turn reports `loaded=false`.** The gate short-circuits before stage 4, so
+memory genuinely does not run; the trace says so rather than reporting a zero that would
+look like a measurement. `turn_count` is still given, being a fact about the session.
+
+Measured cost: none. The trace is built from the `MemoryContext` the stage already
+loaded — no extra query. It replaced a temporary repository read in the beta adapter
+that issued two additional queries per turn, so this is one fewer round trip, and one
+source of truth instead of two.

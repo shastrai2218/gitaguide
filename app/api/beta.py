@@ -36,8 +36,6 @@ from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.api.routes import OrchestratorDep
-from app.config import get_settings
-from app.pipeline.orchestrator import GuidanceOrchestrator
 from app.pipeline.schemas import GuidanceResult, UserTurn
 
 logger = logging.getLogger(__name__)
@@ -74,13 +72,12 @@ class BetaCitation(BaseModel):
 
 
 class BetaMemory(BaseModel):
-    """What the memory stage saw when it assembled this turn's context.
+    """What the memory stage put into this turn's prompt.
 
-    Every field is nullable and is ``None`` when the value cannot be established
-    honestly. The orchestrator does not currently report memory state on its
-    result, so these are read from the repository *before* the turn runs -
-    exactly the state :meth:`app.pipeline.memory.ConversationMemory.load` reads.
-    That is a read, not a pipeline change.
+    Projected straight from :class:`app.pipeline.schemas.MemoryTrace`, which the
+    memory stage itself produces. The adapter deliberately does not read the
+    repository to recompute any of this: there is exactly one source of memory
+    truth and it is the pipeline.
     """
 
     turn_count: int | None = None
@@ -149,37 +146,6 @@ def _citations_for(result: GuidanceResult) -> list[BetaCitation]:
     return citations
 
 
-async def _memory_snapshot(
-    orchestrator: GuidanceOrchestrator, session_id: str | None
-) -> BetaMemory:
-    """Read the memory state this turn will be built on, before it runs.
-
-    Returns all-``None`` for a session that does not exist yet, and on any read
-    failure - the meta line then omits the memory fields rather than showing a
-    zero that would read as a measurement.
-    """
-    if not session_id:
-        return BetaMemory()
-
-    settings = get_settings()
-    try:
-        session = await orchestrator.repository.get_session(session_id)
-        if session is None:
-            return BetaMemory(turn_count=0, summary_included=False, recent_turns_injected=0)
-        recent = await orchestrator.repository.list_messages(
-            session_id, limit=settings.memory_last_n_turns
-        )
-    except Exception:  # pragma: no cover - defensive; never fail a turn on this
-        logger.exception("memory snapshot failed for session %s", session_id)
-        return BetaMemory()
-
-    return BetaMemory(
-        turn_count=session.turn_count,
-        summary_included=bool(session.rolling_summary),
-        recent_turns_injected=len(recent),
-    )
-
-
 # --------------------------------------------------------------------------- #
 # Routes
 # --------------------------------------------------------------------------- #
@@ -193,8 +159,6 @@ async def beta_chat(
     which is what :attr:`GuidanceResult.crisis` records: that path returns
     before retrieval and generation run.
     """
-    memory = await _memory_snapshot(orchestrator, payload.session_id)
-
     turn = UserTurn(message=payload.message, session_id=payload.session_id)
     try:
         result = await orchestrator.handle_turn(turn)
@@ -217,7 +181,11 @@ async def beta_chat(
             crisis_score=result.intent.semantic_crisis_score,
         ),
         citations=_citations_for(result),
-        memory=memory,
+        memory=BetaMemory(
+            turn_count=result.memory.turn_count,
+            summary_included=result.memory.summary_included,
+            recent_turns_injected=result.memory.recent_turns_injected,
+        ),
         meta=BetaMeta(
             provider=generation.provider if generation else None,
             model=(generation.model or None) if generation else None,

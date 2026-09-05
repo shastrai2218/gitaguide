@@ -264,6 +264,35 @@ class RetrievalTrace(BaseModel):
         return [item.verse_id for item in self.results]
 
 
+# ---------------------------------------------------------------------- memory
+class MemoryTrace(BaseModel):
+    """What stage 4 actually put into the generation prompt.
+
+    Memory was the one stage with no observable output: an empty
+    ``memory_summary`` at turn 2 looked identical to a broken memory channel and
+    to a working one that simply had nothing to summarise yet. These three
+    fields separate those cases, and they are produced by the memory stage
+    itself so there is a single source of truth for them.
+
+    ``turn_count`` counts **messages**, not exchanges - the repository
+    increments it once per persisted message - so one completed exchange
+    advances it by two. It is reported as the pipeline stores it rather than
+    halved, because that is the number the ``sessions`` row actually holds.
+
+    ``recent_turns_injected`` is the number of turns handed to
+    :meth:`app.pipeline.memory.MemoryContext.render`. The renderer applies a
+    character cap afterwards, so under a very long history the prompt may carry
+    slightly less than this count.
+    """
+
+    turn_count: int = Field(default=0, ge=0)
+    summary_included: bool = False
+    recent_turns_injected: int = Field(default=0, ge=0)
+    #: False when the stage did not run at all - the crisis short-circuit
+    #: returns before memory is loaded, by design.
+    loaded: bool = False
+
+
 # ------------------------------------------------------------------ generation
 class GenerationResult(BaseModel):
     """Output of :class:`app.pipeline.generation.GroundedGenerator`."""
@@ -308,6 +337,7 @@ class GuidanceResult(BaseModel):
     output_safety: SafetyVerdict = Field(default_factory=SafetyVerdict)
     retrieval: RetrievalTrace | None = None
     generation: GenerationResult | None = None
+    memory: MemoryTrace = Field(default_factory=MemoryTrace)
     memory_summary: str = ""
     stages_run: list[str] = Field(default_factory=list)
     total_latency_ms: float = 0.0

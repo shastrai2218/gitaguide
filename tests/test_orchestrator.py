@@ -225,6 +225,82 @@ async def test_memory_context_is_empty_for_a_new_session(
     assert context.render() == ""
 
 
+# ------------------------------------------------------- memory observability
+async def test_memory_trace_is_reported_and_grows(
+    orchestrator: GuidanceOrchestrator,
+) -> None:
+    """The memory stage reports what it injected, turn by turn.
+
+    This exists because an empty ``memory_summary`` at turn 2 was
+    indistinguishable from a broken memory channel. ``turn_count`` counts
+    messages and the user's own message is persisted before the stage runs, so
+    exchange 1 reports 1 and exchange 2 reports 3.
+    """
+    first = await orchestrator.handle_turn(UserTurn(message="I feel stuck in my career"))
+    assert first.memory.loaded is True
+    assert first.memory.turn_count == 1
+    assert first.memory.recent_turns_injected == 1
+    assert first.memory.summary_included is False
+
+    second = await orchestrator.handle_turn(
+        UserTurn(message="and my family keeps pushing me", session_id=first.session_id)
+    )
+    assert second.memory.turn_count == 3
+    assert second.memory.recent_turns_injected == 3
+    assert second.memory.summary_included is False
+
+
+async def test_memory_trace_reports_the_summary_once_there_is_one(
+    orchestrator: GuidanceOrchestrator, repository: InMemoryRepository
+) -> None:
+    """``summary_included`` must flip only when a summary actually exists."""
+    result = await orchestrator.handle_turn(UserTurn(message="I am unhappy at work"))
+    session_id = result.session_id
+    for index in range(5):
+        result = await orchestrator.handle_turn(
+            UserTurn(
+                message=f"another thought number {index} about my career",
+                session_id=session_id,
+            )
+        )
+
+    session = await repository.get_session(session_id)
+    assert session is not None and session.rolling_summary
+
+    after = await orchestrator.handle_turn(
+        UserTurn(message="so what should I do next?", session_id=session_id)
+    )
+    assert after.memory.summary_included is True
+    # The last-N window caps injection; it must not grow without bound.
+    assert (
+        after.memory.recent_turns_injected
+        <= orchestrator.settings.memory_last_n_turns
+    )
+
+
+async def test_memory_trace_says_the_stage_never_ran_on_a_crisis_turn(
+    orchestrator: GuidanceOrchestrator,
+) -> None:
+    """The gate short-circuits before memory, and the trace says so plainly."""
+    result = await orchestrator.handle_turn(UserTurn(message="I want to kill myself"))
+    assert result.crisis is True
+    assert result.memory.loaded is False
+    assert result.memory.recent_turns_injected == 0
+    assert result.memory.summary_included is False
+    # turn_count is a fact about the session, so it is still reported.
+    assert result.memory.turn_count >= 1
+
+
+async def test_memory_trace_is_persisted_on_the_message_row(
+    orchestrator: GuidanceOrchestrator, repository: InMemoryRepository
+) -> None:
+    """Persisted, not only returned - ``GET /explain`` serves it back."""
+    result = await orchestrator.handle_turn(UserTurn(message="My team ignores me"))
+    record = await repository.get_message(result.message_id)
+    assert record is not None
+    assert record.memory == result.memory.model_dump(mode="json")
+
+
 # -------------------------------------------------------------- output safety
 async def test_unsafe_generation_is_replaced(orchestrator: GuidanceOrchestrator) -> None:
     """If the model emits unsafe text, the user must not see it."""

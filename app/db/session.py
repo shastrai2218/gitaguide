@@ -37,14 +37,40 @@ def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSessi
     return async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 
+#: Columns added after the first schema went live, as ``(table, column, type)``.
+#:
+#: ``create_all`` creates missing *tables* but never adds a column to a table
+#: that already exists, so a database created before one of these entries would
+#: silently reject every insert that mentions it. Each entry is applied with
+#: ``ADD COLUMN IF NOT EXISTS``: additive only, idempotent, and it never drops
+#: or retypes anything. A production deployment would use Alembic; this is the
+#: honest minimum for a research project that already has live data.
+ADDITIVE_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    # Day 2: memory observability (app.pipeline.schemas.MemoryTrace).
+    ("messages", "memory", "JSON"),
+)
+
+
 async def init_models(engine: AsyncEngine) -> None:
-    """Create tables if absent.
+    """Create tables if absent, then add any columns a live table is missing.
 
     Fine for a research project; a production deployment would use Alembic.
     """
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
-    logger.info("database schema ensured")
+
+    if engine.dialect.name != "postgresql":
+        logger.info("database schema ensured (%s)", engine.dialect.name)
+        return
+
+    from sqlalchemy import text
+
+    async with engine.begin() as connection:
+        for table, column, column_type in ADDITIVE_COLUMNS:
+            await connection.execute(
+                text(f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS "{column}" {column_type}')
+            )
+    logger.info("database schema ensured (%d additive column(s) checked)", len(ADDITIVE_COLUMNS))
 
 
 async def session_scope(

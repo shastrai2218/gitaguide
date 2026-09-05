@@ -89,6 +89,7 @@ async def explain(message_id: str, orchestrator: OrchestratorDep) -> ExplainResp
         safety=record.safety,
         retrieval=record.retrieval,
         generation=record.generation,
+        memory=record.memory,
         latency_ms=record.latency_ms,
     )
 

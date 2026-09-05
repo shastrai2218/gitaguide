@@ -49,6 +49,8 @@ class MessageRecord:
     safety: dict[str, Any] | None = None
     retrieval: dict[str, Any] | None = None
     generation: dict[str, Any] | None = None
+    #: Serialised :class:`app.pipeline.schemas.MemoryTrace` for this turn.
+    memory: dict[str, Any] | None = None
     citations: list[str] = field(default_factory=list)
     crisis: bool = False
     latency_ms: float = 0.0

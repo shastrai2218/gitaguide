@@ -77,7 +77,12 @@ def test_beta_chat_cited_verses_come_from_retrieval(client: TestClient) -> None:
 
 
 def test_beta_chat_reports_memory_state(client: TestClient) -> None:
-    """The memory block reflects the session, and grows across turns."""
+    """The memory block comes from the pipeline and grows across turns.
+
+    ``turn_count`` counts messages, and the user's own message is persisted
+    before the memory stage runs, so exchange 1 already reports 1 and exchange 2
+    reports 3 (user, assistant, user).
+    """
     session = "beta-memory"
     first = client.post(
         "/api/chat", json={"session_id": session, "message": "I feel stuck in my role"}
@@ -86,14 +91,38 @@ def test_beta_chat_reports_memory_state(client: TestClient) -> None:
         "/api/chat", json={"session_id": session, "message": "Should I move teams?"}
     ).json()
 
-    # Turn one sees a session that does not exist yet: an honest zero.
-    assert first["memory"]["turn_count"] == 0
-    assert first["memory"]["recent_turns_injected"] == 0
+    assert first["memory"] == {
+        "turn_count": 1,
+        "summary_included": False,
+        "recent_turns_injected": 1,
+    }
+    assert second["memory"] == {
+        "turn_count": 3,
+        "summary_included": False,
+        "recent_turns_injected": 3,
+    }
 
-    # Turn two sees the first exchange already persisted.
-    assert second["memory"]["turn_count"] >= 1
-    assert second["memory"]["recent_turns_injected"] >= 1
-    assert second["memory"]["summary_included"] is False
+
+def test_beta_chat_memory_matches_the_research_surface(client: TestClient) -> None:
+    """One source of truth: the adapter must not recompute memory itself.
+
+    Both surfaces project the same ``GuidanceResult.memory``, so the same turn
+    number in two parallel sessions must report identical memory blocks.
+    """
+    message = "I am unsure whether to accept the offer"
+    beta = client.post(
+        "/api/chat", json={"session_id": "beta-mem-a", "message": message}
+    ).json()
+    full = client.post(
+        "/chat", json={"session_id": "beta-mem-b", "message": message}
+    ).json()
+
+    assert beta["memory"]["turn_count"] == full["memory"]["turn_count"]
+    assert beta["memory"]["summary_included"] == full["memory"]["summary_included"]
+    assert (
+        beta["memory"]["recent_turns_injected"]
+        == full["memory"]["recent_turns_injected"]
+    )
 
 
 # --------------------------------------------------------------------------- #
