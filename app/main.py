@@ -20,6 +20,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.beta import router as beta_router
 from app.api.routes import router
 from app.config import Settings, get_settings
 from app.db import build_repository
@@ -103,6 +104,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(router)
+    # The beta UI's flat envelope, served alongside the research surface.
+    app.include_router(beta_router)
     return app
 
 
