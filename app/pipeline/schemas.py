@@ -338,6 +338,11 @@ class GuidanceResult(BaseModel):
     retrieval: RetrievalTrace | None = None
     generation: GenerationResult | None = None
     memory: MemoryTrace = Field(default_factory=MemoryTrace)
+    #: Wall-clock milliseconds per pipeline stage, keyed by the ``STAGE_*``
+    #: names in :mod:`app.pipeline.orchestrator`. The copy stored on the message
+    #: row omits ``persist`` - a stage cannot time the write that stores it -
+    #: which is the same cut the row's own ``latency_ms`` uses.
+    timings: dict[str, float] = Field(default_factory=dict)
     memory_summary: str = ""
     stages_run: list[str] = Field(default_factory=list)
     total_latency_ms: float = 0.0

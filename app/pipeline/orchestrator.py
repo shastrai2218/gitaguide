@@ -69,6 +69,45 @@ STAGE_SAFETY_OUTPUT = "safety_output"
 STAGE_PERSIST = "persist"
 
 
+class StageTimer:
+    """Wall-clock per pipeline stage, recorded under the ``STAGE_*`` names.
+
+    Latency here is not a micro-optimisation concern - it is the difference
+    between a reply that feels considered and one that feels broken. The turn
+    total alone cannot say *which* stage spent it, and the answer is not always
+    generation: a cold ONNX session, a slow Neo4j query, or a NIM 503 retry all
+    show up as "the app is slow" without this.
+
+    Reuses ``stages_run``'s vocabulary so the two lists cannot drift apart. Use
+    it as a context manager per stage::
+
+        with timer(STAGE_RETRIEVAL):
+            ...
+
+    It records the stage even when the body raises, so a failed turn still says
+    where the time went.
+    """
+
+    def __init__(self) -> None:
+        self.timings: dict[str, float] = {}
+        self._stage: str | None = None
+        self._started: float = 0.0
+
+    def __call__(self, stage: str) -> StageTimer:
+        self._stage = stage
+        return self
+
+    def __enter__(self) -> StageTimer:
+        self._started = time.perf_counter()
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        if self._stage is not None:
+            elapsed = round((time.perf_counter() - self._started) * 1000, 2)
+            self.timings[self._stage] = round(self.timings.get(self._stage, 0.0) + elapsed, 2)
+            self._stage = None
+
+
 class GuidanceOrchestrator:
     """Chains the pipeline and returns a fully traced :class:`GuidanceResult`."""
 
@@ -97,20 +136,24 @@ class GuidanceOrchestrator:
         """Run one full turn of the pipeline."""
         started = time.perf_counter()
         stages: list[str] = []
+        timer = StageTimer()
 
         session = await self.repository.ensure_session(turn.session_id, turn.locale)
         message = turn.message.strip()
 
         # ---- stage 1: emotion (CPU-bound; off the event loop) -------------
-        emotion: EmotionResult = await asyncio.to_thread(self.detector.detect, message)
+        with timer(STAGE_EMOTION):
+            emotion: EmotionResult = await asyncio.to_thread(self.detector.detect, message)
         stages.append(STAGE_EMOTION)
 
         # ---- stage 2: intent ---------------------------------------------
-        intent: IntentResult = await self.intent_classifier.classify(message, emotion)
+        with timer(STAGE_INTENT):
+            intent: IntentResult = await self.intent_classifier.classify(message, emotion)
         stages.append(STAGE_INTENT)
 
         # ---- stage 3: SAFETY GATE (before retrieval/generation) ----------
-        input_verdict = self.safety_gate.check_input(message, emotion, intent, session.id)
+        with timer(STAGE_SAFETY_INPUT):
+            input_verdict = self.safety_gate.check_input(message, emotion, intent, session.id)
         stages.append(STAGE_SAFETY_INPUT)
 
         user_message = await self.repository.add_message(
@@ -135,27 +178,32 @@ class GuidanceOrchestrator:
                 verdict=input_verdict,
                 stages=stages,
                 started=started,
+                timer=timer,
             )
 
         # ---- stage 4: memory ---------------------------------------------
-        memory_context = await self.memory.load(session.id)
-        memory_trace = memory_context.trace()
+        with timer(STAGE_MEMORY):
+            memory_context = await self.memory.load(session.id)
+            memory_trace = memory_context.trace()
         stages.append(STAGE_MEMORY)
 
         # ---- stage 5: hybrid retrieval -----------------------------------
-        retrieval: RetrievalTrace = await self.retriever.retrieve(message, emotion, intent)
+        with timer(STAGE_RETRIEVAL):
+            retrieval: RetrievalTrace = await self.retriever.retrieve(message, emotion, intent)
         stages.append(STAGE_RETRIEVAL)
 
         # ---- stage 6: grounded generation --------------------------------
-        generation: GenerationResult = await self.generator.generate(
-            message, retrieval, emotion, intent, memory_context
-        )
+        with timer(STAGE_GENERATION):
+            generation: GenerationResult = await self.generator.generate(
+                message, retrieval, emotion, intent, memory_context
+            )
         stages.append(STAGE_GENERATION)
 
         # ---- stage 7: SAFETY GATE (output) -------------------------------
-        output_verdict = self.safety_gate.check_output(
-            generation.answer, session.id, input_verdict
-        )
+        with timer(STAGE_SAFETY_OUTPUT):
+            output_verdict = self.safety_gate.check_output(
+                generation.answer, session.id, input_verdict
+            )
         stages.append(STAGE_SAFETY_OUTPUT)
         answer = (
             self.safety_gate.crisis_response(output_verdict)
@@ -164,28 +212,34 @@ class GuidanceOrchestrator:
         )
 
         # ---- stage 8: persist + memory refresh ---------------------------
-        assistant_message = await self.repository.add_message(
-            MessageRecord(
-                id=str(uuid.uuid4()),
-                session_id=session.id,
-                role="assistant",
-                content=answer,
-                emotion=emotion.model_dump(mode="json"),
-                intent=intent.model_dump(mode="json"),
-                safety=output_verdict.model_dump(mode="json"),
-                retrieval=retrieval.model_dump(mode="json"),
-                generation=generation.model_dump(mode="json"),
-                memory=memory_trace.model_dump(mode="json"),
-                citations=list(generation.citations),
-                crisis=False,
-                latency_ms=round((time.perf_counter() - started) * 1000, 2),
+        # The row stores the timings for the stages that *produced* it, the same
+        # cut as its own ``latency_ms``: the persist figure cannot be inside the
+        # row that the persisting writes. It is measured, logged and returned.
+        with timer(STAGE_PERSIST):
+            assistant_message = await self.repository.add_message(
+                MessageRecord(
+                    id=str(uuid.uuid4()),
+                    session_id=session.id,
+                    role="assistant",
+                    content=answer,
+                    emotion=emotion.model_dump(mode="json"),
+                    intent=intent.model_dump(mode="json"),
+                    safety=output_verdict.model_dump(mode="json"),
+                    retrieval=retrieval.model_dump(mode="json"),
+                    generation=generation.model_dump(mode="json"),
+                    memory=memory_trace.model_dump(mode="json"),
+                    timings=dict(timer.timings),
+                    citations=list(generation.citations),
+                    crisis=False,
+                    latency_ms=round((time.perf_counter() - started) * 1000, 2),
+                )
             )
-        )
-        await self._persist_safety(
-            output_verdict, session.id, assistant_message.id, "output", emotion, intent
-        )
-        summary = await self.memory.maybe_update_summary(session.id)
+            await self._persist_safety(
+                output_verdict, session.id, assistant_message.id, "output", emotion, intent
+            )
+            summary = await self.memory.maybe_update_summary(session.id)
         stages.append(STAGE_PERSIST)
+        self._log_timings(session.id, assistant_message.id, timer.timings, crisis=False)
 
         return GuidanceResult(
             session_id=session.id,
@@ -199,6 +253,7 @@ class GuidanceOrchestrator:
             retrieval=retrieval,
             generation=generation,
             memory=memory_trace,
+            timings=dict(timer.timings),
             memory_summary=summary or memory_context.summary,
             stages_run=stages,
             total_latency_ms=round((time.perf_counter() - started) * 1000, 2),
@@ -214,6 +269,7 @@ class GuidanceOrchestrator:
         verdict: SafetyVerdict,
         stages: list[str],
         started: float,
+        timer: StageTimer,
     ) -> GuidanceResult:
         """Return the crisis response without touching retrieval or the LLM.
 
@@ -224,23 +280,26 @@ class GuidanceOrchestrator:
         """
         answer = self.safety_gate.crisis_response(verdict)
         memory_trace = MemoryTrace(turn_count=turn_count, loaded=False)
-        assistant_message = await self.repository.add_message(
-            MessageRecord(
-                id=str(uuid.uuid4()),
-                session_id=session_id,
-                role="assistant",
-                content=answer,
-                emotion=emotion.model_dump(mode="json"),
-                intent=intent.model_dump(mode="json"),
-                safety=verdict.model_dump(mode="json"),
-                memory=memory_trace.model_dump(mode="json"),
-                crisis=True,
-                latency_ms=round((time.perf_counter() - started) * 1000, 2),
+        with timer(STAGE_PERSIST):
+            assistant_message = await self.repository.add_message(
+                MessageRecord(
+                    id=str(uuid.uuid4()),
+                    session_id=session_id,
+                    role="assistant",
+                    content=answer,
+                    emotion=emotion.model_dump(mode="json"),
+                    intent=intent.model_dump(mode="json"),
+                    safety=verdict.model_dump(mode="json"),
+                    memory=memory_trace.model_dump(mode="json"),
+                    timings=dict(timer.timings),
+                    crisis=True,
+                    latency_ms=round((time.perf_counter() - started) * 1000, 2),
+                )
             )
-        )
         logger.info(
             "crisis short-circuit: session=%s categories=%s", session_id, verdict.categories
         )
+        self._log_timings(session_id, assistant_message.id, timer.timings, crisis=True)
         return GuidanceResult(
             session_id=session_id,
             message_id=assistant_message.id,
@@ -252,8 +311,32 @@ class GuidanceOrchestrator:
             retrieval=None,
             generation=None,
             memory=memory_trace,
+            timings=dict(timer.timings),
             stages_run=stages,
             total_latency_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
+
+    @staticmethod
+    def _log_timings(
+        session_id: str, message_id: str, timings: dict[str, float], *, crisis: bool
+    ) -> None:
+        """One structured line per turn: where the wall clock went.
+
+        No metrics service and no new dependency - the requirement is to be able
+        to answer "which stage was slow on that turn?" from the logs a tester's
+        run already produced.
+        """
+        if not timings:
+            return
+        total = round(sum(timings.values()), 2)
+        breakdown = " ".join(f"{stage}={value:.1f}ms" for stage, value in timings.items())
+        logger.info(
+            "TURN_LATENCY session=%s message=%s crisis=%s total=%.1fms %s",
+            session_id,
+            message_id,
+            crisis,
+            total,
+            breakdown,
         )
 
     async def _persist_safety(

@@ -20,7 +20,7 @@ Contract::
           intent  {label, crisis_score},
           citations [{source, ref, text}],
           memory  {turn_count, summary_included, recent_turns_injected},
-          meta    {provider, model, latency_ms}}
+          meta    {provider, model, latency_ms, stage_latency_ms}}
 
     GET /api/sessions/{session_id}/messages
       -> {session_id, messages: [{id, role, content, blocked, created_at}]}
@@ -89,6 +89,9 @@ class BetaMeta(BaseModel):
     provider: str | None = None
     model: str | None = None
     latency_ms: float | None = None
+    #: Wall-clock ms per pipeline stage, keyed by stage name. Empty only if the
+    #: pipeline recorded nothing, which would itself be a defect.
+    stage_latency_ms: dict[str, float] = Field(default_factory=dict)
 
 
 class BetaChatResponse(BaseModel):
@@ -190,6 +193,7 @@ async def beta_chat(
             provider=generation.provider if generation else None,
             model=(generation.model or None) if generation else None,
             latency_ms=result.total_latency_ms,
+            stage_latency_ms=dict(result.timings),
         ),
     )
 

@@ -10,6 +10,39 @@ function fmt(value, digits = 2) {
   return value === null || value === undefined ? null : value.toFixed(digits)
 }
 
+/** Short stage names, so the breakdown stays one readable line. */
+const STAGE_LABELS = {
+  emotion: 'emo',
+  intent: 'int',
+  safety_input: 'gate',
+  memory: 'mem',
+  retrieval: 'ret',
+  generation: 'gen',
+  safety_output: 'out',
+  persist: 'db',
+}
+
+/**
+ * Where the turn's wall clock went, largest first.
+ *
+ * Only stages worth a reader's attention are shown: anything under 10ms is
+ * noise next to a multi-second generation call, and listing it would bury the
+ * one number that explains a slow turn.
+ */
+function stageBreakdown(stages) {
+  if (!stages) return null
+  const entries = Object.entries(stages)
+    .filter(([, ms]) => typeof ms === 'number' && ms >= 10)
+    .sort((a, b) => b[1] - a[1])
+  if (!entries.length) return null
+  return entries
+    .map(([stage, ms]) => {
+      const label = STAGE_LABELS[stage] || stage
+      return ms >= 1000 ? `${label} ${(ms / 1000).toFixed(1)}s` : `${label} ${Math.round(ms)}ms`
+    })
+    .join(' ')
+}
+
 export default function MetaLine({ turn }) {
   const parts = []
 
@@ -41,6 +74,9 @@ export default function MetaLine({ turn }) {
   if (turn.meta.latencyMs !== null) {
     parts.push(`${(turn.meta.latencyMs / 1000).toFixed(1)}s`)
   }
+
+  const breakdown = stageBreakdown(turn.meta.stageLatencyMs)
+  if (breakdown) parts.push(breakdown)
 
   if (!parts.length) return null
 

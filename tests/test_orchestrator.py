@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+
 import pytest
 
 from app.db.repository import InMemoryRepository
@@ -13,6 +15,7 @@ from app.pipeline.orchestrator import (
     STAGE_SAFETY_INPUT,
     STAGE_SAFETY_OUTPUT,
     GuidanceOrchestrator,
+    StageTimer,
     build_orchestrator,
 )
 from app.pipeline.schemas import (
@@ -299,6 +302,72 @@ async def test_memory_trace_is_persisted_on_the_message_row(
     record = await repository.get_message(result.message_id)
     assert record is not None
     assert record.memory == result.memory.model_dump(mode="json")
+
+
+# ---------------------------------------------------------- latency instrument
+async def test_every_stage_that_ran_is_timed(
+    orchestrator: GuidanceOrchestrator,
+) -> None:
+    """``timings`` and ``stages_run`` must describe the same set of stages.
+
+    They are built from the same ``STAGE_*`` constants, so a stage added to one
+    and forgotten in the other shows up here rather than as a silently missing
+    number in the latency baseline.
+    """
+    result = await orchestrator.handle_turn(UserTurn(message="I am overloaded at work"))
+
+    assert set(result.timings) == set(result.stages_run)
+    assert all(value >= 0.0 for value in result.timings.values())
+    # The parts cannot exceed the whole, give or take timer resolution.
+    assert sum(result.timings.values()) <= result.total_latency_ms + 5.0
+
+
+async def test_timings_are_persisted_minus_the_persist_stage(
+    orchestrator: GuidanceOrchestrator, repository: InMemoryRepository
+) -> None:
+    """The row carries the stages that produced it - it cannot time its own write."""
+    result = await orchestrator.handle_turn(UserTurn(message="I am overloaded at work"))
+    record = await repository.get_message(result.message_id)
+
+    assert record is not None and record.timings
+    assert "persist" not in record.timings, "a row cannot contain the timing of its own insert"
+    assert "persist" in result.timings, "but the returned result must still report it"
+    assert set(record.timings) | {"persist"} == set(result.timings)
+
+
+async def test_a_blocked_turn_is_timed_for_the_stages_it_ran(
+    orchestrator: GuidanceOrchestrator,
+) -> None:
+    """The crisis path is timed too - it is the one that must stay fast."""
+    result = await orchestrator.handle_turn(UserTurn(message="I want to kill myself"))
+
+    assert result.crisis is True
+    assert set(result.timings) == {"emotion", "intent", "safety_input", "persist"}
+    assert "retrieval" not in result.timings
+    assert "generation" not in result.timings
+
+
+def test_stage_timer_records_a_stage_whose_body_raised() -> None:
+    """The timer must close the stage on the way out of a failing block.
+
+    Without this, an exception mid-pipeline would drop the timing of the stage
+    that failed - exactly the one worth knowing about.
+    """
+    timer = StageTimer()
+    with contextlib.suppress(RuntimeError), timer("retrieval"):
+        raise RuntimeError("retrieval is down")
+
+    assert "retrieval" in timer.timings
+    assert timer.timings["retrieval"] >= 0.0
+
+
+def test_stage_timer_accumulates_repeated_stages() -> None:
+    """Two visits to one stage sum rather than overwrite."""
+    timer = StageTimer()
+    for _ in range(2):
+        with timer("generation"):
+            pass
+    assert list(timer.timings) == ["generation"]
 
 
 # -------------------------------------------------------------- output safety

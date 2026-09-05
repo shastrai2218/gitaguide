@@ -13,7 +13,7 @@
  *         intent  {label, crisis_score},
  *         citations [{source, ref, text}],
  *         memory  {turn_count, summary_included, recent_turns_injected},
- *         meta    {provider, model, latency_ms}}
+ *         meta    {provider, model, latency_ms, stage_latency_ms}}
  *
  *   GET /api/sessions/{id}/messages -> {session_id, messages: [...]}
  *     Optional: the UI degrades gracefully when it is absent (404/501).
@@ -79,6 +79,12 @@ function normaliseTurn(body) {
       provider: meta.provider ?? null,
       model: meta.model ?? null,
       latencyMs: numberOrNull(meta.latency_ms),
+      // Per-stage wall clock, keyed by pipeline stage name. Kept as the raw
+      // map: the meta line decides what is worth showing, not the wire.
+      stageLatencyMs:
+        meta.stage_latency_ms && typeof meta.stage_latency_ms === 'object'
+          ? meta.stage_latency_ms
+          : {},
     },
   }
 }
@@ -221,7 +227,23 @@ async function postChatMock(sessionId, message, signal) {
     },
     citations: crisis ? [] : MOCK_CITATIONS,
     memory: { turn_count: 2, summary_included: false, recent_turns_injected: 2 },
-    meta: { provider: 'mock', model: 'mock-preview', latency_ms: crisis ? 120 : 4200 },
+    meta: {
+      provider: 'mock',
+      model: 'mock-preview',
+      latency_ms: crisis ? 120 : 4200,
+      stage_latency_ms: crisis
+        ? { emotion: 62, intent: 41, safety_input: 3, persist: 14 }
+        : {
+            emotion: 58,
+            intent: 39,
+            safety_input: 2,
+            memory: 11,
+            retrieval: 380,
+            generation: 3660,
+            safety_output: 2,
+            persist: 48,
+          },
+    },
   })
 }
 

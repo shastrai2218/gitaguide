@@ -35,7 +35,7 @@ function restoredEntry(record) {
       intent: { label: null, crisisScore: null },
       citations: [],
       memory: { turnCount: null, summaryIncluded: null, recentTurnsInjected: null },
-      meta: { provider: null, model: null, latencyMs: null },
+      meta: { provider: null, model: null, latencyMs: null, stageLatencyMs: {} },
     },
   }
 }

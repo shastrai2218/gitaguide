@@ -96,6 +96,8 @@ class ChatResponse(BaseModel):
     #: What the memory stage injected into this turn's prompt. Produced by the
     #: pipeline, not recomputed here - see :class:`MemoryTrace`.
     memory: MemoryTrace = Field(default_factory=MemoryTrace)
+    #: Wall-clock ms per pipeline stage; see ``GuidanceResult.timings``.
+    timings: dict[str, float] = Field(default_factory=dict)
     memory_summary: str = ""
     stages_run: list[str] = Field(default_factory=list)
     total_latency_ms: float = 0.0
@@ -159,6 +161,7 @@ class ChatResponse(BaseModel):
             why_this_verse=dict(generation.why_this_verse) if generation else {},
             grounded=generation.grounded if generation else False,
             memory=result.memory,
+            timings=dict(result.timings),
             memory_summary=result.memory_summary,
             stages_run=result.stages_run,
             total_latency_ms=result.total_latency_ms,
@@ -185,6 +188,8 @@ class ExplainResponse(BaseModel):
     generation: dict[str, Any] | None = None
     #: Null on rows written before memory observability existed.
     memory: dict[str, Any] | None = None
+    #: Null on rows written before latency instrumentation existed.
+    timings: dict[str, Any] | None = None
     latency_ms: float = 0.0
 
 

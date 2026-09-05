@@ -92,6 +92,9 @@ class Message(Base):
     #: What the memory stage injected into the prompt for this turn. Null on
     #: rows written before memory observability existed.
     memory: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    #: Per-stage wall clock in milliseconds. Null on rows written before
+    #: latency instrumentation existed.
+    timings: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     citations: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
     crisis: Mapped[bool] = mapped_column(Boolean, default=False)

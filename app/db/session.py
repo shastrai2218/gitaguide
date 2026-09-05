@@ -48,6 +48,8 @@ def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSessi
 ADDITIVE_COLUMNS: tuple[tuple[str, str, str], ...] = (
     # Day 2: memory observability (app.pipeline.schemas.MemoryTrace).
     ("messages", "memory", "JSON"),
+    # Day 3: per-stage latency instrumentation.
+    ("messages", "timings", "JSON"),
 )
 
 
