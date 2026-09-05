@@ -1,0 +1,95 @@
+# Render blueprint for the GitaGuide beta API.
+#
+# Every secret is declared with `sync: false`, which means Render prompts for it
+# in the dashboard and never stores it in this file or in git. Nothing here
+# contains a key, a password, or a connection string - see .env.production.example
+# for the shape of each value and docs/DEPLOY.md for the order to set them in.
+#
+# Plan: Starter. Not Free - a free instance sleeps, and the first request after
+# a sleep pays the full ONNX model load, which is minutes, not seconds. Testers
+# would read that as the app being broken.
+
+services:
+  - type: web
+    name: gitaguide-api
+    runtime: docker
+    plan: starter
+    region: singapore # closest to the testers; change if yours are elsewhere
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    # One instance. The rate limiter and telemetry counters are in-process, so
+    # scaling out would multiply every configured limit by the instance count.
+    numInstances: 1
+    autoDeploy: false # deploy deliberately during a beta, not on every push
+
+    envVars:
+      # ---- mode -----------------------------------------------------------
+      - key: GITAGUIDE_ENVIRONMENT
+        value: prod
+      - key: GITAGUIDE_LOG_LEVEL
+        value: INFO
+      # The single most important variable here. `true` would serve every
+      # tester canned text from in-process fakes while /health still looked fine.
+      - key: GITAGUIDE_MOCK_MODE
+        value: "false"
+
+      # ---- secrets: entered in the Render dashboard, never in git ----------
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: GITAGUIDE_POSTGRES_DSN
+        sync: false
+      - key: GITAGUIDE_NEO4J_URI
+        sync: false
+      - key: GITAGUIDE_NEO4J_PASSWORD
+        sync: false
+      - key: GITAGUIDE_TELEMETRY_SESSION_SALT
+        sync: false
+
+      # ---- backends -------------------------------------------------------
+      - key: GITAGUIDE_USE_REAL_NEO4J
+        value: "true"
+      - key: GITAGUIDE_NEO4J_USERNAME
+        value: neo4j
+      - key: GITAGUIDE_NEO4J_DATABASE
+        value: neo4j
+      - key: GITAGUIDE_LLM_PROVIDER
+        value: nvidia
+
+      # ---- limits: explicit in production, never left to code defaults ----
+      # The global bucket is what protects the ~40 req/min NIM budget; one turn
+      # spends two calls on the primary model. See app/api/ratelimit.py.
+      - key: GITAGUIDE_RATE_LIMIT_ENABLED
+        value: "true"
+      - key: GITAGUIDE_RATE_LIMIT_SESSION_PER_MINUTE
+        value: "5"
+      - key: GITAGUIDE_RATE_LIMIT_SESSION_BURST
+        value: "3"
+      - key: GITAGUIDE_RATE_LIMIT_IP_PER_MINUTE
+        value: "20"
+      - key: GITAGUIDE_RATE_LIMIT_IP_BURST
+        value: "8"
+      - key: GITAGUIDE_RATE_LIMIT_GLOBAL_PER_MINUTE
+        value: "16"
+      - key: GITAGUIDE_RATE_LIMIT_GLOBAL_BURST
+        value: "6"
+
+      # Must be >= 15; the app refuses to boot below that, because the intent
+      # classifier shares this budget with generation.
+      - key: GITAGUIDE_GENERATION_BUDGET_SECONDS
+        value: "45"
+
+      # ---- consent and telemetry ------------------------------------------
+      - key: GITAGUIDE_CONSENT_REQUIRED
+        value: "true"
+      - key: GITAGUIDE_CONSENT_VERSION
+        value: v1
+      - key: GITAGUIDE_TELEMETRY_ENABLED
+        value: "true"
+      - key: GITAGUIDE_TELEMETRY_PATH
+        value: /app/logs/telemetry.jsonl
+
+      # ---- CORS: set to the Vercel URL once the frontend exists ------------
+      # Left blank on purpose. The frontend is deployed after the API, so this
+      # is filled in on the second pass (docs/DEPLOY.md step 4).
+      - key: GITAGUIDE_CORS_ORIGINS
+        sync: false
