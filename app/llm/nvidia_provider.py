@@ -47,6 +47,7 @@ import time
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from app import telemetry
 from app.config import Settings, get_settings
 from app.llm.base import TASK_INTENT, LLMError, LLMProvider, LLMResponse
 
@@ -335,6 +336,14 @@ class NvidiaProvider(LLMProvider):
 
                 if not is_retryable(exc) or attempt == attempts:
                     break
+
+                # Upstream pressure is worth counting: a run where Super
+                # returned 503 twenty times explains its own latency, and the
+                # Day 3 baseline recorded zero of them, so a change is visible.
+                upstream_status = error_status(exc)
+                telemetry.count("upstream_retry")
+                if upstream_status is not None:
+                    telemetry.count(f"upstream_{upstream_status}")
 
                 delay = retry_after_seconds(exc)
                 if delay is None:

@@ -43,3 +43,6 @@ Thumbs.db
 
 # ---- typescript build info ----
 *.tsbuildinfo
+
+# Telemetry (rotating local files; the database is the durable record)
+logs/

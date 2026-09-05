@@ -53,6 +53,7 @@ from app.api.routes import OrchestratorDep
 from app.db.repository import FeedbackRecord
 from app.pipeline.orchestrator import GuidanceOrchestrator
 from app.pipeline.schemas import GuidanceResult, UserTurn
+from app.telemetry import Telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -268,6 +269,10 @@ def _enforce_rate_limit(request: Request, session_id: str | None) -> None:
     if decision.allowed:
         return
 
+    telemetry: Telemetry | None = getattr(request.app.state, "telemetry", None)
+    if telemetry is not None:
+        telemetry.record_rate_limited(decision.scope)
+
     wait = decision.retry_after_seconds
     logger.info(
         "rate limited: scope=%s retry_after=%ss session=%s",
@@ -311,6 +316,10 @@ async def beta_chat(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="the guidance pipeline failed; please try again",
         ) from exc
+
+    telemetry: Telemetry | None = getattr(request.app.state, "telemetry", None)
+    if telemetry is not None:
+        telemetry.record_turn(result, surface="beta")
 
     generation = result.generation
     return BetaChatResponse(

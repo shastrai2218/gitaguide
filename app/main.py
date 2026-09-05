@@ -30,6 +30,7 @@ from app.llm.factory import build_llm_provider
 from app.pipeline.emotion import EmotionDetector
 from app.pipeline.orchestrator import build_orchestrator
 from app.pipeline.retrieval import build_retriever
+from app.telemetry import build_telemetry
 
 VERSION = "0.1.0"
 
@@ -84,6 +85,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.settings = settings
     app.state.orchestrator = orchestrator
     app.state.rate_limiter = build_rate_limiter(settings)
+    app.state.telemetry = build_telemetry(settings)
+    if settings.telemetry_enabled:
+        logger.info("telemetry -> %s (no message text is written)", settings.telemetry_path)
+    else:
+        logger.warning("TELEMETRY IS DISABLED; the Day 3 residual risk is unobservable")
     if settings.rate_limit_enabled:
         logger.info(
             "rate limits: session=%.0f/min(burst %.0f) ip=%.0f/min(burst %.0f) "

@@ -96,9 +96,17 @@ async def explain(message_id: str, orchestrator: OrchestratorDep) -> ExplainResp
 
 
 @router.get("/health", response_model=HealthResponse, tags=["ops"])
-async def health(orchestrator: OrchestratorDep, settings: SettingsDep) -> HealthResponse:
+async def health(
+    orchestrator: OrchestratorDep, settings: SettingsDep, request: Request
+) -> HealthResponse:
     """Component-level health, including which backends are actually in use."""
     components = await orchestrator.health()
+    telemetry = getattr(request.app.state, "telemetry", None)
+    if telemetry is not None:
+        components["telemetry_today"] = telemetry.counters.today()
+    limiter = getattr(request.app.state, "rate_limiter", None)
+    if limiter is not None:
+        components["rate_limit"] = limiter.snapshot()
     return HealthResponse(
         status="ok",
         app=settings.app_name,

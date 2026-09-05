@@ -169,6 +169,16 @@ class Settings(BaseSettings):
     memory_summary_max_chars: int = 1200
 
     # -------------------------------------------------------------------- api
+    # -------------------------------------------------------------- telemetry
+    #: One JSON line per turn, to a rotating local file. Never message text.
+    telemetry_enabled: bool = True
+    telemetry_path: str = "logs/telemetry.jsonl"
+    telemetry_max_bytes: int = 10_000_000
+    telemetry_backup_count: int = 5
+    #: Salt for the session pseudonym. Change it per deployment; changing it
+    #: makes old and new logs ungroupable, which is the intended trade.
+    telemetry_session_salt: str = "gitaguide-beta"
+
     # ---------------------------------------------------------------- consent
     #: The consent text the tester agreed to. Bump when the wording changes in a
     #: way a tester would want to see again; a session consented to an older
