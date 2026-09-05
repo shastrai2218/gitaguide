@@ -34,6 +34,10 @@ class SessionRecord:
     locale: str = "en-IN"
     rolling_summary: str = ""
     turn_count: int = 0
+    #: Consent provenance. ``None`` means this session never consented, which
+    #: the chat endpoint treats as a refusal to serve rather than an implied yes.
+    consent_version: str | None = None
+    consent_at: datetime | None = None
     created_at: datetime = field(default_factory=_utcnow)
     updated_at: datetime = field(default_factory=_utcnow)
 
@@ -98,6 +102,10 @@ class Repository(ABC):
     @abstractmethod
     async def update_summary(self, session_id: str, summary: str) -> None: ...
 
+    @abstractmethod
+    async def record_consent(self, session_id: str, version: str) -> SessionRecord:
+        """Store that this session agreed to ``version`` of the consent text."""
+
     # messages ------------------------------------------------------------
     @abstractmethod
     async def add_message(self, message: MessageRecord) -> MessageRecord: ...
@@ -154,6 +162,13 @@ class InMemoryRepository(Repository):
             self.sessions[session_id] = record
             return record
         return await self.create_session(locale=locale)
+
+    async def record_consent(self, session_id: str, version: str) -> SessionRecord:
+        record = await self.ensure_session(session_id)
+        record.consent_version = version
+        record.consent_at = _utcnow()
+        record.updated_at = record.consent_at
+        return record
 
     async def update_summary(self, session_id: str, summary: str) -> None:
         session = self.sessions.get(session_id)

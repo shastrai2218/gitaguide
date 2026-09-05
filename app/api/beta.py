@@ -22,14 +22,23 @@ Contract::
           memory  {turn_count, summary_included, recent_turns_injected},
           meta    {provider, model, latency_ms, stage_latency_ms}}
 
+    POST /api/consent {session_id, version}
+      -> {session_id, consent_version, consent_at}
+
     GET /api/sessions/{session_id}/messages
       -> {session_id, messages: [{id, role, content, blocked, created_at}]}
+
+Consent is enforced here, on the server. A browser flag is a UI convenience;
+it is not a record, and it is not evidence. ``/api/chat`` returns **409** for a
+session with no stored consent at the current version, so a tester who clears
+storage, opens a second browser, or calls the API directly is asked again
+rather than quietly served.
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
@@ -37,6 +46,7 @@ from pydantic import BaseModel, Field
 
 from app.api.ratelimit import RATE_LIMITED_MESSAGE, RateLimiter
 from app.api.routes import OrchestratorDep
+from app.pipeline.orchestrator import GuidanceOrchestrator
 from app.pipeline.schemas import GuidanceResult, UserTurn
 
 logger = logging.getLogger(__name__)
@@ -118,6 +128,23 @@ class BetaMessagesResponse(BaseModel):
     messages: list[BetaMessage] = Field(default_factory=list)
 
 
+class BetaConsentRequest(BaseModel):
+    """``POST /api/consent`` body."""
+
+    session_id: str = Field(min_length=1, max_length=64)
+    version: str = Field(min_length=1, max_length=32)
+
+
+class BetaConsentResponse(BaseModel):
+    session_id: str
+    consent_version: str
+    consent_at: datetime
+
+
+#: Sent with the 409 so the UI can tell "consent needed" apart from a real error.
+CONSENT_REQUIRED_CODE = "consent_required"
+
+
 # --------------------------------------------------------------------------- #
 # Projection
 # --------------------------------------------------------------------------- #
@@ -148,6 +175,44 @@ def _citations_for(result: GuidanceResult) -> list[BetaCitation]:
             )
         )
     return citations
+
+
+# --------------------------------------------------------------------------- #
+# Consent
+# --------------------------------------------------------------------------- #
+async def _require_consent(
+    request: Request, orchestrator: GuidanceOrchestrator, session_id: str | None
+) -> None:
+    """Raise 409 unless this session consented to the current version.
+
+    A session that has never been created has never consented, so the absence of
+    a row is a refusal, not a default-yes. Reading the session here costs one
+    indexed primary-key lookup, which is cheap next to the two NIM calls it
+    guards.
+    """
+    settings = getattr(request.app.state, "settings", None)
+    if settings is not None and not settings.consent_required:
+        return
+
+    required = settings.consent_version if settings is not None else "v1"
+    record = await orchestrator.repository.get_session(session_id) if session_id else None
+    if record is not None and record.consent_version == required:
+        return
+
+    logger.info(
+        "consent required: session=%s stored=%s required=%s",
+        session_id or "-",
+        (record.consent_version if record else None) or "none",
+        required,
+    )
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": CONSENT_REQUIRED_CODE,
+            "message": "Please read and accept the beta notice before continuing.",
+            "required_version": required,
+        },
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -209,6 +274,7 @@ async def beta_chat(
     before retrieval and generation run.
     """
     _enforce_rate_limit(request, payload.session_id)
+    await _require_consent(request, orchestrator, payload.session_id)
 
     turn = UserTurn(message=payload.message, session_id=payload.session_id)
     try:
@@ -243,6 +309,36 @@ async def beta_chat(
             latency_ms=result.total_latency_ms,
             stage_latency_ms=dict(result.timings),
         ),
+    )
+
+
+@router.post("/consent", response_model=BetaConsentResponse)
+async def beta_consent(
+    payload: BetaConsentRequest, orchestrator: OrchestratorDep, request: Request
+) -> BetaConsentResponse:
+    """Record that a session accepted a specific version of the beta notice.
+
+    Creating the session as a side effect is deliberate: consent is the first
+    thing that happens, before any message exists to create one.
+    """
+    settings = getattr(request.app.state, "settings", None)
+    required = settings.consent_version if settings is not None else "v1"
+    if payload.version != required:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": CONSENT_REQUIRED_CODE,
+                "message": "That consent notice is out of date; please reload.",
+                "required_version": required,
+            },
+        )
+
+    record = await orchestrator.repository.record_consent(payload.session_id, payload.version)
+    logger.info("consent recorded: session=%s version=%s", record.id, payload.version)
+    return BetaConsentResponse(
+        session_id=record.id,
+        consent_version=record.consent_version or payload.version,
+        consent_at=record.consent_at or datetime.now(UTC),
     )
 
 

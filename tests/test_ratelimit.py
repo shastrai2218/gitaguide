@@ -113,6 +113,7 @@ def limited_client() -> Iterator[TestClient]:
             rate_limit_ip_burst=1000,
             rate_limit_global_per_minute=1000,
             rate_limit_global_burst=1000,
+            consent_required=False,
         )
     )
     with TestClient(app) as client:

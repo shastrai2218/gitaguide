@@ -65,6 +65,8 @@ class SqlAlchemyRepository(Repository):
             locale=row.locale,
             rolling_summary=row.rolling_summary or "",
             turn_count=row.turn_count,
+            consent_version=row.consent_version,
+            consent_at=row.consent_at,
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
@@ -133,6 +135,19 @@ class SqlAlchemyRepository(Repository):
                 await session.refresh(row)
                 return self._to_session_record(row)
         return await self.create_session(locale=locale)
+
+    async def record_consent(self, session_id: str, version: str) -> SessionRecord:
+        await self.ensure_session(session_id)
+        async with self.session_factory() as session:
+            row = await session.get(ConversationSession, session_id)
+            if row is None:  # pragma: no cover - ensure_session just created it
+                raise RuntimeError(f"session {session_id!r} vanished during consent write")
+            row.consent_version = version
+            row.consent_at = _utcnow()
+            row.updated_at = row.consent_at
+            await session.commit()
+            await session.refresh(row)
+            return self._to_session_record(row)
 
     async def update_summary(self, session_id: str, summary: str) -> None:
         async with self.session_factory() as session:

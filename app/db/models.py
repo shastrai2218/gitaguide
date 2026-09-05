@@ -59,6 +59,13 @@ class ConversationSession(Base):
     locale: Mapped[str] = mapped_column(String(16), default="en-IN")
     rolling_summary: Mapped[str] = mapped_column(Text, default="")
     turn_count: Mapped[int] = mapped_column(Integer, default=0)
+    #: Which version of the consent text this session agreed to, and when. Null
+    #: on rows written before consent recording existed, and on any session that
+    #: has not consented - which the chat endpoint refuses to serve.
+    consent_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    consent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow

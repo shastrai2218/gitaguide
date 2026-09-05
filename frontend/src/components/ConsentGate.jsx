@@ -7,7 +7,7 @@
  * well as in the persistent footnote, because the first screen is the one a
  * person in distress is most likely to be looking at.
  */
-export default function ConsentGate({ onAccept }) {
+export default function ConsentGate({ onAccept, error }) {
   return (
     <div className="gate">
       <main className="gate-card">
@@ -41,7 +41,8 @@ export default function ConsentGate({ onAccept }) {
         <p>
           Your messages and the replies are stored on the project&apos;s server,
           along with the pipeline&apos;s own trace of each turn, so the system
-          can be evaluated and improved. Please do not enter names, contact
+          can be evaluated and improved. Your acceptance of this notice is
+          recorded against your session. Please do not enter names, contact
           details, or anything you would not want kept.
         </p>
 
@@ -51,6 +52,12 @@ export default function ConsentGate({ onAccept }) {
           <li>KIRAN — 1800-599-0019 (24×7, free)</li>
           <li>Emergency — 112</li>
         </ul>
+
+        {error && (
+          <p className="gate-error" role="alert">
+            {error}
+          </p>
+        )}
 
         <button type="button" className="gate-accept" onClick={onAccept}>
           I understand — begin

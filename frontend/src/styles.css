@@ -530,6 +530,15 @@ textarea {
   margin-bottom: 0.3rem;
 }
 
+.gate-error {
+  margin: 1.25rem 0 0;
+  padding: 0.65rem 0.85rem;
+  border-left: 2px solid var(--accent);
+  background: var(--field);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  font-size: 0.92rem;
+}
+
 .gate-accept {
   width: 100%;
   margin-top: 1.75rem;

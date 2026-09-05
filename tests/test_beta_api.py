@@ -29,7 +29,12 @@ def client() -> Iterator[TestClient]:
     ``tests/test_ratelimit.py``.
     """
     app = create_app(
-        Settings(mock_mode=True, environment="test", rate_limit_enabled=False)
+        Settings(
+            mock_mode=True,
+            environment="test",
+            rate_limit_enabled=False,
+            consent_required=False,
+        )
     )
     with TestClient(app) as test_client:
         yield test_client

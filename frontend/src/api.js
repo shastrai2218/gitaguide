@@ -15,9 +15,20 @@
  *         memory  {turn_count, summary_included, recent_turns_injected},
  *         meta    {provider, model, latency_ms, stage_latency_ms}}
  *
+ *   POST /api/consent {session_id, version} -> {session_id, consent_version, consent_at}
+ *
  *   GET /api/sessions/{id}/messages -> {session_id, messages: [...]}
  *     Optional: the UI degrades gracefully when it is absent (404/501).
+ *
+ * Consent is enforced server-side: /api/chat answers 409 with
+ * `detail.code === "consent_required"` for a session that has not recorded it.
  */
+
+/** Version of the consent notice this build shows. Must match the server's. */
+export const CONSENT_VERSION = 'v1'
+
+/** Thrown when the server says this session has not consented. */
+export const CONSENT_REQUIRED = 'consent_required'
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 
@@ -28,12 +39,14 @@ export const MOCK = import.meta.env.VITE_MOCK === '1'
 export const SHOW_META = import.meta.env.VITE_SHOW_META !== '0'
 
 export class ApiError extends Error {
-  constructor(message, status, retryAfterSeconds = null) {
+  constructor(message, status, retryAfterSeconds = null, code = null) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     /** Seconds to wait, from a 429. Null for every other failure. */
     this.retryAfterSeconds = retryAfterSeconds
+    /** Machine-readable reason, e.g. `consent_required`. Null if unstructured. */
+    this.code = code
   }
 }
 
@@ -129,7 +142,12 @@ async function postChatLive(sessionId, message, signal) {
 
   if (!response.ok) {
     const failure = await readFailure(response)
-    throw new ApiError(failure.message, response.status, failure.retryAfterSeconds)
+    throw new ApiError(
+      failure.message,
+      response.status,
+      failure.retryAfterSeconds,
+      failure.code,
+    )
   }
   return normaliseTurn(await response.json())
 }
@@ -157,13 +175,53 @@ async function readFailure(response) {
     if (typeof detail.retry_after_seconds === 'number') {
       retryAfterSeconds = detail.retry_after_seconds
     }
+    const code = typeof detail.code === 'string' ? detail.code : null
     if (typeof detail.message === 'string') {
-      return { message: detail.message, retryAfterSeconds }
+      return { message: detail.message, retryAfterSeconds, code }
+    }
+    return {
+      message: `The server returned ${response.status}.`,
+      retryAfterSeconds,
+      code,
     }
   }
-  if (typeof detail === 'string') return { message: detail, retryAfterSeconds }
+  if (typeof detail === 'string') {
+    return { message: detail, retryAfterSeconds, code: null }
+  }
 
-  return { message: `The server returned ${response.status}.`, retryAfterSeconds }
+  return {
+    message: `The server returned ${response.status}.`,
+    retryAfterSeconds,
+    code: null,
+  }
+}
+
+/**
+ * Record consent for this session, server-side.
+ *
+ * The browser flag alone is not a record: it does not survive cleared storage
+ * and cannot say which version was shown. This is what the server enforces.
+ */
+export async function recordConsentOnServer(sessionId) {
+  if (MOCK) return true
+  let response
+  try {
+    response = await fetch(`${API_BASE}/consent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, version: CONSENT_VERSION }),
+    })
+  } catch {
+    throw new ApiError(
+      'Could not reach GitaGuide to record your consent. Is the backend running?',
+      0,
+    )
+  }
+  if (!response.ok) {
+    const failure = await readFailure(response)
+    throw new ApiError(failure.message, response.status, null, failure.code)
+  }
+  return true
 }
 
 /**

@@ -64,3 +64,13 @@ export function recordConsent() {
   memoryConsent = true
   writeStore(CONSENT_KEY, 'true')
 }
+
+/** Forget the local flag, e.g. when the server says this session has none. */
+export function clearConsent() {
+  memoryConsent = false
+  try {
+    window.localStorage.removeItem(CONSENT_KEY)
+  } catch {
+    /* storage unavailable; the in-memory flag is already cleared */
+  }
+}

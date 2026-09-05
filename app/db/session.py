@@ -50,6 +50,9 @@ ADDITIVE_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("messages", "memory", "JSON"),
     # Day 3: per-stage latency instrumentation.
     ("messages", "timings", "JSON"),
+    # Day 5: consent recording.
+    ("sessions", "consent_version", "VARCHAR(32)"),
+    ("sessions", "consent_at", "TIMESTAMP WITH TIME ZONE"),
 )
 
 

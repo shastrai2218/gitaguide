@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { ApiError, fetchSessionMessages, sendMessage } from './api.js'
+import {
+  ApiError,
+  CONSENT_REQUIRED,
+  fetchSessionMessages,
+  recordConsentOnServer,
+  sendMessage,
+} from './api.js'
 import AssistantTurn from './components/AssistantTurn.jsx'
 import Composer from './components/Composer.jsx'
 import ConsentGate from './components/ConsentGate.jsx'
@@ -8,6 +14,7 @@ import ErrorTurn from './components/ErrorTurn.jsx'
 import Header from './components/Header.jsx'
 import WaitingIndicator from './components/WaitingIndicator.jsx'
 import {
+  clearConsent,
   getSessionId,
   hasConsented,
   recordConsent,
@@ -89,6 +96,16 @@ export default function App() {
         setEntries((current) => [...current, { kind: 'assistant', turn }])
       } catch (error) {
         if (error?.name === 'AbortError') return
+
+        // The server is the authority on consent. If it says this session has
+        // none - cleared storage, a second browser, a rotated session - show
+        // the gate again rather than leaving the tester at a dead end.
+        if (error instanceof ApiError && error.code === CONSENT_REQUIRED) {
+          clearConsent()
+          setConsented(false)
+          return
+        }
+
         const message =
           error instanceof ApiError
             ? error.message
@@ -107,6 +124,8 @@ export default function App() {
     [sessionId],
   )
 
+  const [consentError, setConsentError] = useState(null)
+
   function handleNewSession() {
     abortRef.current?.abort()
     abortRef.current = null
@@ -115,12 +134,27 @@ export default function App() {
     setEntries([])
   }
 
-  function handleAccept() {
+  async function handleAccept() {
+    setConsentError(null)
+    try {
+      await recordConsentOnServer(sessionId)
+    } catch (error) {
+      // Fail loudly: if consent could not be recorded, do not let the tester
+      // through on a browser flag the server will refuse anyway.
+      setConsentError(
+        error instanceof ApiError
+          ? error.message
+          : 'Could not record your consent. Please try again.',
+      )
+      return
+    }
     recordConsent()
     setConsented(true)
   }
 
-  if (!consented) return <ConsentGate onAccept={handleAccept} />
+  if (!consented) {
+    return <ConsentGate onAccept={handleAccept} error={consentError} />
+  }
 
   return (
     <div className="app">

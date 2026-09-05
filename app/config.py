@@ -169,6 +169,15 @@ class Settings(BaseSettings):
     memory_summary_max_chars: int = 1200
 
     # -------------------------------------------------------------------- api
+    # ---------------------------------------------------------------- consent
+    #: The consent text the tester agreed to. Bump when the wording changes in a
+    #: way a tester would want to see again; a session consented to an older
+    #: version is treated as not consented.
+    consent_version: str = "v1"
+    #: Server-side enforcement. Off only for tests that are not about consent -
+    #: never in anything a tester touches, or the record is worthless.
+    consent_required: bool = True
+
     # ------------------------------------------------------------ rate limits
     #: NIM free tier is ~40 req/min *per model* and one normal turn spends two
     #: calls on the primary model (intent + generation), ~2.05 with the
