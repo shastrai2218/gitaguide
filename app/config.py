@@ -117,11 +117,11 @@ class Settings(BaseSettings):
     nvidia_model: str = "nvidia/nemotron-3-super-120b-a12b"
     #: Second NIM model tried before dropping to the fake provider. A different
     #: model means a different rate-limit bucket, which is the point.
-    nvidia_fallback_model: str = "nvidia/nemotron-3-nano-30b-a3b"
+    nvidia_fallback_model: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
     nvidia_temperature: float = 0.6
     nvidia_max_tokens: int = 1200
     #: Hard ceiling for intent classification (JSON-only, no prose needed).
-    nvidia_intent_max_tokens: int = 100
+    nvidia_intent_max_tokens: int = 128
     #: Nemotron 3 is a hybrid reasoning model; chat answers do not want the trace.
     nvidia_disable_thinking: bool = True
     #: Prepended to the system prompt when thinking is disabled.
@@ -150,7 +150,7 @@ class Settings(BaseSettings):
     graph_path_boost: float = 0.15
 
     # ----------------------------------------------------------------- safety
-    #: Intensity above which raw emotion (grief/fear) alone trips the gate.
+    #: Retained calibration marker for emotion evaluation; it does not block alone.
     safety_intensity_threshold: float = 0.85
     #: Crisis-intent probability above which the gate trips.
     safety_crisis_intent_threshold: float = 0.5

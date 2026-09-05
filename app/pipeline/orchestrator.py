@@ -255,7 +255,7 @@ class GuidanceOrchestrator:
         The gate's own sink is synchronous (stdlib logging), so database
         persistence happens here, where we are already in async context.
         """
-        if not verdict.triggers or not self.settings.safety_log_enabled:
+        if not verdict.requires_audit() or not self.settings.safety_log_enabled:
             return
         await self.repository.log_safety(
             SafetyLogRecord(
@@ -264,10 +264,11 @@ class GuidanceOrchestrator:
                 message_id=message_id,
                 stage=stage,
                 blocked=verdict.blocked,
-                layers=verdict.layers,
-                categories=verdict.categories,
+                layers=verdict.audit_layers(),
+                categories=verdict.audit_categories(),
                 triggers={
-                    "items": [trigger.model_dump(mode="json") for trigger in verdict.triggers]
+                    "items": [trigger.model_dump(mode="json") for trigger in verdict.triggers],
+                    "signals": [signal.model_dump(mode="json") for signal in verdict.signals],
                 },
                 excerpt="",
                 dominant_emotion=emotion.dominant,

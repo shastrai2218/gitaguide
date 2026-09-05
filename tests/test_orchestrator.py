@@ -15,7 +15,13 @@ from app.pipeline.orchestrator import (
     GuidanceOrchestrator,
     build_orchestrator,
 )
-from app.pipeline.schemas import UserTurn
+from app.pipeline.schemas import (
+    EmotionResult,
+    IntentLabel,
+    IntentResult,
+    SemanticStatus,
+    UserTurn,
+)
 
 WORK_QUERY = "My manager took credit for my project and I am furious. What should I do?"
 CRISIS_QUERY = "I want to end my life tonight"
@@ -108,6 +114,67 @@ async def test_clean_turn_writes_no_safety_log(
 ) -> None:
     await orchestrator.handle_turn(UserTurn(message="What does BG 2.47 mean?"))
     assert await repository.list_safety_logs() == []
+
+
+async def test_semantic_near_miss_is_persisted_without_blocking(
+    orchestrator: GuidanceOrchestrator,
+    repository: InMemoryRepository,
+) -> None:
+    class NearMissClassifier:
+        async def classify(
+            self, text: str, emotion: EmotionResult | None = None
+        ) -> IntentResult:
+            return IntentResult(
+                intent=IntentLabel.EMOTIONAL_SUPPORT,
+                confidence=0.65,
+                scores={
+                    IntentLabel.EMOTIONAL_SUPPORT.value: 0.65,
+                    IntentLabel.CRISIS.value: 0.35,
+                },
+                semantic_status=SemanticStatus.OK,
+                semantic_provider="test",
+                semantic_model="risk-fixture",
+                semantic_crisis_score=0.35,
+            )
+
+    orchestrator.intent_classifier = NearMissClassifier()  # type: ignore[assignment]
+    result = await orchestrator.handle_turn(UserTurn(message="I feel very low today"))
+    logs = await repository.list_safety_logs()
+    assert not result.crisis
+    assert len(logs) == 1
+    assert not logs[0].blocked
+    assert logs[0].stage == "input"
+    assert logs[0].triggers["items"] == []
+    assert logs[0].triggers["signals"][0]["score"] == 0.35
+
+
+@pytest.mark.parametrize("status", [SemanticStatus.UNAVAILABLE, SemanticStatus.MALFORMED])
+async def test_unusable_semantic_result_is_persisted_for_audit(
+    orchestrator: GuidanceOrchestrator,
+    repository: InMemoryRepository,
+    status: SemanticStatus,
+) -> None:
+    class UnusableClassifier:
+        async def classify(
+            self, text: str, emotion: EmotionResult | None = None
+        ) -> IntentResult:
+            return IntentResult(
+                intent=IntentLabel.OTHER,
+                confidence=1.0,
+                scores={IntentLabel.OTHER.value: 1.0},
+                semantic_status=status,
+                semantic_provider="test",
+                semantic_model="risk-fixture",
+            )
+
+    orchestrator.intent_classifier = UnusableClassifier()  # type: ignore[assignment]
+    result = await orchestrator.handle_turn(UserTurn(message="Should I take the new job?"))
+    logs = await repository.list_safety_logs()
+    assert not result.crisis
+    assert len(logs) == 1
+    assert not logs[0].blocked
+    assert logs[0].categories == ["none"]
+    assert status.value in logs[0].triggers["signals"][0]["detail"]
 
 
 # --------------------------------------------------------------------- session

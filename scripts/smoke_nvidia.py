@@ -10,7 +10,7 @@ Usage
 
     python -m scripts.smoke_nvidia                    # one call to the primary model
     python -m scripts.smoke_nvidia --fallback         # use nvidia_fallback_model
-    python -m scripts.smoke_nvidia --model nvidia/nemotron-3-nano-30b-a3b
+    python -m scripts.smoke_nvidia --model nvidia/nemotron-3.5-lightning-30b-a3b
     python -m scripts.smoke_nvidia --list-models      # catalogue (needs no key)
     python -m scripts.smoke_nvidia --grep nemotron    # filter the catalogue
     python -m scripts.smoke_nvidia --show-raw         # do not strip <think> blocks

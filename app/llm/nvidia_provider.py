@@ -31,7 +31,7 @@ the retry budget is exhausted does failover advance.
 **Token budgets.** Generation defaults to ``temperature=0.6`` /
 ``max_tokens=1200``; intent-classification prompts (identified by the
 ``TASK: intent_classification`` marker every prompt builder writes) are clamped
-to ``nvidia_intent_max_tokens`` (100) because that call returns only JSON.
+to ``nvidia_intent_max_tokens`` (128) because that call returns only compact JSON.
 
 The ``openai`` SDK is imported lazily inside :meth:`NvidiaProvider._get_client`,
 so importing this module - and unit-testing it with an injected client - needs

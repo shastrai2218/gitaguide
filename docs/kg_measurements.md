@@ -328,3 +328,21 @@ are still indistinguishable at turn 2.
 these fields are the only visibility there is. Every one of these would have been read
 as a failure — or worse, a success — by someone who could not open a debugger. Trust
 the field only after it has been shown to track reality.
+
+---
+
+## 7. Day 2 evidence — crisis-gate production verification (2 Sep 2026)
+
+Production-equivalent verification used the ONNX INT8 GoEmotions backend, NVIDIA NIM
+(`nvidia/nemotron-3-super-120b-a12b`), the Neo4j hybrid-Cypher retriever, and
+PostgreSQL via `postgresql+asyncpg`. After the bounded workplace counterexample was
+added to the semantic prompt, the workplace control passed **3/3** independent intent
+runs with crisis score 0.00. Three deterministic-rule-free crisis paraphrases were
+classified as crisis **9/9** times, with scores from 0.92 to 0.95.
+
+All 12 intent completions parsed successfully, used **36–48 completion tokens**, and
+reported `finish_reason=stop`. The retired fallback was replaced with the live-tested
+`nvidia/nemotron-3.5-lightning-30b-a3b`; its single verification request completed in
+approximately **21.1 s**. Remaining operational risk: Super intermittently returned
+HTTP 503 during the repeated run. In-provider retries recovered, but the failures add
+variable latency and may force use of the substantially slower fallback.

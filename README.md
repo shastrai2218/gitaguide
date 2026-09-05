@@ -44,7 +44,7 @@ flowchart TD
     ORCH --> EMO["1 · EmotionDetector<br/>SamLowe/roberta-base-go_emotions<br/>ONNX INT8, CPU<br/>→ labels + intensity"]
     EMO --> INT["2 · IntentClassifier<br/>zero-shot via LLM wrapper<br/>+ keyword prior<br/>→ 6 classes"]
 
-    INT --> GATE{"3 · SAFETY GATE<br/>rule layer + model layer"}
+    INT --> GATE{"3 · SAFETY GATE<br/>rule layer + semantic risk policy"}
     GATE -->|blocked| CRISIS["Crisis response<br/>Tele-MANAS 14416, iCall, KIRAN<br/>NO retrieval, NO generation, NO verses"]
     GATE -->|passed| MEM["4 · Memory<br/>rolling summary + last N turns<br/>(PostgreSQL)"]
 
@@ -142,7 +142,7 @@ gitaguide/
 │       ├── schemas.py           shared stage types (the trace)
 │       ├── emotion.py           1 · GoEmotions ONNX INT8 + lexicon fallback + intensity formula
 │       ├── intent.py            2 · zero-shot + keyword prior (fine-tuned model = future work)
-│       ├── safety.py            3 · rule layer, model layer, output layer, audit sink
+│       ├── safety.py            3 · rule layer, semantic risk policy, output layer, audit sink
 │       ├── memory.py            4 · rolling summary + last N turns
 │       ├── retrieval.py         5 · hybrid retrieval + intent-conditioned re-ranker
 │       ├── generation.py        6 · grounded generation, citation enforcement, "Why this verse"
@@ -158,7 +158,7 @@ gitaguide/
 │   ├── build_graph.py           corpus → Neo4j nodes/edges + vector index + full-text index
 │   └── cypher_queries.py        every Cypher statement, including the hybrid retrieval tail
 ├── eval/
-│   ├── test_safety_redteam.py   31 crisis prompts (100% recall asserted) + 15 benign controls
+│   ├── test_safety_redteam.py   36 crisis prompts (100% recall asserted) + 25 benign controls
 │   ├── retrieval_eval.py        Recall@k, MRR, nDCG@k, intent accuracy, ablation flags
 │   └── gold_pairs.json          10 starter (query → verse) pairs; extend freely
 ├── tests/                       unit tests: emotion, safety, retrieval re-ranking, generation,
@@ -249,7 +249,7 @@ time with `python -m scripts.smoke_nvidia --list-models --grep nemotron`).
 | Role     | Setting                           | Default                             |
 | -------- | --------------------------------- | ----------------------------------- |
 | primary  | `GITAGUIDE_NVIDIA_MODEL`          | `nvidia/nemotron-3-super-120b-a12b` |
-| fallback | `GITAGUIDE_NVIDIA_FALLBACK_MODEL` | `nvidia/nemotron-3-nano-30b-a3b`    |
+| fallback | `GITAGUIDE_NVIDIA_FALLBACK_MODEL` | `nvidia/nemotron-3.5-lightning-30b-a3b` |
 
 `deepseek-ai/deepseek-v4-flash-0731` is a valid alternative fallback if you want a non-Nemotron
 second opinion.
@@ -274,7 +274,7 @@ instead of failing.
 The free tier allows roughly **40 requests per minute per model** and returns HTTP 429 on burst.
 
 ```
-nemotron-3-super-120b-a12b  →  nemotron-3-nano-30b-a3b  →  FakeLLMProvider
+nemotron-3-super-120b-a12b  →  nemotron-3.5-lightning-30b-a3b  →  FakeLLMProvider
    ↑ 3 attempts, exp. backoff    ↑ same, fresh 429 bucket    ↑ always answers, still cited
      (Retry-After honoured)
 ```
@@ -290,12 +290,12 @@ classification + generation), plus 1 more every `GITAGUIDE_MEMORY_SUMMARY_TRIGGE
 the rolling summary. That is roughly **18–20 turns per minute** across all participants on the
 primary model — comfortable for a supervised session with 5–10 testers, tight if you run a large
 open evaluation. Mitigations already in place: per-user rate limiting upstream of the API, the
-Nano fallback with its own 429 bucket, and the intent call clamped to
-`GITAGUIDE_NVIDIA_INTENT_MAX_TOKENS=100` so the cheap call stays cheap. `GET /safety/logs` and the
+Lightning fallback with its own 429 bucket, and the intent call clamped to
+`GITAGUIDE_NVIDIA_INTENT_MAX_TOKENS=128` so the compact call stays bounded. `GET /safety/logs` and the
 `llm_provider` field in every `/chat` response tell you which model actually answered, so a session
-that silently fell back to Nano or to the fake provider is visible in the data.
+that silently fell back to Lightning or to the fake provider is visible in the data.
 
-Generation defaults: `temperature=0.6`, `max_tokens=1200`. Intent classification: `max_tokens ≤ 100`,
+Generation defaults: `temperature=0.6`, `max_tokens=1200`. Intent classification: `max_tokens ≤ 128`,
 clamped in the provider by detecting the `TASK: intent_classification` marker — the pipeline itself
 was not touched.
 
@@ -304,7 +304,7 @@ was not touched.
 ```bash
 pip install openai
 python -m scripts.smoke_nvidia                 # one real call: model, latency, first 200 chars
-python -m scripts.smoke_nvidia --fallback      # same against the Nano model
+python -m scripts.smoke_nvidia --fallback      # same against the Lightning model
 python -m scripts.smoke_nvidia --show-raw      # leave thinking on, inspect the trace
 python -m scripts.smoke_nvidia --list-models --grep nemotron
 ```
@@ -331,7 +331,7 @@ faked is a valid configuration, which is how retrieval is evaluated in isolation
 
 Degradation is deliberate: a missing Neo4j falls back to the in-memory retriever, a missing
 database to the in-memory repository, and a failing LLM walks the chain
-(Nemotron Super -> Nemotron Nano -> any configured extra provider -> the fake provider). The `/health` endpoint reports which backend is
+(Nemotron Super -> Nemotron Lightning -> any configured extra provider -> the fake provider). The `/health` endpoint reports which backend is
 actually serving.
 
 ---
@@ -365,22 +365,23 @@ enforced structurally in `orchestrator.handle_turn` and asserted in
 | Layer      | Signal                                                                  | Effect                              |
 | ---------- | ----------------------------------------------------------------------- | ----------------------------------- |
 | **rule**   | regex over suicidal ideation, self-harm, harm to others, abuse, medical  | short-circuit, crisis response      |
-| **model**  | `intent == crisis` above threshold, or extreme grief/fear intensity      | short-circuit, crisis response      |
+| **model**  | semantic crisis score ≥ 0.5; emotion is non-blocking context only         | short-circuit, crisis response      |
 | **output** | harm methods, discouraging treatment, moralising, dismissal              | replace the answer with a safe one  |
 
 When it blocks, the pipeline returns the crisis message and **nothing else** — no retrieval, no
-LLM call, no verses (asserted: `extract_verse_ids(crisis_response) == []`). The message lists
+generation call, no verses (asserted: `extract_verse_ids(crisis_response) == []`). The message lists
 Tele-MANAS **14416**, iCall **9152987821**, AASRA, KIRAN **1800-599-0019** and **112**, plus the
 Women Helpline (181) for abuse cases.
 
-Every trigger is written to `safety_logs` with the layer, category, matched text and the
-emotion/intent readings at that moment (`GET /safety/logs`), so gate precision and recall can be
-reported on real traffic rather than only on the red-team suite.
+Every blocked case is written to `safety_logs`, as are semantic near-misses and unavailable or
+malformed semantic-classifier results. Clean zero-signal decisions are not stored. Rows include
+the layer, category, matched text, semantic provenance and emotion/intent readings
+(`GET /safety/logs`).
 
 **Calibration note.** Intensity is `0.75·primary + 0.15·support + lexical` (see
-`emotion.compute_intensity`). The coefficients are deliberately chosen so that ordinary
-bereavement stays *below* the 0.85 threshold — grief guidance is the core use case, not an
-emergency — while stacked despair markers cross it. Both directions are pinned by tests.
+`emotion.compute_intensity`). It is retained as context for the safety audit, but it cannot block
+a turn or lower the 0.5 semantic threshold without measured calibration evidence. Grief guidance
+therefore remains available unless a rule or semantic crisis signal independently fires.
 
 Two suppressions keep the gate usable, and both are shared between the gate and the intent prior
 so they cannot disagree: explicit negation ("I am **not** suicidal") and third-party-past framing
@@ -393,10 +394,10 @@ fires — "my friend wants to die" needs the helplines either way.
 
 ### Safety (release gate)
 
-`pytest eval/test_safety_redteam.py` — 31 crisis prompts must all be blocked (recall asserted at
-exactly 1.0), 15 benign prompts must all pass, plus output-layer and logging checks. Three
-documented gaps (code-mixed Hindi, heavy euphemism) are `xfail`ed rather than hidden: they are
-limitations to report. This job is a required check in CI.
+`pytest eval/test_safety_redteam.py` — 36 crisis prompts must all be blocked (recall asserted at
+exactly 1.0), and 25 benign prompts must all pass, plus output-layer and logging checks. The three
+former code-mixed/euphemism `xfail` cases are now mandatory passing cases. This job is a required
+check in CI.
 
 ### Retrieval
 
@@ -424,7 +425,7 @@ never hardcoded and `.env` is git-ignored. The knobs that change research behavi
 | Variable                                   | Default | What it controls                                        |
 | ------------------------------------------ | ------- | ------------------------------------------------------- |
 | `GITAGUIDE_MOCK_MODE`                      | `true`  | master offline switch (all fakes)                       |
-| `GITAGUIDE_SAFETY_INTENSITY_THRESHOLD`     | `0.85`  | intensity at which grief/fear alone trips the gate      |
+| `GITAGUIDE_SAFETY_INTENSITY_THRESHOLD`     | `0.85`  | retained calibration marker; emotion does not block     |
 | `GITAGUIDE_SAFETY_CRISIS_INTENT_THRESHOLD` | `0.5`   | crisis-intent confidence needed to trip the gate        |
 | `GITAGUIDE_SCRIPTURE_INTENT_BOOST`         | `0.25`  | strength of the intent-conditioned scripture prior      |
 | `GITAGUIDE_GRAPH_PATH_BOOST`               | `0.15`  | weight of the graph channel in the fused score          |
@@ -436,9 +437,9 @@ never hardcoded and `.env` is git-ignored. The knobs that change research behavi
 | `GITAGUIDE_LLM_FALLBACK_PROVIDER`          | unset   | extra provider between NIM and the fake                 |
 | `NVIDIA_API_KEY`                           | unset   | the `nvapi-` key; its presence makes NIM the default    |
 | `GITAGUIDE_NVIDIA_MODEL`                   | Super 120B | primary NIM model slug                               |
-| `GITAGUIDE_NVIDIA_FALLBACK_MODEL`          | Nano 30B | second NIM model (separate 429 bucket)                 |
+| `GITAGUIDE_NVIDIA_FALLBACK_MODEL`          | Lightning 30B | second NIM model (separate 429 bucket)             |
 | `GITAGUIDE_NVIDIA_MAX_RETRIES`             | `3`     | in-provider attempts on 429/5xx before failover         |
-| `GITAGUIDE_NVIDIA_INTENT_MAX_TOKENS`       | `100`   | ceiling for the intent-classification call              |
+| `GITAGUIDE_NVIDIA_INTENT_MAX_TOKENS`       | `128`   | ceiling for the intent-classification call              |
 | `GITAGUIDE_NVIDIA_DISABLE_THINKING`        | `true`  | suppress the Nemotron reasoning trace                   |
 
 ---
@@ -473,8 +474,8 @@ never hardcoded and `.env` is git-ignored. The knobs that change research behavi
 - Intent classification is **zero-shot + keyword prior**. `FineTunedIntentClassifier` is an
   explicit stub: labelling ~2k turns and fine-tuning `distilroberta-base` (then ONNX INT8, like the
   emotion model) is future work, with macro-F1 against this baseline as the comparison.
-- The gate's rule layer is **English-only**. Code-mixed Hindi/Hinglish is a known gap, tracked as
-  `xfail` cases in the red-team suite.
+- The gate has a deliberately narrow Latin-script Hindi/Hinglish rule set, not general multilingual
+  understanding. Unseen phrasing still depends on the zero-shot semantic classifier.
 - The bundled sample corpus is 16 verses — enough to develop and test against, not to evaluate on.
   Run phases 1–2 for the full corpus before reporting numbers.
 - `Base.metadata.create_all` is used instead of migrations; Alembic is listed in

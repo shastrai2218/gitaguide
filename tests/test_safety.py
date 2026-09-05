@@ -25,11 +25,20 @@ from app.pipeline.schemas import (
     IntentResult,
     SafetyCategory,
     SafetyLayer,
+    SemanticStatus,
 )
 
 
 def _intent(label: IntentLabel, confidence: float = 0.9) -> IntentResult:
-    return IntentResult(intent=label, confidence=confidence, scores={label.value: confidence})
+    return IntentResult(
+        intent=label,
+        confidence=confidence,
+        scores={label.value: confidence},
+        semantic_status=SemanticStatus.OK,
+        semantic_provider="test",
+        semantic_model="test-intent",
+        semantic_crisis_score=confidence if label is IntentLabel.CRISIS else 0.0,
+    )
 
 
 def _emotion(name: str, score: float, intensity: float) -> EmotionResult:
@@ -86,23 +95,26 @@ def test_model_layer_fires_on_crisis_intent(gate: SafetyGate) -> None:
     assert SafetyLayer.MODEL.value in verdict.layers
 
 
-def test_model_layer_ignores_low_confidence_crisis(gate: SafetyGate, settings: Settings) -> None:
+def test_model_layer_records_below_threshold_semantic_near_miss(gate: SafetyGate) -> None:
     verdict = gate.check_input(
         "work is heavy at the moment",
         emotion=_emotion("nervousness", 0.4, 0.3),
         intent=_intent(IntentLabel.CRISIS, 0.2),
     )
     assert not verdict.blocked
+    assert verdict.signals
+    assert "near-miss" in verdict.signals[0].detail
 
 
-def test_model_layer_fires_on_extreme_intensity(gate: SafetyGate, settings: Settings) -> None:
+def test_emotion_never_blocks_independently(gate: SafetyGate, settings: Settings) -> None:
     verdict = gate.check_input(
         "everything hurts",
         emotion=_emotion("grief", 0.99, settings.safety_intensity_threshold + 0.05),
         intent=_intent(IntentLabel.EMOTIONAL_SUPPORT),
     )
-    assert verdict.blocked
-    assert SafetyCategory.SEVERE_DISTRESS.value in verdict.categories
+    assert not verdict.blocked
+    assert verdict.triggers == []
+    assert verdict.signals == []
 
 
 def test_model_layer_ignores_high_intensity_positive_emotion(gate: SafetyGate) -> None:
@@ -163,6 +175,39 @@ def test_every_trigger_is_logged(gate: SafetyGate, safety_sink: InMemorySafetyEv
 def test_clean_input_is_not_logged(gate: SafetyGate, safety_sink: InMemorySafetyEventSink) -> None:
     gate.check_input("Should I take the new job?")
     assert safety_sink.events == []
+
+
+def test_semantic_near_miss_is_logged(
+    gate: SafetyGate, safety_sink: InMemorySafetyEventSink
+) -> None:
+    verdict = gate.check_input(
+        "nothing feels important lately",
+        emotion=_emotion("sadness", 0.4, 0.3),
+        intent=_intent(IntentLabel.CRISIS, 0.35),
+    )
+    assert not verdict.blocked
+    assert len(safety_sink.events) == 1
+    assert safety_sink.events[0].verdict.signals
+
+
+@pytest.mark.parametrize("status", [SemanticStatus.UNAVAILABLE, SemanticStatus.MALFORMED])
+def test_unusable_semantic_classifier_is_logged(
+    gate: SafetyGate,
+    safety_sink: InMemorySafetyEventSink,
+    status: SemanticStatus,
+) -> None:
+    intent = IntentResult(
+        intent=IntentLabel.OTHER,
+        confidence=1.0,
+        scores={IntentLabel.OTHER.value: 1.0},
+        semantic_status=status,
+        semantic_provider="test",
+        semantic_model="test-intent",
+    )
+    verdict = gate.check_input("Should I take the new job?", intent=intent)
+    assert not verdict.blocked
+    assert verdict.signals[0].category is SafetyCategory.NONE
+    assert len(safety_sink.events) == 1
 
 
 def test_logging_can_be_disabled(safety_sink: InMemorySafetyEventSink) -> None:

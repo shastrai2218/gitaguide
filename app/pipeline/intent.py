@@ -23,8 +23,14 @@ import re
 from collections.abc import Mapping, Sequence
 
 from app.config import Settings, get_settings
-from app.llm.base import TASK_INTENT, LLMProvider, LLMResponse
-from app.pipeline.schemas import EmotionResult, IntentLabel, IntentResult
+from app.llm.base import TASK_INTENT, LLMError, LLMProvider, LLMResponse
+from app.pipeline.schemas import (
+    EmotionResult,
+    IntentLabel,
+    IntentResult,
+    SemanticParseStatus,
+    SemanticStatus,
+)
 from app.pipeline.textutils import (
     has_academic_framing,
     is_negated,
@@ -172,11 +178,35 @@ def build_intent_prompt(text: str, emotion: EmotionResult | None = None) -> str:
         "Rules:\n"
         "- If there is any indication of self-harm, suicide, being harmed by someone, or a "
         "medical emergency, the intent is crisis.\n"
+        "- Passive suicidal ideation and perceived burdensomeness are crisis even without the "
+        "words suicide, die, or self-harm.\n"
+        "- Latin-script Hindi/Hinglish expressions of not wanting to live are crisis.\n"
+        "- Explicit negation, recovered third-party history, figurative language, and academic "
+        "discussion are not crisis unless the speaker also expresses current personal risk.\n"
         "- Work, money, career and leadership problems are professional_dilemma even when "
         "they are emotional.\n"
-        "- Return ONLY minified JSON: "
-        '{"intent": "...", "confidence": 0.0-1.0, "scores": {"<intent>": 0.0-1.0, ...}, '
-        '"rationale": "one short sentence"}\n\n'
+        "- A statement explicitly bounded to leaving or being replaced on a team, project, or "
+        "work role because of skills or fit is professional_dilemma, not perceived "
+        "burdensomeness about the person's life. This exception is only for that explicit "
+        "work scope; general claims that loved ones or people would be better off if the "
+        "speaker were absent remain crisis.\n"
+        "Examples:\n"
+        '- "I think everyone would be better off without me" -> crisis\n'
+        '- "My absence would make life easier for the people around me" -> crisis\n'
+        '- "mujhe ab jeene ka mann nahi karta" -> crisis\n'
+        '- "Mera jeene ka mann nahi hai" -> crisis\n'
+        '- "I am not suicidal; I am asking about suffering" -> not crisis\n'
+        '- "My friend was suicidal last year and recovered" -> not crisis\n'
+        '- "This deadline is killing me" -> professional_dilemma, not crisis\n'
+        '- "The team would be better off without me on this project because my skills do not '
+        'match" -> professional_dilemma, not crisis\n'
+        '- "The project needs someone more experienced than me in this role" -> '
+        'professional_dilemma, not crisis\n'
+        "Return ONLY one-line minified JSON: no markdown, explanation, or rationale. "
+        "The scores array must contain all six probabilities in this exact order: "
+        "seek_guidance, emotional_support, professional_dilemma, scripture_question, "
+        "crisis, other. Example shape: "
+        '{"intent":"crisis","confidence":0.95,"scores":[0,0,0,0,0.95,0.05]}\n\n'
         f"{emotion_line}"
         f"USER MESSAGE: {text}\n"
     )
@@ -214,20 +244,78 @@ class IntentClassifier:
         llm_scores: dict[str, float] | None = None
         rationale = "keyword prior only"
         backend = "prior"
+        semantic_status = SemanticStatus.NOT_REQUESTED
+        semantic_provider = ""
+        semantic_model = ""
+        semantic_crisis_score = 0.0
+        semantic_parse_status = SemanticParseStatus.NOT_ATTEMPTED
+        semantic_finish_reason = ""
+        semantic_prompt_tokens = 0
+        semantic_completion_tokens = 0
 
         if self.use_llm and self.llm is not None:
             try:
                 response: LLMResponse = await self.llm.complete(
                     build_intent_prompt(text, emotion),
-                    max_tokens=300,
+                    max_tokens=self.settings.nvidia_intent_max_tokens,
                     temperature=0.0,
                 )
-                payload = response.json(default={})
-                llm_scores = self._normalise_llm_payload(payload)
-                rationale = str(payload.get("rationale", "")) or "zero-shot classification"
-                backend = f"llm:{response.provider}+prior"
             except Exception:
-                logger.exception("intent LLM call failed; falling back to keyword prior")
+                semantic_status = SemanticStatus.UNAVAILABLE
+                semantic_provider = getattr(self.llm, "name", "")
+                semantic_model = getattr(self.llm, "model", "")
+                backend = "prior(semantic-unavailable)"
+                rationale = "semantic classifier unavailable; keyword prior only"
+                logger.exception("intent semantic classifier unavailable; using keyword prior")
+            else:
+                semantic_provider = response.provider
+                semantic_model = response.model
+                semantic_finish_reason = str(response.raw.get("finish_reason") or "")
+                semantic_prompt_tokens = response.prompt_tokens
+                semantic_completion_tokens = response.completion_tokens
+                try:
+                    payload = response.json()
+                except LLMError:
+                    semantic_status = SemanticStatus.MALFORMED
+                    semantic_parse_status = SemanticParseStatus.INVALID_JSON
+                    backend = f"prior(semantic-malformed:{response.provider})"
+                    rationale = "semantic classifier returned malformed JSON; keyword prior only"
+                    logger.warning(
+                        "intent semantic classifier returned malformed JSON provider=%s model=%s",
+                        response.provider,
+                        response.model,
+                    )
+                else:
+                    normalised = (
+                        self._normalise_llm_payload(payload)
+                        if isinstance(payload, Mapping)
+                        else {}
+                    )
+                    expected_scores = {label.value for label in IntentLabel}
+                    if set(normalised) != expected_scores:
+                        semantic_status = SemanticStatus.MALFORMED
+                        semantic_parse_status = SemanticParseStatus.INCOMPLETE_SCORES
+                        backend = f"prior(semantic-malformed:{response.provider})"
+                        rationale = (
+                            "semantic classifier returned an incomplete intent distribution; "
+                            "keyword prior only"
+                        )
+                        logger.warning(
+                            "intent semantic classifier returned incomplete scores "
+                            "provider=%s model=%s keys=%s",
+                            response.provider,
+                            response.model,
+                            sorted(normalised),
+                        )
+                    else:
+                        llm_scores = normalised
+                        semantic_status = SemanticStatus.OK
+                        semantic_parse_status = SemanticParseStatus.PARSED
+                        semantic_crisis_score = normalised.get(IntentLabel.CRISIS.value, 0.0)
+                        rationale = (
+                            str(payload.get("rationale", "")) or "zero-shot classification"
+                        )
+                        backend = f"llm:{response.provider}+prior"
 
         scores = _blend(prior, llm_scores)
         scores = self._apply_emotion_nudge(scores, emotion)
@@ -239,12 +327,20 @@ class IntentClassifier:
             scores=scores,
             rationale=rationale,
             backend=backend,
+            semantic_status=semantic_status,
+            semantic_provider=semantic_provider,
+            semantic_model=semantic_model,
+            semantic_crisis_score=round(semantic_crisis_score, 4),
+            semantic_parse_status=semantic_parse_status,
+            semantic_finish_reason=semantic_finish_reason,
+            semantic_prompt_tokens=semantic_prompt_tokens,
+            semantic_completion_tokens=semantic_completion_tokens,
         )
 
     # ------------------------------------------------------------- helpers
     @staticmethod
     def _normalise_llm_payload(payload: Mapping[str, object]) -> dict[str, float]:
-        """Accept either a full ``scores`` map or just ``intent`` + confidence."""
+        """Normalise a full score mapping or the compact fixed-order score array."""
         valid = {item.value for item in IntentLabel}
         raw_scores = payload.get("scores")
         scores: dict[str, float] = {}
@@ -255,6 +351,16 @@ class IntentClassifier:
                         scores[key] = max(0.0, min(1.0, float(value)))
                     except (TypeError, ValueError):
                         continue
+        elif (
+            isinstance(raw_scores, Sequence)
+            and not isinstance(raw_scores, (str, bytes))
+            and len(raw_scores) == len(IntentLabel)
+        ):
+            for label, value in zip(IntentLabel, raw_scores, strict=True):
+                try:
+                    scores[label.value] = max(0.0, min(1.0, float(value)))
+                except (TypeError, ValueError):
+                    return {}
 
         intent = payload.get("intent")
         if isinstance(intent, str) and intent in valid:

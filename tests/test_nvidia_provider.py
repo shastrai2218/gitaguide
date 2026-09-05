@@ -84,7 +84,7 @@ def nvidia_settings() -> Settings:
         mock_mode=False,
         nvidia_api_key="nvapi-unit-test-not-a-real-key",
         nvidia_model="nvidia/nemotron-3-super-120b-a12b",
-        nvidia_fallback_model="nvidia/nemotron-3-nano-30b-a3b",
+        nvidia_fallback_model="nvidia/nemotron-3.5-lightning-30b-a3b",
         nvidia_max_retries=3,
         nvidia_retry_base_delay=0.01,
         nvidia_retry_max_delay=0.05,
@@ -195,10 +195,10 @@ async def test_generation_defaults(nvidia_settings: Settings) -> None:
 
 
 async def test_intent_calls_are_clamped(nvidia_settings: Settings) -> None:
-    """Intent classification must stay at or below 100 tokens."""
+    """Intent classification must stay at or below the compact 128-token ceiling."""
     provider, client = make_provider(nvidia_settings, [StubCompletion('{"intent":"other"}')])
     await provider.complete(INTENT_PROMPT, max_tokens=900)
-    assert client.calls[0]["max_tokens"] <= 100
+    assert client.calls[0]["max_tokens"] <= 128
     assert client.calls[0]["max_tokens"] == nvidia_settings.nvidia_intent_max_tokens
 
 
@@ -324,11 +324,11 @@ def test_bad_retry_after_falls_back_to_backoff() -> None:
 # --------------------------------------------------------------------------- #
 # Failover chain
 # --------------------------------------------------------------------------- #
-def test_chain_order_is_super_then_nano_then_fake(nvidia_settings: Settings) -> None:
+def test_chain_order_is_super_then_lightning_then_fake(nvidia_settings: Settings) -> None:
     chain = build_nvidia_chain(nvidia_settings)
     assert [provider.name for provider in chain] == [
         "nvidia:nvidia/nemotron-3-super-120b-a12b",
-        "nvidia:nvidia/nemotron-3-nano-30b-a3b",
+        "nvidia:nvidia/nemotron-3.5-lightning-30b-a3b",
         "fake",
     ]
 
@@ -349,22 +349,22 @@ def test_duplicate_fallback_model_is_not_added(nvidia_settings: Settings) -> Non
 
 
 async def test_failover_reaches_the_nvidia_fallback_model(nvidia_settings: Settings) -> None:
-    """Persistent 429 on Super hands off to Nano, not straight to the fake."""
+    """Persistent 429 on Super hands off to Lightning, not straight to fake."""
     super_provider = NvidiaProvider(
         nvidia_settings,
         model="nvidia/nemotron-3-super-120b-a12b",
         client=StubClient([StubError(429), StubError(429), StubError(429)]),
     )
-    nano_provider = NvidiaProvider(
+    lightning_provider = NvidiaProvider(
         nvidia_settings,
-        model="nvidia/nemotron-3-nano-30b-a3b",
-        client=StubClient([StubCompletion("BG-2.47 from nano.")]),
+        model="nvidia/nemotron-3.5-lightning-30b-a3b",
+        client=StubClient([StubCompletion("BG-2.47 from Lightning.")]),
     )
-    chain = FallbackLLMProvider([super_provider, nano_provider, FakeLLMProvider()])
+    chain = FallbackLLMProvider([super_provider, lightning_provider, FakeLLMProvider()])
 
     response = await chain.complete(ANSWER_PROMPT)
-    assert response.text == "BG-2.47 from nano."
-    assert response.model == "nvidia/nemotron-3-nano-30b-a3b"
+    assert response.text == "BG-2.47 from Lightning."
+    assert response.model == "nvidia/nemotron-3.5-lightning-30b-a3b"
 
 
 async def test_failover_reaches_the_fake_when_all_nim_models_fail(
@@ -376,7 +376,10 @@ async def test_failover_reaches_the_fake_when_all_nim_models_fail(
             model=model,
             client=StubClient([StubError(500), StubError(500), StubError(500)]),
         )
-        for model in ("nvidia/nemotron-3-super-120b-a12b", "nvidia/nemotron-3-nano-30b-a3b")
+        for model in (
+            "nvidia/nemotron-3-super-120b-a12b",
+            "nvidia/nemotron-3.5-lightning-30b-a3b",
+        )
     ]
     chain = FallbackLLMProvider([*dead, FakeLLMProvider()])
     response = await chain.complete(ANSWER_PROMPT)
@@ -385,7 +388,7 @@ async def test_failover_reaches_the_fake_when_all_nim_models_fail(
 
 
 async def test_retries_happen_before_failover(nvidia_settings: Settings) -> None:
-    """A momentary 429 must be retried on Super, not skipped to Nano."""
+    """A momentary 429 must be retried on Super, not skipped to Lightning."""
     super_client = StubClient([StubError(429), StubCompletion("BG-2.47 from super.")])
     nano_client = StubClient([StubCompletion("should not be reached")])
     chain = FallbackLLMProvider(

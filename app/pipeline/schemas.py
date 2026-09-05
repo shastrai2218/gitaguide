@@ -78,6 +78,24 @@ class IntentLabel(str, Enum):
     OTHER = "other"
 
 
+class SemanticStatus(str, Enum):
+    """Whether the external semantic intent signal was usable for this turn."""
+
+    NOT_REQUESTED = "not_requested"
+    OK = "ok"
+    UNAVAILABLE = "unavailable"
+    MALFORMED = "malformed"
+
+
+class SemanticParseStatus(str, Enum):
+    """Detailed parser outcome for the semantic intent completion."""
+
+    NOT_ATTEMPTED = "not_attempted"
+    PARSED = "parsed"
+    INVALID_JSON = "invalid_json"
+    INCOMPLETE_SCORES = "incomplete_scores"
+
+
 class IntentResult(BaseModel):
     """Output of :class:`app.pipeline.intent.IntentClassifier`."""
 
@@ -86,6 +104,14 @@ class IntentResult(BaseModel):
     scores: dict[str, float] = Field(default_factory=dict)
     rationale: str = ""
     backend: str = "unknown"
+    semantic_status: SemanticStatus = SemanticStatus.NOT_REQUESTED
+    semantic_provider: str = ""
+    semantic_model: str = ""
+    semantic_crisis_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    semantic_parse_status: SemanticParseStatus = SemanticParseStatus.NOT_ATTEMPTED
+    semantic_finish_reason: str = ""
+    semantic_prompt_tokens: int = Field(default=0, ge=0)
+    semantic_completion_tokens: int = Field(default=0, ge=0)
 
 
 # ---------------------------------------------------------------------- safety
@@ -125,6 +151,7 @@ class SafetyVerdict(BaseModel):
 
     blocked: bool = False
     triggers: list[SafetyTrigger] = Field(default_factory=list)
+    signals: list[SafetyTrigger] = Field(default_factory=list)
     response: str | None = None
     checked_at: datetime = Field(default_factory=_utcnow)
 
@@ -137,6 +164,21 @@ class SafetyVerdict(BaseModel):
     @property
     def layers(self) -> list[str]:
         return sorted({t.layer.value for t in self.triggers})
+
+    def requires_audit(self) -> bool:
+        """True for blocked decisions and meaningful non-blocking signals only."""
+
+        return self.blocked or bool(self.triggers) or bool(self.signals)
+
+    def audit_layers(self) -> list[str]:
+        """Layers represented by either blocking triggers or audit signals."""
+
+        return sorted({item.layer.value for item in [*self.triggers, *self.signals]})
+
+    def audit_categories(self) -> list[str]:
+        """Categories represented by either blocking triggers or audit signals."""
+
+        return sorted({item.category.value for item in [*self.triggers, *self.signals]})
 
 
 # ------------------------------------------------------------------- retrieval

@@ -5,7 +5,7 @@ Research-pipeline role
 Turns the raw user message into a multi-label emotion distribution plus a single
 scalar ``intensity``.  Two things downstream depend on it:
 
-1. the **safety gate** thresholds on ``intensity`` for extreme grief/fear, and
+1. the **safety audit** records ``intensity`` as non-blocking context, and
 2. the **retriever** walks ``(:Emotion)-[:ADDRESSES_EMOTION]->(:Verse)`` edges
    using the top emotion labels, which is how affect actually steers retrieval.
 
@@ -327,12 +327,10 @@ def compute_intensity(labels: Sequence[EmotionScore], text: str = "") -> float:
 
     Calibration note
     ----------------
-    The coefficients are chosen so that a *single* strong negative label cannot
-    by itself cross ``safety_intensity_threshold`` (0.85). Ordinary bereavement
-    ("my father passed away, I keep crying") must stay below the gate - grief
-    guidance is the core use case of this system, not an emergency - while
-    stacked despair markers ("hopeless", "nobody cares", "cannot do this any
-    more") plus co-activated labels do cross it.
+    The coefficients were calibrated against ``safety_intensity_threshold``
+    (0.85) so ordinary bereavement remains distinguishable from stacked despair.
+    Intensity is now audit context only: crossing that calibration marker never
+    blocks without an independent deterministic or semantic crisis signal.
     """
     if not labels:
         return 0.0

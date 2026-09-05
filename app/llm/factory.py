@@ -39,7 +39,7 @@ def build_nvidia_chain(settings: Settings) -> list[LLMProvider]:
 
     Both NIM entries are the same provider class with different model slugs,
     which matters on the free tier: the ~40 requests/minute limit is *per
-    model*, so a rate-limited Super has a fresh budget on Nano. Retries for
+    model*, so a rate-limited Super has a fresh budget on Lightning. Retries for
     429/5xx happen inside :class:`app.llm.nvidia_provider.NvidiaProvider`, so
     this chain only advances once a model is genuinely unavailable.
     """

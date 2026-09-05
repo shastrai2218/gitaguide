@@ -26,7 +26,7 @@ services:
       # Read from .env by compose; never inlined here.
       NVIDIA_API_KEY: "${NVIDIA_API_KEY:-}"
       GITAGUIDE_NVIDIA_MODEL: "${GITAGUIDE_NVIDIA_MODEL:-nvidia/nemotron-3-super-120b-a12b}"
-      GITAGUIDE_NVIDIA_FALLBACK_MODEL: "${GITAGUIDE_NVIDIA_FALLBACK_MODEL:-nvidia/nemotron-3-nano-30b-a3b}"
+      GITAGUIDE_NVIDIA_FALLBACK_MODEL: "${GITAGUIDE_NVIDIA_FALLBACK_MODEL:-nvidia/nemotron-3.5-lightning-30b-a3b}"
       GITAGUIDE_ANTHROPIC_API_KEY: "${GITAGUIDE_ANTHROPIC_API_KEY:-}"
       GITAGUIDE_OPENAI_API_KEY: "${GITAGUIDE_OPENAI_API_KEY:-}"
       GITAGUIDE_CORS_ORIGINS: "http://localhost:5173"

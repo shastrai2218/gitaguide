@@ -10,9 +10,9 @@ this turn.  It has three layers:
                   to others, abuse/violence and medical emergencies.  Tuned for
                   **recall**: a false positive costs a helpline message, a false
                   negative is unacceptable (see ``eval/test_safety_redteam.py``).
-``model layer``   fires on the *model* signals rather than surface text - crisis
-                  intent from :mod:`app.pipeline.intent`, or extreme grief/fear
-                  intensity from :mod:`app.pipeline.emotion`.
+``risk policy``   applies the semantic crisis score from
+                  :mod:`app.pipeline.intent`. Emotion is context only and never
+                  blocks independently.
 ``output layer``  runs AFTER generation on the produced answer, catching unsafe
                   content the LLM may have introduced (harm methods, telling the
                   user to stop treatment, moralising about their suffering).
@@ -34,7 +34,6 @@ from datetime import UTC, datetime
 from re import Pattern
 
 from app.config import Settings, get_settings
-from app.pipeline.emotion import CRISIS_RELEVANT_EMOTIONS
 from app.pipeline.schemas import (
     EmotionResult,
     IntentLabel,
@@ -43,6 +42,7 @@ from app.pipeline.schemas import (
     SafetyLayer,
     SafetyTrigger,
     SafetyVerdict,
+    SemanticStatus,
 )
 from app.pipeline.textutils import (
     has_academic_framing,
@@ -51,6 +51,11 @@ from app.pipeline.textutils import (
 )
 
 logger = logging.getLogger(__name__)
+
+# A semantic score below the blocking threshold is only audit-worthy once it is
+# large enough to represent a substantive model signal. This is deliberately
+# not a blocking threshold and must be calibrated from tester traffic.
+SEMANTIC_NEAR_MISS_FLOOR = 0.20
 
 # --------------------------------------------------------------------------- #
 # Crisis response
@@ -186,6 +191,35 @@ RULES: tuple[SafetyRule, ...] = (
         r"can(?:'t|not) (?:go on|do this) any ?more|ready to give up on life|"
         r"end(?:ing)? it all|end(?:ing)? things tonight)\b",
         "expressed wish to die or to stop living",
+        negatable=True,
+    ),
+    _rule(
+        "perceived_burdensomeness",
+        SafetyCategory.SUICIDAL_IDEATION,
+        r"\b(?:everyone|everybody|people|my family|they) (?:would|would all|'d) "
+        r"be better off without me\b",
+        "user believes other people would be better off without them",
+        negatable=True,
+    ),
+    _rule(
+        "hinglish_wish_not_to_live",
+        SafetyCategory.SUICIDAL_IDEATION,
+        r"\b(?:(?:mujhe (?:ab )?|mera )?jeene ka mann nahi (?:hai|karta)|"
+        r"mujhe (?:ab )?jeena nahi (?:hai|chahta|chahti))\b",
+        "Hinglish expression of not wanting to live",
+    ),
+    _rule(
+        "hinglish_end_everything",
+        SafetyCategory.SUICIDAL_IDEATION,
+        r"\bab bas bahut ho gaya\b[^.!?]{0,40}\bmain khatam kar "
+        r"(?:dunga|dungi) sab kuch\b",
+        "Hinglish expression of ending everything after intolerable distress",
+    ),
+    _rule(
+        "permanent_last_train",
+        SafetyCategory.SUICIDAL_IDEATION,
+        r"\bcatch (?:the |my )?last train (?:tonight|today)[, ]+permanently\b",
+        "farewell euphemism combining a final journey with permanence",
         negatable=True,
     ),
     _rule(
@@ -326,18 +360,20 @@ class LoggingSafetyEventSink(SafetyEventSink):
     """Default sink: structured stdlib logging (always on)."""
 
     def record(self, event: SafetyEvent) -> None:
-        if not event.verdict.triggers:
+        if not event.verdict.requires_audit():
             return
-        logger.warning(
-            "SAFETY_TRIGGER session=%s layers=%s categories=%s blocked=%s intensity=%.3f "
-            "intent=%s rules=%s",
+        items = [*event.verdict.triggers, *event.verdict.signals]
+        log = logger.warning if event.verdict.blocked else logger.info
+        log(
+            "SAFETY_AUDIT session=%s layers=%s categories=%s blocked=%s intensity=%.3f "
+            "intent=%s items=%s",
             event.session_id,
-            ",".join(event.verdict.layers),
-            ",".join(event.verdict.categories),
+            ",".join(event.verdict.audit_layers()),
+            ",".join(event.verdict.audit_categories()),
             event.verdict.blocked,
             event.emotion_intensity,
             event.intent,
-            ",".join(t.detail for t in event.verdict.triggers),
+            ",".join(item.detail for item in items),
         )
 
 
@@ -376,7 +412,7 @@ class CompositeSafetyEventSink(SafetyEventSink):
 # The gate
 # --------------------------------------------------------------------------- #
 class SafetyGate:
-    """Rule layer + model layer on input, content check on output.
+    """Rule layer + semantic risk policy on input, content check on output.
 
     Examples
     --------
@@ -435,41 +471,73 @@ class SafetyGate:
         """True if a negation token sits just before the matched cue."""
         return is_negated(text, match_start)
 
-    # ----------------------------------------------------------- model layer
-    def _run_model_layer(
+    # ------------------------------------------------------------ risk policy
+    def _run_risk_policy(
         self,
         emotion: EmotionResult | None,
         intent: IntentResult | None,
-    ) -> list[SafetyTrigger]:
-        triggers: list[SafetyTrigger] = []
+    ) -> tuple[list[SafetyTrigger], list[SafetyTrigger]]:
+        """Return blocking triggers and non-blocking audit signals.
 
-        if intent is not None and intent.intent is IntentLabel.CRISIS:
-            confidence = max(intent.confidence, intent.scores.get(IntentLabel.CRISIS.value, 0.0))
-            if confidence >= self.settings.safety_crisis_intent_threshold:
+        The semantic crisis probability is the only model signal allowed to
+        block. Emotion is attached as context for auditability but cannot block
+        independently and does not lower the configured 0.5 threshold.
+        """
+        triggers: list[SafetyTrigger] = []
+        signals: list[SafetyTrigger] = []
+
+        if intent is None:
+            return triggers, signals
+
+        status = intent.semantic_status
+        score = intent.semantic_crisis_score
+        threshold = self.settings.safety_crisis_intent_threshold
+        provenance = (
+            f"provider={intent.semantic_provider or 'unknown'} "
+            f"model={intent.semantic_model or 'unknown'}"
+        )
+        emotion_context = ""
+        if emotion is not None and emotion.labels:
+            emotion_context = (
+                f"; emotion={emotion.dominant} intensity={emotion.intensity:.2f}"
+            )
+
+        if status is SemanticStatus.OK:
+            if score >= threshold:
                 triggers.append(
                     SafetyTrigger(
                         layer=SafetyLayer.MODEL,
                         category=SafetyCategory.SUICIDAL_IDEATION,
-                        detail=f"intent classifier returned crisis (conf={confidence:.2f})",
-                        score=confidence,
+                        detail=(
+                            f"semantic crisis score {score:.2f} >= {threshold:.2f}; "
+                            f"{provenance}{emotion_context}"
+                        ),
+                        score=score,
                     )
                 )
-
-        if emotion is not None and emotion.labels:
-            threshold = self.settings.safety_intensity_threshold
-            if emotion.intensity >= threshold and emotion.dominant in CRISIS_RELEVANT_EMOTIONS:
-                triggers.append(
+            elif score >= SEMANTIC_NEAR_MISS_FLOOR:
+                signals.append(
                     SafetyTrigger(
                         layer=SafetyLayer.MODEL,
-                        category=SafetyCategory.SEVERE_DISTRESS,
+                        category=SafetyCategory.SUICIDAL_IDEATION,
                         detail=(
-                            f"extreme {emotion.dominant} intensity "
-                            f"{emotion.intensity:.2f} >= {threshold:.2f}"
+                            f"semantic crisis near-miss {score:.2f} < {threshold:.2f}; "
+                            f"{provenance}{emotion_context}"
                         ),
-                        score=emotion.intensity,
+                        score=score,
                     )
                 )
-        return triggers
+        elif status in {SemanticStatus.UNAVAILABLE, SemanticStatus.MALFORMED}:
+            signals.append(
+                SafetyTrigger(
+                    layer=SafetyLayer.MODEL,
+                    category=SafetyCategory.NONE,
+                    detail=f"semantic classifier {status.value}; {provenance}{emotion_context}",
+                    score=0.0,
+                )
+            )
+
+        return triggers, signals
 
     # ---------------------------------------------------------------- input
     def check_input(
@@ -481,9 +549,10 @@ class SafetyGate:
     ) -> SafetyVerdict:
         """Gate the user's message. MUST be called before retrieval/generation."""
         triggers = self._run_rules(text, self.rules, SafetyLayer.RULE)
-        triggers.extend(self._run_model_layer(emotion, intent))
+        model_triggers, signals = self._run_risk_policy(emotion, intent)
+        triggers.extend(model_triggers)
 
-        verdict = SafetyVerdict(blocked=bool(triggers), triggers=triggers)
+        verdict = SafetyVerdict(blocked=bool(triggers), triggers=triggers, signals=signals)
         if verdict.blocked:
             categories = [t.category for t in triggers]
             verdict.response = build_crisis_response(categories)
@@ -520,7 +589,7 @@ class SafetyGate:
         session_id: str | None,
         kind: str = "input",
     ) -> None:
-        if not self.settings.safety_log_enabled or not verdict.triggers:
+        if not self.settings.safety_log_enabled or not verdict.requires_audit():
             return
         self.sink.record(
             SafetyEvent(
