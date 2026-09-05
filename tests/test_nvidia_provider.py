@@ -324,28 +324,44 @@ def test_bad_retry_after_falls_back_to_backoff() -> None:
 # --------------------------------------------------------------------------- #
 # Failover chain
 # --------------------------------------------------------------------------- #
-def test_chain_order_is_super_then_lightning_then_fake(nvidia_settings: Settings) -> None:
+def test_chain_order_is_super_then_lightning(nvidia_settings: Settings) -> None:
     chain = build_nvidia_chain(nvidia_settings)
     assert [provider.name for provider in chain] == [
         "nvidia:nvidia/nemotron-3-super-120b-a12b",
         "nvidia:nvidia/nemotron-3.5-lightning-30b-a3b",
-        "fake",
     ]
 
 
-def test_configured_extra_fallback_sits_before_the_fake(nvidia_settings: Settings) -> None:
+def test_the_live_chain_has_no_fake_last_resort(nvidia_settings: Settings) -> None:
+    """A total outage must not be served to a tester as guidance.
+
+    The fake always answers, and answers with citations, so it used to make an
+    outage look like a real reply. The chain now ends at the real providers and
+    the generation stage says "the guide is overloaded" instead - which is
+    honest, and countable.
+    """
+    assert not any(provider.is_fake for provider in build_nvidia_chain(nvidia_settings))
+
+
+def test_a_configured_extra_fallback_is_appended_after_the_nim_models(
+    nvidia_settings: Settings,
+) -> None:
     settings = nvidia_settings.model_copy(
         update={"llm_fallback_provider": LLMProviderName.OPENAI, "openai_api_key": ""}
     )
-    # No OpenAI key, so that link is skipped - but the fake tail must survive.
-    assert build_nvidia_chain(settings)[-1].name == "fake"
+    # No OpenAI key, so that link is skipped and the NIM pair is the whole chain.
+    chain = build_nvidia_chain(settings)
+    assert [provider.name for provider in chain] == [
+        "nvidia:nvidia/nemotron-3-super-120b-a12b",
+        "nvidia:nvidia/nemotron-3.5-lightning-30b-a3b",
+    ]
 
 
 def test_duplicate_fallback_model_is_not_added(nvidia_settings: Settings) -> None:
     settings = nvidia_settings.model_copy(
         update={"nvidia_fallback_model": nvidia_settings.nvidia_model}
     )
-    assert len(build_nvidia_chain(settings)) == 2
+    assert len(build_nvidia_chain(settings)) == 1
 
 
 async def test_failover_reaches_the_nvidia_fallback_model(nvidia_settings: Settings) -> None:
@@ -440,7 +456,10 @@ def test_build_llm_provider_returns_the_nvidia_chain(nvidia_settings: Settings) 
     provider = build_llm_provider(nvidia_settings)
     assert isinstance(provider, FallbackLLMProvider)
     assert provider.name.startswith("fallback(nvidia:")
-    assert provider.providers[-1].is_fake
+    assert not any(step.is_fake for step in provider.providers)
+    # The wall-clock budget must be attached here, not left to each provider's
+    # own timeout - otherwise two "reasonable" timeouts add up to a long wait.
+    assert provider.budget_seconds == nvidia_settings.generation_budget_seconds
 
 
 def test_build_llm_provider_is_fake_in_mock_mode() -> None:

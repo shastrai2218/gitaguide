@@ -229,6 +229,10 @@ class Telemetry:
             counters.increment("llm_fallback_used")
         if event["provider"] == "fake":
             counters.increment("fake_provider_answered")
+        if event["provider"] == "overloaded":
+            # The wall-clock budget ran out. Counted so "the beta felt slow"
+            # can be checked against how often it actually gave up.
+            counters.increment("overloaded_turns")
 
     def _emit(self, event: dict[str, Any]) -> None:
         if self._writer is None:

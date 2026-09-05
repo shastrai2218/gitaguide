@@ -169,6 +169,14 @@ class Settings(BaseSettings):
     memory_summary_max_chars: int = 1200
 
     # -------------------------------------------------------------------- api
+    # ------------------------------------------------------- generation budget
+    #: Total wall clock allowed for one turn's generation, across the whole
+    #: fallback chain. The Day 3 worst observed turn was 14.4s and a later UI
+    #: turn reached 29.7s, so 45s is generous - it is a stop, not a target.
+    #: When it runs out the tester gets an honest "overloaded" reply rather
+    #: than a spinner that never ends or a 500.
+    generation_budget_seconds: float = 45.0
+
     # -------------------------------------------------------------- telemetry
     #: One JSON line per turn, to a rotating local file. Never message text.
     telemetry_enabled: bool = True

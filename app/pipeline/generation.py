@@ -29,7 +29,7 @@ import time
 from collections.abc import Collection, Sequence
 
 from app.config import Settings, get_settings
-from app.llm.base import TASK_ANSWER, LLMProvider, LLMResponse
+from app.llm.base import TASK_ANSWER, BudgetExhaustedError, LLMProvider, LLMResponse
 from app.pipeline.memory import MemoryContext
 from app.pipeline.schemas import (
     EmotionResult,
@@ -42,6 +42,18 @@ from app.pipeline.schemas import (
 from corpus.schemas import VERSE_ID_RE, extract_verse_ids
 
 logger = logging.getLogger(__name__)
+
+#: Recorded as the provider of an overload turn, so these are countable in the
+#: database and in telemetry instead of being mistaken for a short real answer.
+PROVIDER_OVERLOADED = "overloaded"
+
+#: What a tester sees when the whole chain ran out of wall clock. No verses: it
+#: would be dishonest to attach scripture to a turn the model never answered.
+OVERLOADED_ANSWER = (
+    "The guide is overloaded — please try again in a minute.\n\n"
+    "Nothing you wrote was lost, and this is not about what you asked. "
+    "The models behind GitaGuide are shared and sometimes queue up."
+)
 
 WHY_HEADING = "### Why this verse"
 
@@ -232,7 +244,10 @@ class GroundedGenerator:
             )
 
         prompt = build_answer_prompt(query, retrieval, emotion, intent, memory)
-        response = await self._complete(prompt)
+        try:
+            response = await self._complete(prompt)
+        except BudgetExhaustedError as exc:
+            return self._overloaded_result(started, exc)
         answer, citations, hallucinated = self._validate(response.text, allowed)
 
         if hallucinated or not citations:
@@ -241,7 +256,10 @@ class GroundedGenerator:
             retry_prompt = build_answer_prompt(
                 query, retrieval, emotion, intent, memory, corrective_note=note
             )
-            retry = await self._complete(retry_prompt)
+            try:
+                retry = await self._complete(retry_prompt)
+            except BudgetExhaustedError as exc:
+                return self._overloaded_result(started, exc)
             retry_answer, retry_citations, retry_hallucinated = self._validate(
                 retry.text, allowed
             )
@@ -293,6 +311,31 @@ class GroundedGenerator:
         )
 
     # ---------------------------------------------------------------- pieces
+    def _overloaded_result(
+        self, started: float, exc: BudgetExhaustedError
+    ) -> GenerationResult:
+        """A normal-shaped turn saying the guide is overloaded.
+
+        Not a 500, and not a template answer dressed up as guidance. The tester
+        asked something real and deserves to know the system could not get to it
+        in time, in the same shape as every other reply, so the UI renders it
+        without a special case.
+
+        ``provider="overloaded"`` is persisted with the turn, so these are
+        countable afterwards rather than looking like ordinary short answers.
+        """
+        logger.error("generation budget exhausted; serving the overload reply (%s)", exc)
+        return GenerationResult(
+            answer=OVERLOADED_ANSWER,
+            citations=[],
+            why_this_verse={},
+            grounded=False,
+            provider=PROVIDER_OVERLOADED,
+            model="",
+            latency_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
+
+
     async def _complete(self, prompt: str) -> LLMResponse:
         try:
             return await self.llm.complete(
@@ -301,6 +344,10 @@ class GroundedGenerator:
                 max_tokens=self.settings.llm_max_tokens,
                 temperature=self.settings.llm_temperature,
             )
+        except BudgetExhaustedError:
+            # Not swallowed: the caller has to be able to tell "slow" from
+            # "broken", because the honest reply differs.
+            raise
         except Exception:
             logger.exception("LLM completion failed")
             return LLMResponse(text="", provider=self.llm.name, model=self.llm.model)

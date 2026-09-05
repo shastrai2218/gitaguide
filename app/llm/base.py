@@ -11,9 +11,11 @@ dissertation can swap models without touching pipeline code.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -92,21 +94,48 @@ class LLMProvider(ABC):
         return False
 
 
+class BudgetExhaustedError(LLMError):
+    """The turn ran out of wall clock before any provider answered.
+
+    Distinct from :class:`LLMError` so the generator can tell "everything is
+    broken" apart from "everything is slow" and say the honest thing to the
+    tester about which one happened.
+    """
+
+
 class FallbackLLMProvider(LLMProvider):
-    """Try providers in order until one succeeds.
+    """Try providers in order until one succeeds, inside a wall-clock budget.
 
     Configured via ``GITAGUIDE_LLM_PROVIDER`` + ``GITAGUIDE_LLM_FALLBACK_PROVIDER``
     so a transient Anthropic outage degrades to OpenAI (or to the fake provider
     in development) instead of failing the request.
+
+    **The budget spans the whole chain, not each provider.** Without that, a
+    primary that retries 429s for its full backoff and then hands over to a
+    fallback that does the same can keep one tester waiting for minutes while
+    every individual timeout looks reasonable. The budget is what a person
+    actually experiences, so it is what is enforced.
+
+    It is also **shared**, not spent first-come: each attempt may use at most
+    ``remaining / providers_left``. A primary allowed to burn the whole budget
+    would starve the fallback of the time it needs to answer, which defeats the
+    point of having one - the fallback exists precisely for the case where the
+    primary is slow. With a 45s budget and a Super/Lightning chain, Super gets
+    ~22s (worst observed turn: 13.6s) and Lightning keeps the rest (observed
+    ~21.1s). Only when every provider has had its slice is the caller told the
+    guide is overloaded.
     """
 
     name = "fallback"
 
-    def __init__(self, providers: Sequence[LLMProvider]) -> None:
+    def __init__(
+        self, providers: Sequence[LLMProvider], budget_seconds: float | None = None
+    ) -> None:
         if not providers:
             raise ValueError("FallbackLLMProvider needs at least one provider")
         self.providers = list(providers)
         self.model = self.providers[0].model
+        self.budget_seconds = budget_seconds
         self.name = "fallback(" + ",".join(p.name for p in self.providers) + ")"
 
     async def complete(
@@ -118,14 +147,37 @@ class FallbackLLMProvider(LLMProvider):
         stop: Sequence[str] | None = None,
     ) -> LLMResponse:
         last_error: Exception | None = None
+        started = time.monotonic()
+        budget = self.budget_seconds
+
         for step, provider in enumerate(self.providers):
+            remaining = None if budget is None else budget - (time.monotonic() - started)
+            providers_left = len(self.providers) - step
+            # Each attempt gets an equal share of what is left, so a slow
+            # primary cannot consume the fallback's chance to answer.
+            slice_seconds = None if remaining is None else remaining / providers_left
+            if remaining is not None and remaining <= 0:
+                logger.error(
+                    "generation budget of %.1fs exhausted before %s could be tried",
+                    budget,
+                    provider.name,
+                )
+                raise BudgetExhaustedError(
+                    f"generation budget of {budget:.1f}s exhausted after "
+                    f"{step} provider(s); last error: {last_error}"
+                )
             try:
-                response = await provider.complete(
+                call = provider.complete(
                     prompt,
                     system=system,
                     max_tokens=max_tokens,
                     temperature=temperature,
                     stop=stop,
+                )
+                response = (
+                    await call
+                    if slice_seconds is None
+                    else await asyncio.wait_for(call, timeout=slice_seconds)
                 )
                 # How far down the chain the answer came from. 0 = the primary
                 # answered; anything higher means degradation the caller needs
@@ -133,9 +185,24 @@ class FallbackLLMProvider(LLMProvider):
                 # string printed at startup.
                 response.raw["fallback_steps"] = step
                 return response
+            except TimeoutError as exc:
+                last_error = exc
+                logger.error(
+                    "provider %s exceeded its %.1fs share of the generation budget "
+                    "(%.1fs of %.1fs left)",
+                    provider.name,
+                    slice_seconds or 0.0,
+                    remaining or 0.0,
+                    budget or 0.0,
+                )
             except Exception as exc:  # pragma: no cover - needs live providers
                 last_error = exc
                 logger.warning("provider %s failed (%s); trying next", provider.name, exc)
+
+        if budget is not None and (time.monotonic() - started) >= budget:
+            raise BudgetExhaustedError(
+                f"generation budget of {budget:.1f}s exhausted; last error: {last_error}"
+            )
         raise LLMError(f"all providers failed; last error: {last_error}")
 
     async def aclose(self) -> None:

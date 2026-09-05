@@ -35,7 +35,7 @@ def build_single_provider(
 
 
 def build_nvidia_chain(settings: Settings) -> list[LLMProvider]:
-    """``nemotron-super -> nvidia fallback model -> fake``.
+    """``nemotron-super -> nvidia fallback model``.
 
     Both NIM entries are the same provider class with different model slugs,
     which matters on the free tier: the ~40 requests/minute limit is *per
@@ -59,9 +59,12 @@ def build_nvidia_chain(settings: Settings) -> list[LLMProvider]:
         except LLMError as exc:
             logger.warning("configured fallback provider %s unavailable (%s)", extra, exc)
 
-    # Last resort: the offline provider. It always answers, and it answers with
-    # citations, so a total outage degrades the answer instead of the service.
-    chain.append(FakeLLMProvider())
+    # The chain deliberately ends here, with no fake last resort. The fake
+    # always answers, and it answers with citations, which means a total NIM
+    # outage used to be served to a tester as guidance that no model produced.
+    # Ending the chain at the real providers lets the generation stage say the
+    # honest thing instead - "the guide is overloaded" - and lets those turns be
+    # counted. Offline development is unaffected: mock mode never reaches here.
     return chain
 
 
@@ -85,9 +88,11 @@ def build_llm_provider(settings: Settings | None = None) -> LLMProvider:
             logger.warning("NVIDIA NIM unavailable (%s); using fake provider", exc)
             return FakeLLMProvider()
         logger.info(
-            "LLM chain: %s", " -> ".join(provider.name for provider in chain)
+            "LLM chain: %s (budget %.0fs across the whole chain)",
+            " -> ".join(provider.name for provider in chain),
+            settings.generation_budget_seconds,
         )
-        return FallbackLLMProvider(chain)
+        return FallbackLLMProvider(chain, budget_seconds=settings.generation_budget_seconds)
 
     try:
         primary = build_single_provider(primary_name, settings)
@@ -105,4 +110,6 @@ def build_llm_provider(settings: Settings | None = None) -> LLMProvider:
         logger.warning("fallback provider %s unavailable (%s)", fallback_name, exc)
         return primary
 
-    return FallbackLLMProvider([primary, fallback])
+    return FallbackLLMProvider(
+        [primary, fallback], budget_seconds=settings.generation_budget_seconds
+    )
