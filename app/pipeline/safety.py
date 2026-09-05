@@ -202,6 +202,25 @@ RULES: tuple[SafetyRule, ...] = (
         negatable=True,
     ),
     _rule(
+        "wish_not_to_be_alive",
+        SafetyCategory.SUICIDAL_IDEATION,
+        r"\b(?:do(?:n't| not|nt) (?:want|wanna) to be alive|"
+        r"do(?:n't| not|nt) wanna be alive|"
+        r"no (?:reason|point) (?:to|in) (?:be|being|stay|staying) alive|"
+        r"no (?:reason|point) to live)\b",
+        "expressed wish not to be alive",
+        negatable=True,
+    ),
+    _rule(
+        "hinglish_not_want_to_be_alive",
+        SafetyCategory.SUICIDAL_IDEATION,
+        r"\b(?:(?:main |mai |mujhe )?(?:ab )?jeena nahi chaht[aiu]|"
+        r"(?:main |mai |mujhe )?(?:ab )?zinda nahi rehna chaht[aiu]|"
+        r"(?:main |mai |mujhe )?(?:ab )?zinda nahi rehna hai)\b",
+        "Hinglish expression of not wanting to be alive",
+        negatable=True,
+    ),
+    _rule(
         "hinglish_wish_not_to_live",
         SafetyCategory.SUICIDAL_IDEATION,
         r"\b(?:(?:mujhe (?:ab )?|mera )?jeene ka mann nahi (?:hai|karta)|"
@@ -286,6 +305,41 @@ HARD_CATEGORIES = frozenset(
 # --------------------------------------------------------------------------- #
 # Output layer
 # --------------------------------------------------------------------------- #
+#: Crisis-adjacent vocabulary for the conservative fallback.
+#:
+#: This is **not** a detection layer. It is consulted only when the semantic
+#: classifier has failed to produce a usable result *twice* and no deterministic
+#: rule fired - a state in which the gate would otherwise be running on the rule
+#: table alone. In that state the right default for a message that talks about
+#: dying, being alive, or ending things is to stop, not to guess.
+#:
+#: Deliberately narrow-ish but recall-biased: a false positive here costs one
+#: person an unnecessary helpline message on roughly 0.2% of turns; a false
+#: negative is the failure recorded in docs/kg_measurements.md section 11.
+#:
+#: The negation / academic / third-party suppressors are **not** applied on this
+#: path, and that is the point: those exist to keep precision high when the
+#: model layer is working. When it is blind, precision is the wrong thing to
+#: optimise.
+SOFT_CRISIS_CUES: tuple[Pattern[str], ...] = tuple(
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        # English
+        r"\b(?:die|dying|died|dead|death)\b",
+        r"\b(?:alive|living|live)\b",
+        r"\bend (?:it|things|my life|it all)\b",
+        r"\b(?:suicide|suicidal|unalive|kms)\b",
+        r"\b(?:self[- ]?harm|cut myself|overdose|od)\b",
+        r"\b(?:give up|giving up|can(?:'t|not) go on|no point|no reason)\b",
+        r"\b(?:worthless|hopeless|nothing left)\b",
+        # Hinglish / Latin-script Hindi
+        r"\b(?:jeena|jeene|zinda|zindagi)\b",
+        r"\b(?:marna|mar jau|mar jaun|mar jaunga|mar jaungi|maut)\b",
+        r"\b(?:khatam|khatm)\b",
+    )
+)
+
+
 OUTPUT_RULES: tuple[SafetyRule, ...] = (
     _rule(
         "output_method_leak",
@@ -532,12 +586,80 @@ class SafetyGate:
                 SafetyTrigger(
                     layer=SafetyLayer.MODEL,
                     category=SafetyCategory.NONE,
-                    detail=f"semantic classifier {status.value}; {provenance}{emotion_context}",
+                    detail=(
+                        f"semantic classifier {status.value} - risk UNKNOWN, not low; "
+                        f"{provenance}{emotion_context}"
+                    ),
                     score=0.0,
                 )
             )
 
         return triggers, signals
+
+    # ------------------------------------------------------- soft-cue fallback
+    @staticmethod
+    def _soft_cue(text: str) -> str | None:
+        """The first crisis-adjacent cue in ``text``, or ``None``."""
+        for pattern in SOFT_CRISIS_CUES:
+            match = pattern.search(text)
+            if match:
+                return match.group(0)
+        return None
+
+    def _run_soft_cue_fallback(
+        self, text: str, intent: IntentResult | None, rule_fired: bool
+    ) -> list[SafetyTrigger]:
+        """Block a crisis-adjacent message when the semantic layer is blind.
+
+        Policy, exactly:
+
+        * the semantic result is malformed or unavailable **after** its retry,
+          **and**
+        * no deterministic rule fired, **and**
+        * the message contains a soft cue
+
+        -> serve the crisis response, logged under the ``soft_cue_fallback``
+        layer so these decisions are countable and separable from real
+        detections.
+
+        A message with **no** cue and a failed parse keeps the previous
+        behaviour: it proceeds, and the audit signal from the risk policy
+        records that the classifier was blind. So a broken classifier can never
+        leave a crisis-adjacent message single-layered, while ordinary turns are
+        never blocked by a parse failure.
+
+        Emotion is not consulted: GoEmotions never independently blocks.
+        """
+        if rule_fired or intent is None:
+            return []
+        if intent.semantic_status not in {SemanticStatus.MALFORMED, SemanticStatus.UNAVAILABLE}:
+            return []
+
+        cue = self._soft_cue(text)
+        if cue is None:
+            return []
+
+        logger.warning(
+            "SOFT_CUE_FALLBACK engaged: semantic layer %s (first=%s retried=%s), cue=%r; "
+            "treating unknown risk as risk",
+            intent.semantic_status.value,
+            intent.semantic_first_parse_status.value,
+            intent.semantic_retried,
+            cue,
+        )
+        return [
+            SafetyTrigger(
+                layer=SafetyLayer.SOFT_CUE_FALLBACK,
+                category=SafetyCategory.SEVERE_DISTRESS,
+                detail=(
+                    f"semantic classifier {intent.semantic_status.value} after retry "
+                    f"(risk unknown, not low); crisis-adjacent cue present and no rule "
+                    f"fired"
+                ),
+                matched_text=cue,
+                score=0.0,
+            )
+        ]
 
     # ---------------------------------------------------------------- input
     def check_input(
@@ -549,8 +671,10 @@ class SafetyGate:
     ) -> SafetyVerdict:
         """Gate the user's message. MUST be called before retrieval/generation."""
         triggers = self._run_rules(text, self.rules, SafetyLayer.RULE)
+        rule_fired = bool(triggers)
         model_triggers, signals = self._run_risk_policy(emotion, intent)
         triggers.extend(model_triggers)
+        triggers.extend(self._run_soft_cue_fallback(text, intent, rule_fired))
 
         verdict = SafetyVerdict(blocked=bool(triggers), triggers=triggers, signals=signals)
         if verdict.blocked:

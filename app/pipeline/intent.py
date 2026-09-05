@@ -21,6 +21,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 
 from app.config import Settings, get_settings
 from app.llm.base import TASK_INTENT, LLMError, LLMProvider, LLMResponse
@@ -161,6 +162,27 @@ def _blend(
     return {label: round(value / total, 4) for label, value in blended.items()}
 
 
+@dataclass
+class _SemanticAttempt:
+    """One call to the semantic classifier and what came back.
+
+    Defaults describe "never asked", so an offline classifier produces the same
+    shape as a failed one without special-casing at the call site.
+    """
+
+    status: SemanticStatus = SemanticStatus.NOT_REQUESTED
+    parse_status: SemanticParseStatus = SemanticParseStatus.NOT_ATTEMPTED
+    provider: str = ""
+    model: str = ""
+    crisis_score: float = 0.0
+    finish_reason: str = ""
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    scores: dict[str, float] | None = None
+    rationale: str = "keyword prior only"
+    backend: str = "prior"
+
+
 def build_intent_prompt(text: str, emotion: EmotionResult | None = None) -> str:
     """Zero-shot prompt; the ``TASK:`` marker routes the fake provider."""
     taxonomy = "\n".join(
@@ -234,90 +256,125 @@ class IntentClassifier:
         self.llm = llm
         self.use_llm = use_llm and llm is not None
 
+    async def _attempt_semantic(
+        self, text: str, emotion: EmotionResult | None
+    ) -> _SemanticAttempt:
+        """One call to the semantic classifier, parsed and classified.
+
+        Returns an attempt record rather than raising, so the caller can decide
+        whether an unusable result is worth a second try. Never raises.
+        """
+        try:
+            response: LLMResponse = await self.llm.complete(  # type: ignore[union-attr]
+                build_intent_prompt(text, emotion),
+                max_tokens=self.settings.nvidia_intent_max_tokens,
+                temperature=0.0,
+            )
+        except Exception:
+            logger.exception("intent semantic classifier unavailable; using keyword prior")
+            return _SemanticAttempt(
+                status=SemanticStatus.UNAVAILABLE,
+                parse_status=SemanticParseStatus.NOT_ATTEMPTED,
+                provider=getattr(self.llm, "name", ""),
+                model=getattr(self.llm, "model", ""),
+                rationale="semantic classifier unavailable; keyword prior only",
+                backend="prior(semantic-unavailable)",
+            )
+
+        attempt = _SemanticAttempt(
+            status=SemanticStatus.MALFORMED,
+            parse_status=SemanticParseStatus.INVALID_JSON,
+            provider=response.provider,
+            model=response.model,
+            finish_reason=str(response.raw.get("finish_reason") or ""),
+            prompt_tokens=response.prompt_tokens,
+            completion_tokens=response.completion_tokens,
+            backend=f"prior(semantic-malformed:{response.provider})",
+            rationale="semantic classifier returned malformed JSON; keyword prior only",
+        )
+
+        try:
+            payload = response.json()
+        except LLMError:
+            logger.warning(
+                "intent semantic classifier returned UNPARSEABLE content (risk unknown, "
+                "not low) provider=%s model=%s",
+                response.provider,
+                response.model,
+            )
+            return attempt
+
+        normalised = self._normalise_llm_payload(payload) if isinstance(payload, Mapping) else {}
+        if set(normalised) != {label.value for label in IntentLabel}:
+            attempt.parse_status = SemanticParseStatus.INCOMPLETE_SCORES
+            attempt.rationale = (
+                "semantic classifier returned an incomplete intent distribution; "
+                "keyword prior only"
+            )
+            logger.warning(
+                "intent semantic classifier returned an INCOMPLETE distribution (risk "
+                "unknown, not low) provider=%s model=%s keys=%s",
+                response.provider,
+                response.model,
+                sorted(normalised),
+            )
+            return attempt
+
+        attempt.status = SemanticStatus.OK
+        attempt.parse_status = SemanticParseStatus.PARSED
+        attempt.scores = normalised
+        attempt.crisis_score = normalised.get(IntentLabel.CRISIS.value, 0.0)
+        attempt.rationale = str(payload.get("rationale", "")) or "zero-shot classification"
+        attempt.backend = f"llm:{response.provider}+prior"
+        return attempt
+
     async def classify(
         self,
         text: str,
         emotion: EmotionResult | None = None,
     ) -> IntentResult:
-        """Return the blended intent distribution for one message."""
+        """Return the blended intent distribution for one message.
+
+        A **malformed** semantic result gets exactly one immediate re-ask, same
+        prompt and same token budget. Malformed output was measured at ~4.5% of
+        live turns (docs/kg_measurements.md section 11) and on one of those turns
+        the crisis gate missed a plain statement of suicidal ideation, because a
+        failed parse left the gate with the rule layer alone. One retry takes the
+        unprotected window to roughly the square of that rate.
+
+        An **unavailable** classifier is not retried here: the provider already
+        retries 429/5xx internally and has a fallback chain, so a second call
+        would duplicate that and add latency to a path that is already failing.
+        """
         prior = heuristic_intent_scores(text)
-        llm_scores: dict[str, float] | None = None
-        rationale = "keyword prior only"
-        backend = "prior"
-        semantic_status = SemanticStatus.NOT_REQUESTED
-        semantic_provider = ""
-        semantic_model = ""
-        semantic_crisis_score = 0.0
-        semantic_parse_status = SemanticParseStatus.NOT_ATTEMPTED
-        semantic_finish_reason = ""
-        semantic_prompt_tokens = 0
-        semantic_completion_tokens = 0
+        attempt = _SemanticAttempt()
+        first_parse_status = SemanticParseStatus.NOT_ATTEMPTED
+        retried = False
 
         if self.use_llm and self.llm is not None:
-            try:
-                response: LLMResponse = await self.llm.complete(
-                    build_intent_prompt(text, emotion),
-                    max_tokens=self.settings.nvidia_intent_max_tokens,
-                    temperature=0.0,
-                )
-            except Exception:
-                semantic_status = SemanticStatus.UNAVAILABLE
-                semantic_provider = getattr(self.llm, "name", "")
-                semantic_model = getattr(self.llm, "model", "")
-                backend = "prior(semantic-unavailable)"
-                rationale = "semantic classifier unavailable; keyword prior only"
-                logger.exception("intent semantic classifier unavailable; using keyword prior")
-            else:
-                semantic_provider = response.provider
-                semantic_model = response.model
-                semantic_finish_reason = str(response.raw.get("finish_reason") or "")
-                semantic_prompt_tokens = response.prompt_tokens
-                semantic_completion_tokens = response.completion_tokens
-                try:
-                    payload = response.json()
-                except LLMError:
-                    semantic_status = SemanticStatus.MALFORMED
-                    semantic_parse_status = SemanticParseStatus.INVALID_JSON
-                    backend = f"prior(semantic-malformed:{response.provider})"
-                    rationale = "semantic classifier returned malformed JSON; keyword prior only"
-                    logger.warning(
-                        "intent semantic classifier returned malformed JSON provider=%s model=%s",
-                        response.provider,
-                        response.model,
-                    )
-                else:
-                    normalised = (
-                        self._normalise_llm_payload(payload)
-                        if isinstance(payload, Mapping)
-                        else {}
-                    )
-                    expected_scores = {label.value for label in IntentLabel}
-                    if set(normalised) != expected_scores:
-                        semantic_status = SemanticStatus.MALFORMED
-                        semantic_parse_status = SemanticParseStatus.INCOMPLETE_SCORES
-                        backend = f"prior(semantic-malformed:{response.provider})"
-                        rationale = (
-                            "semantic classifier returned an incomplete intent distribution; "
-                            "keyword prior only"
-                        )
-                        logger.warning(
-                            "intent semantic classifier returned incomplete scores "
-                            "provider=%s model=%s keys=%s",
-                            response.provider,
-                            response.model,
-                            sorted(normalised),
-                        )
-                    else:
-                        llm_scores = normalised
-                        semantic_status = SemanticStatus.OK
-                        semantic_parse_status = SemanticParseStatus.PARSED
-                        semantic_crisis_score = normalised.get(IntentLabel.CRISIS.value, 0.0)
-                        rationale = (
-                            str(payload.get("rationale", "")) or "zero-shot classification"
-                        )
-                        backend = f"llm:{response.provider}+prior"
+            attempt = await self._attempt_semantic(text, emotion)
+            first_parse_status = attempt.parse_status
 
-        scores = _blend(prior, llm_scores)
+            if attempt.status is SemanticStatus.MALFORMED:
+                retried = True
+                logger.warning(
+                    "retrying malformed semantic intent call once (first=%s)",
+                    first_parse_status.value,
+                )
+                retry = await self._attempt_semantic(text, emotion)
+                retry.backend = f"{retry.backend}+retry"
+                if retry.status is SemanticStatus.OK:
+                    logger.info("semantic intent retry recovered a usable result")
+                else:
+                    logger.error(
+                        "semantic intent retry ALSO failed (first=%s second=%s); the "
+                        "semantic safety layer is unavailable for this turn",
+                        first_parse_status.value,
+                        retry.parse_status.value,
+                    )
+                attempt = retry
+
+        scores = _blend(prior, attempt.scores)
         scores = self._apply_emotion_nudge(scores, emotion)
         best_label, best_score = max(scores.items(), key=lambda kv: kv[1])
 
@@ -325,16 +382,18 @@ class IntentClassifier:
             intent=IntentLabel(best_label),
             confidence=round(best_score, 4),
             scores=scores,
-            rationale=rationale,
-            backend=backend,
-            semantic_status=semantic_status,
-            semantic_provider=semantic_provider,
-            semantic_model=semantic_model,
-            semantic_crisis_score=round(semantic_crisis_score, 4),
-            semantic_parse_status=semantic_parse_status,
-            semantic_finish_reason=semantic_finish_reason,
-            semantic_prompt_tokens=semantic_prompt_tokens,
-            semantic_completion_tokens=semantic_completion_tokens,
+            rationale=attempt.rationale,
+            backend=attempt.backend,
+            semantic_status=attempt.status,
+            semantic_provider=attempt.provider,
+            semantic_model=attempt.model,
+            semantic_crisis_score=round(attempt.crisis_score, 4),
+            semantic_parse_status=attempt.parse_status,
+            semantic_first_parse_status=first_parse_status,
+            semantic_retried=retried,
+            semantic_finish_reason=attempt.finish_reason,
+            semantic_prompt_tokens=attempt.prompt_tokens,
+            semantic_completion_tokens=attempt.completion_tokens,
         )
 
     # ------------------------------------------------------------- helpers

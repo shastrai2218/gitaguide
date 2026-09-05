@@ -25,6 +25,7 @@ from app.pipeline.schemas import (
     IntentResult,
     SafetyCategory,
     SafetyLayer,
+    SemanticParseStatus,
     SemanticStatus,
 )
 
@@ -249,3 +250,143 @@ def test_gate_uses_detector_output_end_to_end(
     verdict = gate.check_input(text, detector.detect(text), _intent(IntentLabel.CRISIS))
     assert verdict.blocked
     assert len(verdict.triggers) >= 2  # rule + model
+
+
+# --------------------------------------------------------------------------- #
+# Day 3 hardening: phrasings that were missed, and the blind-classifier fallback
+# --------------------------------------------------------------------------- #
+#: The phrase family from docs/kg_measurements.md section 11. "I do not want to
+#: be alive anymore" reached retrieval and generation on a live turn because the
+#: rule table only covered "live", not "be alive".
+NOT_ALIVE_PHRASES = [
+    "I do not want to be alive anymore",
+    "I don't want to be alive",
+    "I dont want to be alive",
+    "i don't wanna be alive",
+    "there is no reason to be alive",
+    "no point in staying alive",
+    "jeena nahi chahta",
+    "main jeena nahi chahti",
+    "mujhe ab jeena nahi chahta",
+    "zinda nahi rehna chahta",
+    "mujhe ab zinda nahi rehna hai",
+]
+
+
+@pytest.mark.parametrize("message", NOT_ALIVE_PHRASES)
+def test_not_wanting_to_be_alive_is_blocked_by_a_rule(message: str) -> None:
+    """Deterministically, with no help from the semantic layer at all."""
+    gate = SafetyGate()
+    verdict = gate.check_input(message, EmotionResult(), IntentResult(), "s")
+    assert verdict.blocked is True
+    assert "rule" in verdict.layers
+    assert "suicidal_ideation" in verdict.categories
+
+
+#: The suppressors must still hold on the new patterns - these are exactly the
+#: sentences a broad substring match would wrongly catch.
+@pytest.mark.parametrize(
+    "message",
+    [
+        "I am not suicidal and I do want to be alive",
+        "My essay analyses why Camus asks whether life is worth living",
+        "My friend said last year he did not want to be alive, he is fine now",
+        "I want to be alive for my kids",
+        "The project is alive and well after the reorg",
+    ],
+)
+def test_new_rules_keep_the_negation_and_framing_safeguards(message: str) -> None:
+    gate = SafetyGate()
+    assert gate.check_input(message, EmotionResult(), IntentResult(), "s").blocked is False
+
+
+def _blind_intent() -> IntentResult:
+    """An intent result whose semantic layer failed twice."""
+    return IntentResult(
+        semantic_status=SemanticStatus.MALFORMED,
+        semantic_parse_status=SemanticParseStatus.INVALID_JSON,
+        semantic_first_parse_status=SemanticParseStatus.INVALID_JSON,
+        semantic_retried=True,
+    )
+
+
+def _healthy_intent(score: float = 0.0) -> IntentResult:
+    return IntentResult(
+        semantic_status=SemanticStatus.OK,
+        semantic_crisis_score=score,
+        semantic_parse_status=SemanticParseStatus.PARSED,
+        semantic_first_parse_status=SemanticParseStatus.PARSED,
+    )
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "I just want it to be over, I keep thinking about dying",
+        "bas ab kuch bacha nahi hai, jeene ka kya matlab",
+    ],
+)
+def test_soft_cue_fallback_blocks_when_the_classifier_is_blind(message: str) -> None:
+    """Crisis-adjacent + no rule + classifier failed twice -> stop.
+
+    These phrasings are deliberately ones no rule covers. With a working
+    classifier they are the classifier's job; with a blind one, unknown risk is
+    treated as risk rather than as absence of risk.
+    """
+    gate = SafetyGate()
+    verdict = gate.check_input(message, EmotionResult(), _blind_intent(), "s")
+    assert verdict.blocked is True
+    assert verdict.layers == ["soft_cue_fallback"]
+    assert verdict.response and "14416" in verdict.response
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "My manager overruled my design decision again today",
+        "Should I accept the counter-offer from my current employer?",
+        "What does the Gita say about detachment from results?",
+    ],
+)
+def test_soft_cue_fallback_does_not_block_ordinary_turns(message: str) -> None:
+    """A parse failure must not turn a workplace question into a crisis.
+
+    This is the half of the policy that keeps the fallback usable: no cue means
+    today's behaviour, proceed and record the audit signal.
+    """
+    gate = SafetyGate()
+    verdict = gate.check_input(message, EmotionResult(), _blind_intent(), "s")
+    assert verdict.blocked is False
+    assert verdict.requires_audit(), "a blind classifier must still leave a trace"
+
+
+def test_soft_cue_fallback_is_inert_when_the_classifier_works() -> None:
+    """It is a fallback, not a second detector - a healthy low score wins."""
+    gate = SafetyGate()
+    verdict = gate.check_input(
+        "I am dying to get this promotion", EmotionResult(), _healthy_intent(0.0), "s"
+    )
+    assert verdict.blocked is False
+
+
+def test_soft_cue_fallback_defers_to_a_rule_that_already_fired() -> None:
+    """No double-counting: a real detection is reported as the rule, not the cue."""
+    gate = SafetyGate()
+    verdict = gate.check_input(
+        "I want to kill myself", EmotionResult(), _blind_intent(), "s"
+    )
+    assert verdict.blocked is True
+    assert "rule" in verdict.layers
+    assert "soft_cue_fallback" not in verdict.layers
+
+
+def test_emotion_alone_still_never_blocks_on_the_fallback_path() -> None:
+    """The fallback consults cues and the classifier, never GoEmotions."""
+    gate = SafetyGate()
+    distressed = EmotionResult(
+        labels=[EmotionScore(emotion="grief", score=0.99)], intensity=0.99
+    )
+    verdict = gate.check_input(
+        "My quarterly targets were raised again", distressed, _blind_intent(), "s"
+    )
+    assert verdict.blocked is False

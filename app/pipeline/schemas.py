@@ -108,7 +108,15 @@ class IntentResult(BaseModel):
     semantic_provider: str = ""
     semantic_model: str = ""
     semantic_crisis_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    #: Parse outcome of the attempt whose scores were used (the retry, when one
+    #: happened).
     semantic_parse_status: SemanticParseStatus = SemanticParseStatus.NOT_ATTEMPTED
+    #: Parse outcome of the *first* attempt, kept even when a retry replaced it.
+    #: Without it a successful retry would erase the evidence that the model
+    #: returns unparseable content at a measurable rate.
+    semantic_first_parse_status: SemanticParseStatus = SemanticParseStatus.NOT_ATTEMPTED
+    #: True when the first attempt was unusable and a second was made.
+    semantic_retried: bool = False
     semantic_finish_reason: str = ""
     semantic_prompt_tokens: int = Field(default=0, ge=0)
     semantic_completion_tokens: int = Field(default=0, ge=0)
@@ -119,6 +127,10 @@ class SafetyLayer(str, Enum):
     RULE = "rule"
     MODEL = "model"
     OUTPUT = "output"
+    #: Conservative fallback used only when the semantic layer is blind: the
+    #: message carries a crisis-adjacent cue, no deterministic rule fired, and
+    #: the classifier failed to parse twice. See ``SOFT_CRISIS_CUES``.
+    SOFT_CUE_FALLBACK = "soft_cue_fallback"
 
 
 class SafetyCategory(str, Enum):
