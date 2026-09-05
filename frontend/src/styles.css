@@ -1,0 +1,569 @@
+/*
+ * GitaGuide beta — design system.
+ *
+ * One column, one accent, one motion moment. The palette is dusk indigo with a
+ * single marigold accent; there is deliberately no red anywhere, including on
+ * errors and the crisis panel, because a person in distress should not be met
+ * with an alarm colour.
+ */
+
+:root {
+  --page: #141b33;
+  --panel: #1c2547;
+  --field: #273159;
+  --hair: #34406e;
+  --ink: #f3eee2;
+  --ink-soft: #b7b3a4;
+  --accent: #e9a23b;
+  --crisis: #33294a;
+
+  --column: 44rem;
+  --radius: 10px;
+
+  --font-display: 'Martel', Georgia, 'Times New Roman', serif;
+  --font-ui: 'Mukta', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 17px;
+  font-weight: 300;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+/* Focus is never removed, only restyled. Keyboard users must be able to see
+ * where they are on every control in this app. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------------------------------------------------------------- shell --- */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.column {
+  width: 100%;
+  max-width: var(--column);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+/* --------------------------------------------------------------- header --- */
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--page);
+  border-bottom: 1px solid var(--hair);
+}
+
+.header-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-top: 0.9rem;
+  padding-bottom: 0.9rem;
+}
+
+.wordmark {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.35rem;
+  letter-spacing: 0.01em;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.wordmark em {
+  color: var(--accent);
+  font-style: normal;
+}
+
+.tag {
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+  white-space: nowrap;
+}
+
+.tag-mock {
+  color: var(--page);
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.header-spacer {
+  flex: 1;
+}
+
+.link-button {
+  background: none;
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 0.25rem 0.8rem;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.link-button:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+/* ----------------------------------------------------------- transcript --- */
+
+.transcript {
+  flex: 1;
+  padding-top: 2rem;
+  padding-bottom: 1rem;
+}
+
+.empty-state {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.5rem;
+  line-height: 1.4;
+  color: var(--ink);
+  margin: 3.5rem 0 0;
+}
+
+.empty-hint {
+  color: var(--ink-soft);
+  margin-top: 0.6rem;
+  font-size: 0.95rem;
+}
+
+.turn {
+  margin-bottom: 2.25rem;
+}
+
+/* User: a quiet right-aligned bubble. It should read as an aside, not a
+ * headline — the assistant's reflection is the content of the page. */
+.turn-user {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.bubble {
+  background: var(--field);
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  padding: 0.65rem 0.95rem;
+  max-width: 85%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Assistant: no bubble. Commentary against a marigold rule. */
+.commentary {
+  border-left: 2px solid var(--accent);
+  padding-left: 1.15rem;
+}
+
+.commentary p {
+  margin: 0 0 1rem;
+  overflow-wrap: anywhere;
+}
+
+.commentary p:last-child {
+  margin-bottom: 0;
+}
+
+.commentary-heading {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 0.78rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 1.6rem 0 0.5rem;
+}
+
+.crisis .commentary-heading {
+  margin-top: 1.2rem;
+}
+
+.commentary ul,
+.crisis ul {
+  margin: 0 0 1rem;
+  padding-left: 1.15rem;
+  list-style: none;
+}
+
+.commentary li,
+.crisis li {
+  position: relative;
+  margin-bottom: 0.35rem;
+}
+
+.commentary li::before,
+.crisis li::before {
+  content: '·';
+  position: absolute;
+  left: -0.9rem;
+  color: var(--accent);
+}
+
+.commentary strong,
+.crisis strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* ---------------------------------------------------------------- verse --- */
+
+.leaf {
+  background: var(--panel);
+  border-top: 2px solid var(--accent);
+  border-radius: 0 0 var(--radius) var(--radius);
+  padding: 1rem 1.15rem 1.1rem;
+  margin: 1.25rem 0;
+}
+
+.leaf-ref {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.9rem;
+  letter-spacing: 0.03em;
+  color: var(--accent);
+  margin: 0 0 0.5rem;
+}
+
+.leaf-text {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.02rem;
+  line-height: 1.85;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.leaf-source {
+  margin: 0.6rem 0 0;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  letter-spacing: 0.04em;
+}
+
+/* --------------------------------------------------------------- crisis --- */
+
+.crisis {
+  background: var(--crisis);
+  border-left: 2px solid var(--accent);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  padding: 1.15rem 1.25rem;
+}
+
+.crisis p {
+  margin: 0 0 0.9rem;
+}
+
+.crisis p:last-child {
+  margin-bottom: 0;
+}
+
+.crisis-help {
+  border-top: 1px solid var(--hair);
+  padding-top: 0.8rem;
+  margin-top: 0.9rem;
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+}
+
+.crisis-help strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------- error --- */
+
+.error-turn {
+  border-left: 2px solid var(--hair);
+  padding-left: 1.15rem;
+  color: var(--ink-soft);
+}
+
+.error-turn p {
+  margin: 0 0 0.7rem;
+}
+
+.retry-button {
+  background: none;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 500;
+  padding: 0.25rem 0.9rem;
+}
+
+.retry-button:hover {
+  background: var(--accent);
+  color: var(--page);
+}
+
+/* ----------------------------------------------------------------- meta --- */
+
+.meta {
+  margin-top: 0.9rem;
+  padding-left: 1.15rem;
+  font-size: 0.78rem;
+  line-height: 1.7;
+  color: var(--ink-soft);
+  letter-spacing: 0.02em;
+}
+
+.meta span + span::before {
+  content: '·';
+  margin: 0 0.45rem;
+  color: var(--hair);
+}
+
+/* -------------------------------------------------------------- waiting --- */
+
+.waiting {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--ink-soft);
+  padding-left: 1.15rem;
+  border-left: 2px solid var(--hair);
+}
+
+/* The single motion moment in the whole app: a slow diya. */
+.diya {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+  animation: diya-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes diya-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .diya {
+    animation: none;
+    opacity: 0.9;
+  }
+}
+
+/* ------------------------------------------------------------- composer --- */
+
+.composer-wrap {
+  position: sticky;
+  bottom: 0;
+  background: var(--page);
+  border-top: 1px solid var(--hair);
+  padding-top: 0.9rem;
+  padding-bottom: 0.75rem;
+}
+
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.65rem;
+}
+
+.composer textarea {
+  flex: 1;
+  background: var(--field);
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  color: var(--ink);
+  padding: 0.7rem 0.9rem;
+  resize: none;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.composer textarea::placeholder {
+  color: var(--ink-soft);
+}
+
+.composer textarea:disabled {
+  opacity: 0.6;
+}
+
+.send-button {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  color: var(--page);
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.65rem 1.15rem;
+}
+
+.send-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.footnote {
+  margin: 0.7rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+/* --------------------------------------------------------------- gate ----- */
+
+.gate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 2rem 1.25rem;
+}
+
+.gate-card {
+  width: 100%;
+  max-width: 34rem;
+  background: var(--panel);
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  padding: 1.75rem;
+}
+
+.gate-card h1 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.6rem;
+  margin: 0 0 1rem;
+}
+
+.gate-card h1 em {
+  color: var(--accent);
+  font-style: normal;
+}
+
+.gate-card h2 {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 0.78rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 1.4rem 0 0.4rem;
+}
+
+.gate-card p {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+}
+
+.gate-card ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.95rem;
+}
+
+.gate-card li {
+  margin-bottom: 0.3rem;
+}
+
+.gate-accept {
+  width: 100%;
+  margin-top: 1.75rem;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  color: var(--page);
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.75rem 1rem;
+}
+
+/* --------------------------------------------------------------- mobile --- */
+
+@media (max-width: 480px) {
+  body {
+    font-size: 16px;
+  }
+
+  .column {
+    padding: 0 0.9rem;
+  }
+
+  .bubble {
+    max-width: 92%;
+  }
+
+  .commentary,
+  .meta,
+  .waiting,
+  .error-turn {
+    padding-left: 0.85rem;
+  }
+
+  .wordmark {
+    font-size: 1.15rem;
+  }
+
+  .gate-card {
+    padding: 1.25rem;
+  }
+}
