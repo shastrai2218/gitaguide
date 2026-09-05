@@ -111,8 +111,9 @@ retriever over `corpus/data/sample_corpus.json` (16 verses), the deterministic `
 and the in-memory repository. **The safety gate, the citation enforcement and the graph traversal
 are the real implementations** — only the backing stores and the model weights are faked.
 
-Install everything (`pip install -r requirements.txt`) when you want the real emotion model,
-MiniLM embeddings, Neo4j and a hosted LLM.
+Install `requirements-dev.txt` when you want the real emotion model, MiniLM embeddings, Neo4j
+and a hosted LLM. `requirements.txt` is the **serving** set and is deliberately torch-free: both
+models run as ONNX graphs on onnxruntime, which keeps the runtime at ~490 MB instead of ~5.6 GB.
 
 ---
 
@@ -168,7 +169,9 @@ gitaguide/
 ├── docker-compose.yml           api + neo4j + postgres + frontend
 ├── Dockerfile                   CPU-only API image
 ├── .github/workflows/ci.yml     lint · unit tests · red-team gate · retrieval metrics · FE build
-├── requirements.txt  pyproject.toml  pytest.ini  .env.example
+├── requirements.txt             serving runtime — torch-free, ONNX only
+├── requirements-dev.txt         the above + pytest/ruff/mypy + the torch reference encoder
+├── pyproject.toml  pytest.ini  .env.example
 ```
 
 ---
@@ -323,7 +326,7 @@ think-block stripping, the intent clamp and the whole failover chain. `conftest.
 3. Fill in `GITAGUIDE_NEO4J_*` (AuraDB works as-is), `GITAGUIDE_POSTGRES_DSN`, and `NVIDIA_API_KEY`
    (see [The LLM layer](#the-llm-layer-nvidia-nim)). With `MOCK_MODE=false` and that key set, NIM
    becomes the default provider automatically.
-4. `pip install -r requirements.txt`
+4. `pip install -r requirements-dev.txt` (or `requirements.txt` for a serving-only install)
 5. Build the corpus and the graph (phases 1–2), then start the API.
 
 Backends can be switched on individually — `GITAGUIDE_USE_REAL_NEO4J=true` with everything else
@@ -478,8 +481,9 @@ never hardcoded and `.env` is git-ignored. The knobs that change research behavi
   understanding. Unseen phrasing still depends on the zero-shot semantic classifier.
 - The bundled sample corpus is 16 verses — enough to develop and test against, not to evaluate on.
   Run phases 1–2 for the full corpus before reporting numbers.
-- `Base.metadata.create_all` is used instead of migrations; Alembic is listed in
-  `requirements.txt` but not yet wired.
+- `Base.metadata.create_all` is used instead of migrations, with an additive
+  `ADD COLUMN IF NOT EXISTS` pass in `app/db/session.py` for columns added after a table went
+  live. Alembic is listed in `requirements-dev.txt` but not yet wired.
 
 **Not a clinical tool.** GitaGuide is a research prototype. It is not a therapist, doctor or
 lawyer, it says so in the UI, and the safety gate exists precisely because the failure mode of a

@@ -1,0 +1,27 @@
+# ---------------------------------------------------------------------------
+# GitaGuide development / evaluation dependencies.
+#
+# Everything the serving runtime needs, plus the tools it must NOT ship with.
+# Install this on a workstation; install requirements.txt in a container.
+#
+#     pip install -r requirements-dev.txt
+# ---------------------------------------------------------------------------
+
+-r requirements.txt
+
+# ---- test and lint --------------------------------------------------------
+pytest==9.1.1
+pytest-asyncio==1.4.0
+pytest-cov==6.3.0
+ruff==0.16.4
+mypy==1.18.2
+
+# ---- migrations (not wired yet; see app/db/session.py ADDITIVE_COLUMNS) ---
+alembic==1.17.1
+
+# ---- torch, and the only thing that needs it ------------------------------
+# `sentence-transformers` is the reference implementation the ONNX embedder is
+# checked against (tests/test_embeddings.py::test_onnx_matches_the_torch_encoder).
+# It is NOT importable from the serving path - see app/embeddings.py. Keeping it
+# here, and only here, is what makes the serving image torch-free.
+sentence-transformers==6.0.0

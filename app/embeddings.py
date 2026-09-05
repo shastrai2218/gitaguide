@@ -23,6 +23,10 @@ from app.config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
+
+class EmbeddingError(RuntimeError):
+    """The real embedder is unusable and a fallback would be dishonest."""
+
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 #: Very small English stop list - enough for the offline lexical channel.
@@ -94,38 +98,96 @@ class HashingEmbedder(Embedder):
         return [value / norm for value in vector]
 
 
-class SentenceTransformerEmbedder(Embedder):
-    """``sentence-transformers/all-MiniLM-L6-v2`` (lazy-loaded, CPU)."""
+class OnnxMiniLMEmbedder(Embedder):
+    """``all-MiniLM-L6-v2`` on onnxruntime, with no torch in the process.
 
-    name = "all-MiniLM-L6-v2"
+    Why this exists
+    ---------------
+    ``sentence-transformers`` was the only torch dependency on the serving path,
+    and torch is ~4.4 GB installed. The model itself is a 6-layer MiniLM; it
+    does not need a training framework to run a forward pass. This backend runs
+    the repository's own fp32 ONNX export on onnxruntime and reproduces
+    sentence-transformers' pipeline explicitly: mean-pool the token embeddings
+    under the attention mask, then L2-normalise.
+
+    **fp32, deliberately.** The Neo4j vector index was built with the torch fp32
+    encoder. An INT8 export would shift every query vector relative to the
+    stored ones, degrading retrieval in a way that no test would catch. The
+    emotion model is quantised because its output is a label; this one has to
+    stay commensurate with vectors already in the database.
+
+    Parity with the torch encoder is pinned by ``tests/test_embeddings.py``.
+    Heavy imports are inside :meth:`_ensure_loaded`, never at module import.
+    """
+
+    name = "all-MiniLM-L6-v2-onnx"
 
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
         self.dim = self.settings.embedding_dim
-        self._model: object | None = None
+        self._session: object | None = None
+        self._tokenizer: object | None = None
 
     def _ensure_loaded(self) -> None:
-        if self._model is not None:
+        if self._session is not None:
             return
-        from sentence_transformers import SentenceTransformer
 
-        logger.info("loading embedding model %s", self.settings.embedding_model_id)
-        self._model = SentenceTransformer(self.settings.embedding_model_id, device="cpu")
-        self.dim = int(self._model.get_sentence_embedding_dimension())  # type: ignore[attr-defined]
+        import onnxruntime as ort
+        from huggingface_hub import hf_hub_download
+        from transformers import AutoTokenizer
+
+        settings = self.settings
+        logger.info(
+            "loading embedding model %s (%s, onnx fp32)",
+            settings.embedding_model_id,
+            settings.embedding_onnx_file,
+        )
+        model_path = hf_hub_download(
+            repo_id=settings.embedding_model_id,
+            filename=settings.embedding_onnx_file,
+        )
+        options = ort.SessionOptions()
+        options.intra_op_num_threads = settings.onnx_intra_op_threads
+        options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+
+        self._session = ort.InferenceSession(
+            model_path, sess_options=options, providers=["CPUExecutionProvider"]
+        )
+        self._tokenizer = AutoTokenizer.from_pretrained(settings.embedding_model_id)
+
+        shape = self._session.get_outputs()[0].shape  # type: ignore[attr-defined]
+        hidden = shape[-1] if isinstance(shape[-1], int) else settings.embedding_dim
+        self.dim = int(hidden)
 
     def warmup(self) -> None:
         self._ensure_loaded()
+        self.embed(["warmup"])
 
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
         self._ensure_loaded()
-        assert self._model is not None
-        vectors = self._model.encode(  # type: ignore[attr-defined]
+        assert self._session is not None and self._tokenizer is not None
+        import numpy as np
+
+        encoded = self._tokenizer(  # type: ignore[operator]
             list(texts),
-            normalize_embeddings=True,
-            show_progress_bar=False,
-            convert_to_numpy=True,
+            padding=True,
+            truncation=True,
+            max_length=self.settings.embedding_max_seq_length,
+            return_tensors="np",
         )
-        return [[float(value) for value in row] for row in vectors]
+        input_names = {item.name for item in self._session.get_inputs()}  # type: ignore[attr-defined]
+        feed = {name: value for name, value in encoded.items() if name in input_names}
+        hidden_states = self._session.run(None, feed)[0]  # type: ignore[attr-defined]
+
+        # Mean pooling under the attention mask, exactly as the Pooling module
+        # in the sentence-transformers config does it.
+        mask = encoded["attention_mask"].astype(hidden_states.dtype)[..., None]
+        summed = (hidden_states * mask).sum(axis=1)
+        counts = np.clip(mask.sum(axis=1), a_min=1e-9, a_max=None)
+        pooled = summed / counts
+
+        norms = np.clip(np.linalg.norm(pooled, axis=1, keepdims=True), a_min=1e-12, a_max=None)
+        return [[float(value) for value in row] for row in pooled / norms]
 
 
 def build_embedder(settings: Settings | None = None) -> Embedder:
@@ -133,10 +195,18 @@ def build_embedder(settings: Settings | None = None) -> Embedder:
     settings = settings or get_settings()
     if settings.mock_mode:
         return HashingEmbedder(dim=settings.embedding_dim)
+
+    embedder = OnnxMiniLMEmbedder(settings)
     try:
-        embedder = SentenceTransformerEmbedder(settings)
         embedder.warmup()
-        return embedder
-    except Exception:  # pragma: no cover - depends on local model cache
-        logger.exception("sentence-transformers unavailable; using hashing embedder")
-        return HashingEmbedder(dim=settings.embedding_dim)
+    except Exception as exc:  # pragma: no cover - depends on the model cache
+        # Never degrade silently. The hashing embedder produces vectors that
+        # are unrelated to the MiniLM vectors in the Neo4j index, so falling
+        # back to it would leave retrieval returning near-random verses while
+        # every component still reported healthy.
+        raise EmbeddingError(
+            f"the real embedder could not be loaded ({exc}). Retrieval would "
+            "return meaningless results against a MiniLM-built index, so this "
+            "is fatal. Set GITAGUIDE_MOCK_MODE=true to run offline."
+        ) from exc
+    return embedder

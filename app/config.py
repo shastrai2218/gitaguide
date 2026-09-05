@@ -85,6 +85,13 @@ class Settings(BaseSettings):
 
     embedding_model_id: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_dim: int = 384
+    #: fp32 ONNX export of the embedding model, run on onnxruntime so the
+    #: serving runtime needs no torch. fp32 on purpose: the Neo4j index was
+    #: built with the fp32 encoder and a quantised query vector would not be
+    #: commensurate with it.
+    embedding_onnx_file: str = "onnx/model.onnx"
+    #: ``max_seq_length`` from the model's sentence_bert_config.json.
+    embedding_max_seq_length: int = 256
 
     # ------------------------------------------------------------------ corpus
     #: Explicit corpus file for the in-memory retriever. ``None`` uses the
