@@ -46,3 +46,6 @@ Thumbs.db
 
 # Telemetry (rotating local files; the database is the durable record)
 logs/
+
+# Graph export artefacts (33 MB of embeddings; regenerate with scripts/export_neo4j.py)
+data/graph_export/
