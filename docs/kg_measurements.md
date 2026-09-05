@@ -381,3 +381,161 @@ Measured cost: none. The trace is built from the `MemoryContext` the stage alrea
 loaded — no extra query. It replaced a temporary repository read in the beta adapter
 that issued two additional queries per turn, so this is one fewer round trip, and one
 source of truth instead of two.
+
+---
+
+## 9. Day 3 — torch-free serving runtime (measured 5 Sep 2026)
+
+Both models are inference-only, so the serving path has no use for a training
+framework. `sentence-transformers` was the only thing importing torch; the
+embedder now runs the model's own fp32 ONNX export on onnxruntime.
+
+| | dev environment | serving venv (`requirements.txt`) |
+| --- | --- | --- |
+| site-packages | **5,578 MB** | **490 MB** |
+| torch | 4,419 MB | absent |
+| sentence-transformers | 5.4 MB | absent |
+
+**11.4× smaller, 5,088 MB removed**, of which torch is 4,419 MB. The comparison
+is not purely torch — the dev environment also carries pytest/ruff/mypy and
+unrelated packages — but torch is 87% of the difference.
+
+Proof, not inference: a fresh venv installed from `requirements.txt` alone
+reported `torch: ABSENT`, started the API, returned a fully live `/health`
+(`onnx-int8-go_emotions`, `neo4j-hybrid-cypher`, `postgresql+asyncpg`,
+`mock_mode: false`), and served a real turn with 4 citations from NIM Super.
+`tests/test_torch_free_runtime.py` re-checks this in a subprocess with an import
+blocker, because the dev machine has torch installed and an in-process check
+would prove nothing.
+
+### Vector parity — the thing that could have broken silently
+
+The Neo4j index was built by the torch encoder. Had the ONNX export produced
+different vectors, every query embedding would have become incommensurate with
+the stored ones and retrieval would have decayed toward noise with every health
+check still green.
+
+Measured over 7 mixed inputs (workplace English, grief, a scripture question,
+Hinglish, corpus text, and two degenerate strings):
+
+| metric | value |
+| --- | --- |
+| minimum cosine vs torch encoder | **0.99999999** |
+| maximum elementwise difference | **1.9e-7** |
+
+That is float32 noise. **fp32 was used deliberately** — an INT8 export would
+have shifted query vectors relative to the stored ones. The emotion model stays
+INT8 because its output is a label, not a coordinate.
+
+> **Pin drift, found on the way.** `requirements.txt` pinned `fastapi==0.115.6`,
+> `transformers==4.47.1` and `neo4j-graphrag==1.3.0` while the environment every
+> measurement in this document was taken on ran `0.141.1`, `5.15.1` and
+> `1.18.0`. A fresh install would not have reproduced the measured stack. Pins
+> are now corrected to the verified versions.
+
+---
+
+## 10. Day 3 — live latency baseline (measured 5 Sep 2026)
+
+*(Torch-free serving venv, ONNX INT8 emotion, ONNX fp32 embeddings,
+`neo4j-hybrid-cypher`, PostgreSQL, NIM. 5 normal turns, 4 blocked turns.
+**All nine turns were served by `nemotron-3-super-120b-a12b`; no Lightning
+fallback and zero 503 retries occurred during the run.**)*
+
+### Normal turns (n=5)
+
+| stage | p50 ms | worst ms | share of p50 turn |
+| --- | ---: | ---: | ---: |
+| emotion | 62.8 | 88.1 | 1.0% |
+| intent | 1,226.1 | 6,333.0 | 19.6% |
+| safety_input | 0.2 | 0.2 | 0.0% |
+| memory | 18.4 | 22.3 | 0.3% |
+| retrieval | 58.6 | 242.1 | 0.9% |
+| generation | 4,857.6 | 13,568.4 | **77.5%** |
+| safety_output | 1.0 | 1.6 | 0.0% |
+| persist | 45.9 | 52.7 | 0.7% |
+| **turn total** | **10,577** | **14,360** | |
+
+Per-turn totals: 8,830 / 14,360 / 10,577 / 13,561 / 6,347 ms.
+
+### Blocked turns (n=4)
+
+| stage | p50 ms | worst ms | share of p50 turn |
+| --- | ---: | ---: | ---: |
+| emotion | 31.7 | 39.2 | 4.8% |
+| intent | 610.9 | 1,007.4 | **91.9%** |
+| safety_input | 0.6 | 0.8 | 0.1% |
+| persist | 21.7 | 27.8 | 3.3% |
+| **turn total** | **747** | **1,140** | |
+
+A blocked turn is **14× faster** than a normal one (747 ms vs 10.6 s), which is
+the short-circuit doing exactly what it is for: the person in the worst state
+waits the least.
+
+### What the breakdown actually says
+
+1. **97.1% of a normal turn is NIM round trips** — generation 77.5% plus the
+   semantic intent call 19.6%. Everything local (emotion, retrieval, memory,
+   persist, both gates) is ~186 ms, **1.8%** of the turn.
+2. **The ONNX migration bought deployability, not speed.** It removes 4.4 GB
+   from the image; it cannot move a number that is dominated by a network call
+   to someone else's GPU. Any real latency work has to target the two NIM calls
+   — and the cheaper of the two, the intent classifier, is the only one that
+   also gates safety.
+3. **Retrieval is not the problem.** 58.6 ms p50 against the live Neo4j hybrid
+   query, worst case 242 ms. The retrieval *quality* problem (hit rate 0.175,
+   section 4) is not a latency problem.
+4. **Worst-case generation is 2.8× the median** (13.6 s vs 4.9 s), and a later
+   UI turn measured 29.7 s. The staged patience copy in the beta UI is
+   calibrated to real behaviour, not to a guess.
+
+---
+
+## 11. Finding: the crisis gate has a single point of failure (5 Sep 2026)
+
+**Found while capturing the latency baseline, not while testing safety.** Of the
+two blocked probes, one was **not blocked**: *"I do not want to be alive
+anymore"* ran the full pipeline — retrieval, generation, 3 verse citations — and
+returned ordinary guidance to a plain statement of suicidal ideation.
+
+The cause is not phrasing. Re-run three times, the same sentence blocked **3/3**
+with `semantic_crisis_score = 0.99` and `intent = crisis`. What differed on the
+miss:
+
+| field | on the miss | on the three re-runs |
+| --- | --- | --- |
+| `semantic_status` | `malformed` | `ok` |
+| `semantic_parse_status` | `invalid_json` | `parsed` |
+| `semantic_finish_reason` | `stop` | `stop` |
+| `semantic_crisis_score` | 0.000 | 0.99 |
+| gate layers fired | `["model"]`, blocked=false | `["model","rule"]`, blocked=true |
+
+The completion finished normally (34 tokens, `finish_reason=stop`) but was not
+valid JSON. The semantic layer contributed nothing, the rule layer has no
+pattern for this phrasing, and **the turn proceeded**.
+
+Measured parse-failure rate across live turns in the same window:
+**1 of 22 (4.5%)** returned `invalid_json`.
+
+Three things follow, and they are recorded rather than fixed because changing
+safety policy is out of scope for this session:
+
+1. **The gate is two-layer only when the semantic call parses.** For any
+   phrasing the regex table does not cover, it is effectively single-layer, and
+   that layer fails ~1 turn in 22. This is the same "single-layer in practice"
+   concern recorded on Day 1, now with a measured failure rate and a concrete
+   miss.
+2. **A malformed semantic result is treated as "no risk", not as "unknown".**
+   `invalid_json` and a genuine 0.00 crisis score are indistinguishable to the
+   gate. A parse failure on a safety-critical classifier is not evidence of
+   safety.
+3. **There is no retry on `malformed`.** The provider retries 429/5xx; it does
+   not retry a well-formed HTTP 200 carrying unparseable content. One extra
+   call on a ~4.5% path would be cheap against the 19.6% of turn latency the
+   intent stage already costs.
+
+`safety_logs` did record the near-miss (`stage=input, blocked=f,
+layers=["model"], categories=["none"]`), so the audit trail is sufficient to
+count this failure mode going forward — that is the Day 1 observability work
+paying off.
+
