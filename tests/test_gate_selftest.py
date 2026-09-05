@@ -17,8 +17,12 @@ from app.main import create_app
 from app.pipeline.gate_selftest import (
     CANONICAL_CONTROL,
     CANONICAL_CRISIS,
+    MIN_GENERATION_BUDGET_SECONDS,
     GateSelfTestError,
+    StartupConfigError,
+    check_generation_budget,
     run_gate_self_test,
+    run_startup_self_test,
 )
 from app.pipeline.safety import RULES, SafetyGate
 
@@ -70,10 +74,10 @@ def test_the_app_will_not_start_with_a_disarmed_gate(
     """End to end: a broken gate takes the process down, it does not warn."""
     import app.main as main
 
-    def explode() -> None:
+    def explode(*args: object, **kwargs: object) -> None:
         raise GateSelfTestError("refusing to start: simulated disarmed gate")
 
-    monkeypatch.setattr(main, "run_gate_self_test", explode)
+    monkeypatch.setattr(main, "run_startup_self_test", explode)
     app = create_app(Settings(mock_mode=True, environment="test"))
 
     with pytest.raises(GateSelfTestError), TestClient(app):
@@ -90,3 +94,55 @@ def test_the_canonical_cases_are_what_they_claim_to_be() -> None:
     assert not neutral.blocked
     # The control must be a plausible tester message, not a nonsense string.
     assert len(CANONICAL_CONTROL.split()) >= 5
+
+
+# --------------------------------------------------------------------------- #
+# The generation-budget floor
+# --------------------------------------------------------------------------- #
+def test_the_default_budget_passes_the_floor() -> None:
+    check_generation_budget(Settings(mock_mode=True))
+
+
+def test_a_budget_below_the_floor_refuses_to_start() -> None:
+    """The 2s budget that starved the classifier on 5 Sep must not be bootable."""
+    with pytest.raises(StartupConfigError) as failure:
+        check_generation_budget(
+            Settings(mock_mode=True, generation_budget_seconds=2.0)
+        )
+
+    message = str(failure.value)
+    assert "refusing to start" in message
+    assert "starves" in message
+    # The error has to say what to change, not just that something is wrong.
+    assert "GITAGUIDE_GENERATION_BUDGET_SECONDS" in message
+
+
+def test_the_floor_is_inclusive() -> None:
+    """Exactly at the floor is allowed; the floor is a minimum, not a gap."""
+    check_generation_budget(
+        Settings(mock_mode=True, generation_budget_seconds=MIN_GENERATION_BUDGET_SECONDS)
+    )
+    with pytest.raises(StartupConfigError):
+        check_generation_budget(
+            Settings(
+                mock_mode=True,
+                generation_budget_seconds=MIN_GENERATION_BUDGET_SECONDS - 0.1,
+            )
+        )
+
+
+def test_a_low_budget_is_rejected_rather_than_clamped() -> None:
+    """Clamping would run a number nobody chose and say nothing about it."""
+    settings = Settings(mock_mode=True, generation_budget_seconds=1.0)
+    with pytest.raises(StartupConfigError):
+        run_startup_self_test(settings)
+    assert settings.generation_budget_seconds == 1.0, "the value must not be mutated"
+
+
+def test_the_app_will_not_start_with_a_budget_below_the_floor() -> None:
+    """End to end: a bad env var takes startup down, it does not warn."""
+    app = create_app(
+        Settings(mock_mode=True, environment="test", generation_budget_seconds=5.0)
+    )
+    with pytest.raises(StartupConfigError), TestClient(app):
+        pass  # pragma: no cover - startup raises before the body runs
