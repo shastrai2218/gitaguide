@@ -21,6 +21,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.beta import router as beta_router
+from app.api.concurrency import PipelineGate
 from app.api.ratelimit import build_rate_limiter
 from app.api.routes import router
 from app.config import Settings, get_settings
@@ -95,6 +96,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.orchestrator = orchestrator
     app.state.rate_limiter = build_rate_limiter(settings)
     app.state.telemetry = build_telemetry(settings)
+    app.state.pipeline_gate = (
+        PipelineGate(settings.pipeline_queue_timeout_seconds)
+        if settings.pipeline_serialise
+        else None
+    )
+    if settings.pipeline_serialise:
+        logger.info(
+            "pipeline serialised: one turn at a time, %.0fs queue timeout "
+            "(peak memory is one turn, not N)",
+            settings.pipeline_queue_timeout_seconds,
+        )
+    else:
+        logger.warning(
+            "PIPELINE SERIALISATION IS OFF; concurrent turns can exceed the "
+            "memory limit and be SIGKILLed"
+        )
     if settings.telemetry_enabled:
         logger.info("telemetry -> %s (no message text is written)", settings.telemetry_path)
     else:

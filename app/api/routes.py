@@ -107,6 +107,10 @@ async def health(
     limiter = getattr(request.app.state, "rate_limiter", None)
     if limiter is not None:
         components["rate_limit"] = limiter.snapshot()
+    gate = getattr(request.app.state, "pipeline_gate", None)
+    components["pipeline_serialised"] = gate is not None
+    if gate is not None:
+        components["pipeline_queue_depth"] = gate.waiting
     return HealthResponse(
         status="ok",
         app=settings.app_name,

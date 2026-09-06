@@ -48,9 +48,11 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
+from app.api.concurrency import PipelineBusyError, PipelineGate
 from app.api.ratelimit import RATE_LIMITED_MESSAGE, RateLimiter, client_ip_from
 from app.api.routes import OrchestratorDep
 from app.db.repository import FeedbackRecord
+from app.pipeline.generation import OVERLOADED_ANSWER, PROVIDER_OVERLOADED
 from app.pipeline.orchestrator import GuidanceOrchestrator
 from app.pipeline.schemas import GuidanceResult, UserTurn
 from app.telemetry import Telemetry
@@ -296,6 +298,34 @@ def _enforce_rate_limit(request: Request, session_id: str | None) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Pipeline admission
+# --------------------------------------------------------------------------- #
+async def _run_turn(
+    orchestrator: GuidanceOrchestrator,
+    turn: UserTurn,
+    gate: PipelineGate | None,
+    telemetry: Telemetry | None,
+) -> GuidanceResult:
+    """Run one turn, one at a time when the gate is enabled.
+
+    Only the pipeline is serialised. Consent, feedback and ``/health`` allocate
+    almost nothing and stay concurrent - making them queue behind a 30s turn
+    would be strictly worse for no memory saving.
+    """
+    if gate is None:
+        return await orchestrator.handle_turn(turn)
+
+    async with gate.admit() as queued_for:
+        if telemetry is not None:
+            # Separated so "the beta felt slow" can be checked against how often
+            # turns actually waited, rather than inferred from latency alone.
+            telemetry.record_counter(
+                "turns_queued_then_served" if queued_for > 0.05 else "turns_served_immediately"
+            )
+        return await orchestrator.handle_turn(turn)
+
+
+# --------------------------------------------------------------------------- #
 # Routes
 # --------------------------------------------------------------------------- #
 @router.post("/chat", response_model=BetaChatResponse)
@@ -311,9 +341,22 @@ async def beta_chat(
     _enforce_rate_limit(request, payload.session_id)
     await _require_consent(request, orchestrator, payload.session_id)
 
+    telemetry: Telemetry | None = getattr(request.app.state, "telemetry", None)
+    gate: PipelineGate | None = getattr(request.app.state, "pipeline_gate", None)
     turn = UserTurn(message=payload.message, session_id=payload.session_id)
+
     try:
-        result = await orchestrator.handle_turn(turn)
+        result = await _run_turn(orchestrator, turn, gate, telemetry)
+    except PipelineBusyError:
+        # Shed rather than queue forever. Same shape as any other turn, so the
+        # UI needs no special case; provider="overloaded" makes it countable.
+        if telemetry is not None:
+            telemetry.record_counter("turns_shed")
+        return BetaChatResponse(
+            reply=OVERLOADED_ANSWER,
+            blocked=False,
+            meta=BetaMeta(provider=PROVIDER_OVERLOADED, model=None, latency_ms=None),
+        )
     except Exception as exc:
         logger.exception("pipeline failure on beta /api/chat")
         raise HTTPException(
@@ -321,7 +364,6 @@ async def beta_chat(
             detail="the guidance pipeline failed; please try again",
         ) from exc
 
-    telemetry: Telemetry | None = getattr(request.app.state, "telemetry", None)
     if telemetry is not None:
         telemetry.record_turn(result, surface="beta")
 
