@@ -19,6 +19,7 @@ its own CORS origin — so the last step comes back to Render.
   3. Render      -> API deployed, smoke-tested
   4. Vercel      -> UI deployed
   5. Render      -> CORS origin, then re-smoke
+  6. GitHub      -> keep-warm variable, so the free instance stays awake
 ```
 
 Set aside about 90 minutes. The Aura node import is the long part.
@@ -123,10 +124,13 @@ the API's first boot. Reasoning and the verification queries:
 1. <https://dashboard.render.com> → **New** → **Web Service** → connect this
    repository.
 2. Render reads `render.yaml`. Confirm it picked up: **Docker** runtime,
-   **Starter** plan, health check path **`/health`**, **1** instance.
+   **Free** plan, health check path **`/health`**, **1** instance.
 
-   Keep Starter. On Free the instance sleeps, and the first request after a
-   sleep pays the entire ONNX model load — testers will read that as broken.
+   **Free needs no card.** The trade-off is real and accepted: the instance
+   spins down after ~15 minutes idle, and the next request pays a 30-60s cold
+   start while both ONNX models load. Step 6 sets up a keep-warm ping that
+   makes this rare during testing hours, and the UI says what is happening
+   when it does occur.
 
    Keep it at one instance. The rate limiter and telemetry counters are
    in-process, so two instances would silently double every limit below.
@@ -253,12 +257,56 @@ will refuse it until step 5.
 - [ ] the thumbs buttons record, showing "Thanks — recorded."
 - [ ] `New session` clears the transcript and starts a fresh session
 - [ ] no CORS errors in the browser console
+- [ ] the keep-warm workflow has run green at least once (step 6)
 
 And once more from your machine, now that CORS is set:
 
 ```bash
 python -m scripts.prod_smoke https://<your-service>.onrender.com
 ```
+
+---
+
+## Step 6 — GitHub (keep-warm)
+
+The API is on Render's Free plan, which sleeps after ~15 minutes without
+traffic. `.github/workflows/keepwarm.yml` pings `/health` every 10 minutes to
+keep it awake during testing hours. It needs one variable — a **variable**, not
+a secret, because the URL is public the moment a tester opens the app:
+
+1. GitHub → **Settings** → **Secrets and variables** → **Actions** →
+   **Variables** tab → **New repository variable**:
+
+   | Name | Value |
+   | --- | --- |
+   | `GITAGUIDE_HEALTH_URL` | `https://<your-service>.onrender.com` |
+
+   No trailing slash — the workflow appends `/health`.
+
+2. **Actions** → **keep-warm** → **Run workflow** to trigger it once by hand,
+   rather than waiting up to 10 minutes to discover a typo. A green run says
+   `ok (attempt 1)`. If the variable is unset it fails immediately and prints
+   this exact dashboard path.
+
+**What this buys, and what it does not.** It is a mitigation, not a fix:
+
+- GitHub's cron is **best-effort** and drifts by a few minutes under load;
+  occasional runs are skipped entirely. A missed ping costs one slow request.
+- **The ping spends Free instance-hours.** Render Free gives a fixed monthly
+  budget of instance time, and keeping the service awake is exactly what
+  consumes it. Ten-minute pings across a month is the bulk of that budget, so
+  if you run out mid-beta, this is why. Check **Render → Billing → Usage**.
+- Scheduled workflows are **disabled after 60 days** of repository inactivity.
+  If the beta pauses and resumes, confirm it is still enabled.
+- A genuinely quiet night will still produce one slow first message. The UI
+  handles it honestly: at 35s the waiting copy says *"Waking the server — free
+  hosting sleeps when quiet."*
+
+**Escalation.** If cold starts cost more tester goodwill than the plan costs
+money, switch to **Starter** in the Render dashboard: one dropdown, effective
+without a redeploy, no code change. Update `plan:` in `render.yaml` afterwards
+so the file matches reality. You can then disable this workflow, though leaving
+it running is harmless.
 
 ---
 
@@ -279,9 +327,16 @@ python -m scripts.prod_smoke https://<your-service>.onrender.com
 
 Stated here rather than discovered later:
 
+- **Free plan: the instance sleeps.** After ~15 minutes idle it spins down, and
+  the next request waits 30-60s for it to wake and load both ONNX models. The
+  keep-warm ping makes this uncommon during testing hours but cannot eliminate
+  it, and the ping itself consumes the monthly instance-hour budget. Upgrading
+  to Starter removes the behaviour entirely and is one dropdown away.
 - **One instance, in-process counters.** Rate limits and telemetry counters
-  live in memory. They reset on every restart and deploy, and scaling to two
-  instances would double every limit. Moving them to shared storage is a
+  live in memory. They reset on every restart and deploy — and on the free plan
+  a spin-down is a restart, so a quiet period silently resets the day's
+  telemetry counters. The durable record is PostgreSQL. Scaling to two
+  instances would double every limit; moving these to shared storage is a
   prerequisite for scaling, not an optimisation.
 - **Telemetry is ephemeral.** `/app/logs/telemetry.jsonl` is on Render's
   ephemeral disk. PostgreSQL is the durable record; the JSONL is the
