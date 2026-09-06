@@ -149,6 +149,14 @@ class FallbackLLMProvider(LLMProvider):
         last_error: Exception | None = None
         started = time.monotonic()
         budget = self.budget_seconds
+        # Whether any attempt was cut short by the deadline. The end-of-chain
+        # error is chosen from this rather than from a clock comparison: the
+        # sum of the slices lands *at* the budget, so `elapsed >= budget` is a
+        # coin flip on timer resolution, and losing it meant reporting "all
+        # providers failed" for a turn that was purely slow. That is the
+        # difference between the honest overload reply and the template
+        # fallback, so it must not depend on a race.
+        timed_out = False
 
         for step, provider in enumerate(self.providers):
             remaining = None if budget is None else budget - (time.monotonic() - started)
@@ -187,6 +195,7 @@ class FallbackLLMProvider(LLMProvider):
                 return response
             except TimeoutError as exc:
                 last_error = exc
+                timed_out = True
                 logger.error(
                     "provider %s exceeded its %.1fs share of the generation budget "
                     "(%.1fs of %.1fs left)",
@@ -199,9 +208,11 @@ class FallbackLLMProvider(LLMProvider):
                 last_error = exc
                 logger.warning("provider %s failed (%s); trying next", provider.name, exc)
 
-        if budget is not None and (time.monotonic() - started) >= budget:
+        if timed_out:
+            elapsed = time.monotonic() - started
             raise BudgetExhaustedError(
-                f"generation budget of {budget:.1f}s exhausted; last error: {last_error}"
+                f"generation budget of {budget:.1f}s exhausted after {elapsed:.1f}s; "
+                f"last error: {last_error}"
             )
         raise LLMError(f"all providers failed; last error: {last_error}")
 
