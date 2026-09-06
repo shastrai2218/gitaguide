@@ -101,6 +101,9 @@ class HashingEmbedder(Embedder):
 class OnnxMiniLMEmbedder(Embedder):
     """``all-MiniLM-L6-v2`` on onnxruntime, with no torch in the process.
 
+    The instance sets :attr:`name` in ``__init__`` because it carries the
+    precision, which callers use to tell one encoder's vectors from another's.
+
     Why this exists
     ---------------
     ``sentence-transformers`` was the only torch dependency on the serving path,
@@ -110,23 +113,37 @@ class OnnxMiniLMEmbedder(Embedder):
     sentence-transformers' pipeline explicitly: mean-pool the token embeddings
     under the attention mask, then L2-normalise.
 
-    **fp32, deliberately.** The Neo4j vector index was built with the torch fp32
-    encoder. An INT8 export would shift every query vector relative to the
-    stored ones, degrading retrieval in a way that no test would catch. The
-    emotion model is quantised because its output is a label; this one has to
-    stay commensurate with vectors already in the database.
+    Precision
+    ---------
+    ``fp32`` by default; ``int8`` when ``embedder_precision`` says so. The INT8
+    file is the *same MiniLM*, quantised - not a different model.
 
-    Parity with the torch encoder is pinned by ``tests/test_embeddings.py``.
-    Heavy imports are inside :meth:`_ensure_loaded`, never at module import.
+    **Whichever is chosen must also have written the index.** Vectors are
+    compared by cosine, so an INT8 encoder against an fp32-built index drifts to
+    ~0.986 and quietly returns worse neighbours; nothing errors. Used on both
+    sides it is self-consistent and that penalty does not exist. The precision
+    is therefore part of :attr:`name`, so ``/health`` and every eval artefact
+    record which encoder produced the numbers.
+
+    Parity of the fp32 export against the torch encoder is pinned by
+    ``tests/test_embeddings.py``. Heavy imports are inside
+    :meth:`_ensure_loaded`, never at module import.
     """
-
-    name = "all-MiniLM-L6-v2-onnx"
 
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
         self.dim = self.settings.embedding_dim
+        self.precision = self.settings.embedder_precision
+        self.name = f"all-MiniLM-L6-v2-onnx-{self.precision}"
         self._session: object | None = None
         self._tokenizer: object | None = None
+
+    @property
+    def onnx_file(self) -> str:
+        """The export this instance loads, chosen by configured precision."""
+        if self.precision == "int8":
+            return self.settings.embedding_onnx_file_int8
+        return self.settings.embedding_onnx_file
 
     def _ensure_loaded(self) -> None:
         if self._session is not None:
@@ -138,13 +155,14 @@ class OnnxMiniLMEmbedder(Embedder):
 
         settings = self.settings
         logger.info(
-            "loading embedding model %s (%s, onnx fp32)",
+            "loading embedding model %s (%s, onnx %s)",
             settings.embedding_model_id,
-            settings.embedding_onnx_file,
+            self.onnx_file,
+            self.precision,
         )
         model_path = hf_hub_download(
             repo_id=settings.embedding_model_id,
-            filename=settings.embedding_onnx_file,
+            filename=self.onnx_file,
         )
         options = ort.SessionOptions()
         options.intra_op_num_threads = settings.onnx_intra_op_threads

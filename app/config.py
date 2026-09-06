@@ -92,6 +92,24 @@ class Settings(BaseSettings):
     embedding_onnx_file: str = "onnx/model.onnx"
     #: ``max_seq_length`` from the model's sentence_bert_config.json.
     embedding_max_seq_length: int = 256
+    #: INT8 export of the *same* MiniLM. Not a different model - the same
+    #: weights, quantised. ``quint8_avx2`` rather than an AVX-512 build because
+    #: it runs on any x86-64 host; the AVX-512 file is ~12 MiB smaller but only
+    #: loads where that instruction set is present.
+    embedding_onnx_file_int8: str = "onnx/model_quint8_avx2.onnx"
+    #: Which export to load: ``fp32`` or ``int8``.
+    #:
+    #: **The index and the query encoder must match.** Vectors are compared by
+    #: cosine, so querying an fp32-built index with an INT8 encoder silently
+    #: degrades retrieval - measured at 0.986 min cosine drift, which is not an
+    #: error anywhere, just worse neighbours. Both sides using the same INT8
+    #: encoder is self-consistent and has no such penalty; that is why this is
+    #: one switch rather than two.
+    #:
+    #: Default stays fp32 so local development and the existing local graph are
+    #: unchanged. Production sets ``GITAGUIDE_EMBEDDER_PRECISION=int8`` because
+    #: the free tier cannot hold the fp32 encoder (see render.yaml).
+    embedder_precision: Literal["fp32", "int8"] = "fp32"
 
     # ------------------------------------------------------------------ corpus
     #: Explicit corpus file for the in-memory retriever. ``None`` uses the

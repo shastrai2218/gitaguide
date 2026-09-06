@@ -95,3 +95,54 @@ def test_onnx_matches_the_torch_encoder() -> None:
         assert math.isclose(
             math.sqrt(sum(a * a for a in left)), 1.0, rel_tol=1e-5
         ), "vectors must be L2-normalised, as the Pooling+Normalize modules do"
+
+
+# --------------------------------------------------------------------------- #
+# Precision selection
+# --------------------------------------------------------------------------- #
+def test_fp32_is_the_default_so_local_development_is_unchanged() -> None:
+    """Switching precision must be a deliberate act, not a surprise."""
+    from app.embeddings import OnnxMiniLMEmbedder
+
+    settings = Settings(mock_mode=False)
+    assert settings.embedder_precision == "fp32"
+    assert OnnxMiniLMEmbedder(settings).onnx_file == settings.embedding_onnx_file
+
+
+def test_int8_selects_the_quantised_export_of_the_same_model() -> None:
+    """Same MiniLM, quantised - not a different model."""
+    from app.embeddings import OnnxMiniLMEmbedder
+
+    settings = Settings(mock_mode=False, embedder_precision="int8")
+    embedder = OnnxMiniLMEmbedder(settings)
+
+    assert embedder.onnx_file == settings.embedding_onnx_file_int8
+    assert embedder.onnx_file != settings.embedding_onnx_file
+    # The repository is the model identity; quantisation must not change it.
+    assert settings.embedding_model_id == Settings(mock_mode=False).embedding_model_id
+
+
+def test_the_encoder_name_carries_its_precision() -> None:
+    """An index and a query encoder must be comparable by name.
+
+    The failure this guards against is silent: an INT8 encoder querying an
+    fp32-built index returns worse neighbours and reports nothing. Putting the
+    precision in the name means ``/health``, the eval provenance and the graph
+    manifest all say which encoder produced their vectors.
+    """
+    from app.embeddings import OnnxMiniLMEmbedder
+
+    fp32 = OnnxMiniLMEmbedder(Settings(mock_mode=False, embedder_precision="fp32"))
+    int8 = OnnxMiniLMEmbedder(Settings(mock_mode=False, embedder_precision="int8"))
+
+    assert fp32.name.endswith("-fp32")
+    assert int8.name.endswith("-int8")
+    assert fp32.name != int8.name
+
+
+def test_an_unknown_precision_is_rejected_at_config_time() -> None:
+    """A typo must fail at startup, not silently fall back to fp32."""
+    import pydantic
+
+    with pytest.raises(pydantic.ValidationError):
+        Settings(mock_mode=False, embedder_precision="int4")
