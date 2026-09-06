@@ -146,3 +146,102 @@ def test_an_unknown_precision_is_rejected_at_config_time() -> None:
 
     with pytest.raises(pydantic.ValidationError):
         Settings(mock_mode=False, embedder_precision="int4")
+
+
+def test_embedding_is_batched_so_peak_memory_is_bounded() -> None:
+    """Peak allocation must be a property of the embedder, not of the caller.
+
+    The hidden-state tensor is ``batch x tokens x 384`` float32. Unbatched, a
+    call scales with the caller's list: embedding the 3,836-verse corpus in one
+    pass asked numpy for 1.4 GiB and raised. On the 512 MB instance a far
+    smaller list would be fatal, so the bound belongs here.
+    """
+    from app.embeddings import OnnxMiniLMEmbedder
+
+    settings = Settings(mock_mode=False, embedder_precision="fp32", embedding_batch_size=8)
+    embedder = OnnxMiniLMEmbedder(settings)
+
+    calls: list[int] = []
+    original = embedder._embed_batch
+
+    def counting(texts):
+        calls.append(len(texts))
+        return original(texts)
+
+    embedder._embed_batch = counting  # type: ignore[method-assign]
+    vectors = embedder.embed([f"verse number {index} about duty" for index in range(20)])
+
+    assert len(vectors) == 20, "every input must still get a vector, in order"
+    assert calls == [8, 8, 4], f"expected three bounded batches, got {calls}"
+
+
+def test_int8_always_embeds_one_text_at_a_time() -> None:
+    """INT8 is not batch-invariant, so it must never batch.
+
+    Measured 7 Sep 2026: the fp32 export gives cosine 1.000000 whether texts are
+    embedded singly or 64 at a time; the INT8 export gives 0.980, because a
+    padded batch and an unpadded single text quantise differently. Serving
+    embeds one query per call, so a batched bulk re-embed would have put the
+    index and the query encoder ~0.98 apart - exactly the mismatch that choosing
+    INT8 on both sides was meant to remove.
+    """
+    from app.embeddings import OnnxMiniLMEmbedder
+
+    embedder = OnnxMiniLMEmbedder(
+        Settings(mock_mode=False, embedder_precision="int8", embedding_batch_size=64)
+    )
+    assert embedder.effective_batch_size == 1, (
+        "INT8 must embed one text at a time regardless of the configured batch "
+        "size, or the index and the query encoder drift apart"
+    )
+
+    calls: list[int] = []
+    original = embedder._embed_batch
+
+    def counting(texts):
+        calls.append(len(texts))
+        return original(texts)
+
+    embedder._embed_batch = counting  # type: ignore[method-assign]
+    embedder.embed([f"text {index}" for index in range(5)])
+    assert calls == [1, 1, 1, 1, 1]
+
+
+def test_fp32_honours_the_configured_batch_size() -> None:
+    """It is batch-invariant, so batching is a free memory/speed trade there."""
+    from app.embeddings import OnnxMiniLMEmbedder
+
+    embedder = OnnxMiniLMEmbedder(
+        Settings(mock_mode=False, embedder_precision="fp32", embedding_batch_size=16)
+    )
+    assert embedder.effective_batch_size == 16
+
+
+def test_batching_does_not_change_the_vectors() -> None:
+    """Splitting the work must not change the answer, at either precision.
+
+    This is the property the index depends on: whatever wrote the corpus and
+    whatever embeds a query must agree, and they run with different list
+    lengths.
+    """
+    from app.embeddings import OnnxMiniLMEmbedder
+
+    texts = [f"a sentence about work and duty, number {index}" for index in range(5)]
+    for precision in ("fp32", "int8"):
+        singly = OnnxMiniLMEmbedder(
+            Settings(
+                mock_mode=False, embedder_precision=precision, embedding_batch_size=1
+            )
+        ).embed(texts)
+        together = OnnxMiniLMEmbedder(
+            Settings(
+                mock_mode=False, embedder_precision=precision, embedding_batch_size=64
+            )
+        ).embed(texts)
+
+        for left, right in zip(singly, together, strict=True):
+            similarity = sum(a * b for a, b in zip(left, right, strict=True))
+            assert similarity > 0.99999, (
+                f"{precision}: batch size changed the embedding, so the index and "
+                "the query encoder would disagree"
+            )

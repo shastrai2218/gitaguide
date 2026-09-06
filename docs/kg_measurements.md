@@ -600,3 +600,82 @@ separately queryable in `safety_logs`.
 The honest summary is that the gate no longer has a *single* point of failure —
 it has a much smaller one, and an audit trail that can measure it.
 
+---
+
+## 12. INT8 embedder, self-consistently (measured 7 Sep 2026)
+
+Render's free tier holds 512 MB and the fp32 encoder leaves ~1.5 MiB of headroom.
+The obvious saving is an INT8 export of the same MiniLM, and the Day 6 objection
+was that an INT8 encoder querying an **fp32-built** index drifts to 0.986 min
+cosine.
+
+That objection does not apply when both sides use the same encoder. Cosine has no
+absolute reference; it only needs the query and the index to live in one space.
+So the index was re-embedded with the INT8 encoder and the eval re-run against it.
+
+### First, the harness had to be made able to answer
+
+The initial comparison said hit rate fell 16.7%. It had not. Three consecutive
+runs of **one unchanged configuration** gave:
+
+| run | hit rate | recall@5 | MRR | nDCG@5 |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 0.1250 | 0.0417 | 0.0613 | 0.0379 |
+| 2 | 0.2000 | 0.0625 | 0.0908 | 0.0502 |
+| 3 | 0.2000 | 0.0625 | 0.0908 | 0.0502 |
+
+**A 60% relative spread with nothing changed** — 5 to 8 hits out of 40. The
+cause is that intent classification is a live LLM call and intent feeds the
+reranker through `intent_boost`, so the ranking is not reproducible. Every
+retrieval figure recorded before this page — including the 0.175 baseline of
+2 Sep — was a single sample from that distribution.
+
+`eval/retrieval_eval.py --deterministic-intent` swaps the semantic classifier
+for the keyword prior. Repeated runs then reproduce **exactly**, and only then
+can a 10% difference be resolved at all.
+
+### The comparison
+
+*(Deterministic intent, live `neo4j-hybrid-cypher`, 3,836 verses, 40-query gold
+set, k=5. Same graph, same corpus, same day; the encoder that wrote the index is
+the encoder that queries it.)*
+
+| metric | fp32 index / fp32 query | INT8 index / INT8 query | relative |
+| --- | ---: | ---: | ---: |
+| **hit rate** | **0.1750** | **0.1750** | **0.0%** |
+| recall@5 | 0.0479 | 0.0563 | +17.5% |
+| MRR | 0.0708 | 0.0738 | +4.2% |
+| nDCG@5 | 0.0421 | 0.0462 | +9.7% |
+
+**Hit rate is identical.** The other three move slightly in INT8's favour, and
+should not be read as INT8 being *better*: at 40 queries and 7 hits, they are one
+or two queries changing rank. The defensible claim is that quantisation costs
+nothing measurable here **provided the index is rebuilt with it**.
+
+### Two traps found on the way
+
+**Batch composition changes INT8 vectors.** The fp32 export is batch-invariant —
+embedding seven texts singly or 64 at a time agrees to cosine 1.000000, because
+the mean pool masks padding out exactly. INT8 does not: the same comparison gives
+**0.980**, and batches of 8 and 64 agree with each other but not with 1. The
+variable is padding, not batch size; quantised activations carry per-tensor
+scales, so a padded batch and an unpadded single text quantise differently.
+
+Since serving embeds exactly one query per call, a batched bulk re-embed would
+have put the index and the query encoder ~0.98 apart — reintroducing the very
+mismatch that choosing INT8 on both sides was meant to remove, one layer down.
+`OnnxMiniLMEmbedder` therefore forces a batch of 1 at INT8.
+
+**A mismatched run scores well.** Querying the INT8 index with the fp32 encoder
+gave hit 0.2000 — *higher* than either self-consistent configuration. A metric
+moving in the right direction is not evidence of a correct configuration, and
+the only reason that run was caught is that the encoder's precision is recorded
+in the eval artefact. Check `embedder:` in the JSON before trusting any number
+on this page.
+
+### Consequence for deployment
+
+The stored vectors and the serving encoder are now one decision, not two. After
+changing `GITAGUIDE_EMBEDDER_PRECISION`, the graph **must** be re-embedded
+(`scripts/reembed_graph.py`) and re-exported to Aura. An index and a query
+encoder that disagree do not error; they quietly return worse neighbours.

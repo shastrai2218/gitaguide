@@ -145,6 +145,34 @@ class OnnxMiniLMEmbedder(Embedder):
             return self.settings.embedding_onnx_file_int8
         return self.settings.embedding_onnx_file
 
+    @property
+    def effective_batch_size(self) -> int:
+        """Texts per forward pass, forced to 1 for INT8.
+
+        Measured 7 Sep 2026: the fp32 export is **batch-invariant** - embedding
+        the same seven texts one at a time or 64 at a time agrees to cosine
+        1.000000, because the mean pool masks the padding out exactly. The INT8
+        export is **not**: the same comparison gives 0.980 min cosine, and
+        batches of 8 and 64 agree with each other but not with 1. The variable
+        is padding, not batch size - quantised activations carry per-tensor
+        scales, so a padded batch and an unpadded single text quantise
+        differently.
+
+        That matters because serving embeds exactly one query per call while a
+        bulk re-embed would use batches: the index and the query encoder would
+        drift apart to ~0.98 for the second time, in a new place, having just
+        been made self-consistent. Forcing 1 makes every call identical in
+        shape, so the corpus and every query go through the same arithmetic.
+
+        The cost is only paid by bulk paths (``scripts/reembed_graph.py`` takes
+        minutes rather than ninety seconds). Serving embeds one text per turn
+        either way, and a batch of one is also the smallest possible allocation
+        - which is the right default on a 512 MB instance.
+        """
+        if self.precision == "int8":
+            return 1
+        return max(1, self.settings.embedding_batch_size)
+
     def _ensure_loaded(self) -> None:
         if self._session is not None:
             return
@@ -182,6 +210,22 @@ class OnnxMiniLMEmbedder(Embedder):
         self.embed(["warmup"])
 
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        """Embed in bounded batches.
+
+        The hidden-state tensor is ``batch x tokens x 384`` float32, so peak
+        memory follows the *caller's* list length unless it is bounded here.
+        Embedding the full corpus in one call asked for 1.4 GiB and raised;
+        on a 512 MB instance a much smaller list would be fatal. Batching makes
+        peak allocation a property of this class rather than of whoever calls
+        it.
+        """
+        batch_size = self.effective_batch_size
+        vectors: list[list[float]] = []
+        for start in range(0, len(texts), batch_size):
+            vectors.extend(self._embed_batch(list(texts)[start : start + batch_size]))
+        return vectors
+
+    def _embed_batch(self, texts: Sequence[str]) -> list[list[float]]:
         self._ensure_loaded()
         assert self._session is not None and self._tokenizer is not None
         import numpy as np

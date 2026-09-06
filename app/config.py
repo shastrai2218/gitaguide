@@ -97,6 +97,15 @@ class Settings(BaseSettings):
     #: it runs on any x86-64 host; the AVX-512 file is ~12 MiB smaller but only
     #: loads where that instruction set is present.
     embedding_onnx_file_int8: str = "onnx/model_quint8_avx2.onnx"
+    #: Texts per forward pass.
+    #:
+    #: The hidden-state tensor is ``batch x tokens x 384`` float32, so an
+    #: unbatched call scales with the caller's list: embedding the 3,836-verse
+    #: corpus in one pass asks for 1.4 GiB in a single allocation and raises.
+    #: 64 keeps a worst-case batch near 25 MiB, which the 512 MB instance can
+    #: hold alongside everything else. Serving embeds one query at a time, so
+    #: this only binds on bulk paths like scripts/reembed_graph.py.
+    embedding_batch_size: int = 64
     #: Which export to load: ``fp32`` or ``int8``.
     #:
     #: **The index and the query encoder must match.** Vectors are compared by
@@ -187,6 +196,19 @@ class Settings(BaseSettings):
     memory_summary_max_chars: int = 1200
 
     # -------------------------------------------------------------------- api
+    # ------------------------------------------------------ pipeline admission
+    #: Serialise turns so peak memory is one turn rather than N.
+    #:
+    #: Required on a 512 MB instance: one turn fits with a small margin, two do
+    #: not, and exceeding it is a SIGKILL rather than an error. Off only for
+    #: tests that need concurrency and are not memory-bound.
+    pipeline_serialise: bool = True
+    #: How long a turn may wait for the pipeline before being shed with the
+    #: overload reply. A turn is 10-35s, so one queued turn resolves inside the
+    #: UI's patience copy; beyond this the tester is better served by an honest
+    #: "try again" than by a queue they cannot see.
+    pipeline_queue_timeout_seconds: float = 30.0
+
     # ------------------------------------------------------- generation budget
     #: Total wall clock allowed for one turn's generation, across the whole
     #: fallback chain. The Day 3 worst observed turn was 14.4s and a later UI

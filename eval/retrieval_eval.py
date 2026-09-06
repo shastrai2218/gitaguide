@@ -397,10 +397,13 @@ async def run_evaluation(
     retriever: HybridRetriever | None = None,
     disable_graph: bool = False,
     disable_intent_boost: bool = False,
+    deterministic_intent: bool = False,
 ) -> EvalReport:
     """Run the pipeline over every gold pair and aggregate the metrics."""
     settings = (settings or get_settings()).model_copy()
     ablations: dict[str, Any] = {}
+    if deterministic_intent:
+        ablations["deterministic_intent"] = True
     if disable_graph:
         settings.graph_expansion_hops = 0
         settings.graph_path_boost = 0.0
@@ -437,7 +440,17 @@ async def run_evaluation(
         )
 
     detector = EmotionDetector(settings)
-    classifier = IntentClassifier(llm=build_llm_provider(settings), settings=settings)
+    # The semantic intent classifier is a live LLM call, and intent feeds the
+    # reranker through intent_boost - so with it on, two identical runs against
+    # an identical graph return different rankings. Measured 7 Sep 2026: three
+    # consecutive runs of one configuration gave hit rates 0.125, 0.200 and
+    # 0.200 - a 60% relative spread. Any comparison finer than that is
+    # unresolvable while it is enabled, which is why deterministic_intent exists.
+    classifier = IntentClassifier(
+        llm=None if deterministic_intent else build_llm_provider(settings),
+        settings=settings,
+        use_llm=not deterministic_intent,
+    )
 
     results: list[QueryResult] = []
     for pair in gold.get("pairs", []):
@@ -481,6 +494,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--no-record", action="store_true", help="do not touch the markdown record"
     )
+    parser.add_argument(
+        "--deterministic-intent",
+        action="store_true",
+        help=(
+            "use the keyword intent prior instead of the live semantic classifier, "
+            "so repeated runs are comparable (the LLM call makes hit rate vary by "
+            "up to 60% relative between identical runs)"
+        ),
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.WARNING, format="%(levelname)-8s %(message)s")
@@ -491,6 +513,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             gold_path=Path(args.gold),
             disable_graph=args.no_graph,
             disable_intent_boost=args.no_intent_boost,
+            deterministic_intent=args.deterministic_intent,
         )
     )
     print(report.render())
