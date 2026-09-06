@@ -39,6 +39,24 @@ export const MOCK = import.meta.env.VITE_MOCK === '1'
 /** Meta line under each assistant turn. On unless explicitly switched off. */
 export const SHOW_META = import.meta.env.VITE_SHOW_META !== '0'
 
+/**
+ * How long to wait for one turn before giving up, in milliseconds.
+ *
+ * There was no client-side deadline at all, which meant a genuinely hung
+ * request span forever behind the diya. This is deliberately generous, because
+ * aborting a slow-but-working request is worse than waiting:
+ *
+ *     ~60s   worst-case Render free-tier cold start (instance wake + both
+ *            ONNX models loaded before /health passes)
+ *   + ~50s   worst-case turn (45s generation budget plus the local stages)
+ *   = ~110s  worst realistic first message
+ *
+ * 150s leaves margin over that. Anything beyond it is not slowness, it is a
+ * request that is never coming back, and the tester is better served by an
+ * error they can retry than by a spinner.
+ */
+export const REQUEST_TIMEOUT_MS = 150_000
+
 export class ApiError extends Error {
   constructor(message, status, retryAfterSeconds = null, code = null) {
     super(message)
@@ -128,20 +146,40 @@ function normaliseCitations(raw) {
 // --------------------------------------------------------------------------- //
 
 async function postChatLive(sessionId, message, signal) {
+  // Two reasons a request can be abandoned: the caller cancelled it (New
+  // session, unmount) or it exceeded the deadline. They are told apart below,
+  // because the first must stay silent and the second must be reported.
+  const deadline = new AbortController()
+  const timer = setTimeout(() => deadline.abort(), REQUEST_TIMEOUT_MS)
+  const onCallerAbort = () => deadline.abort()
+  signal?.addEventListener('abort', onCallerAbort)
+
   let response
   try {
     response = await fetch(`${API_BASE}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: sessionId, message }),
-      signal,
+      signal: deadline.signal,
     })
   } catch (cause) {
-    if (cause?.name === 'AbortError') throw cause
+    // The caller's own cancellation propagates untouched, so App.jsx can drop
+    // it silently rather than showing an error for something the user did.
+    if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
+    if (cause?.name === 'AbortError') {
+      throw new ApiError(
+        `GitaGuide did not answer within ${Math.round(REQUEST_TIMEOUT_MS / 1000)} seconds. `
+          + 'The server may still be waking up — please try again.',
+        0,
+      )
+    }
     throw new ApiError(
       'Could not reach GitaGuide. Is the backend running on port 8000?',
       0,
     )
+  } finally {
+    clearTimeout(timer)
+    signal?.removeEventListener('abort', onCallerAbort)
   }
 
   if (!response.ok) {

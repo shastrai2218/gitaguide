@@ -27,7 +27,8 @@ export default function ConsentGate({ onAccept, error }) {
           This is an unreleased research prototype shared with a small group of
           testers. Answers can be wrong, thin, or oddly matched to what you
           asked. Replies usually take a few seconds and sometimes up to half a
-          minute.
+          minute. The very first message after a quiet spell can take a minute
+          on its own — that is the free hosting waking up, not a crash.
         </p>
 
         <h2>Reflection, not treatment</h2>
