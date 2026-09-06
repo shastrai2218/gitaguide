@@ -20,30 +20,26 @@
 # message. The frontend says so in plain language rather than hiding it behind
 # a spinner (see WaitingIndicator's 35s stage).
 #
-# MEASURED MEMORY - read this before keeping the free plan.
+# MEASURED MEMORY, under Render Free's exact shape (512 MB, 0.1 CPU).
 #
-# Run under Render Free's exact shape (512 MB, 0.1 CPU) on 7 Sep 2026:
+#                            fp32, 2 threads     int8, 1 thread, arena cap
+#   idle after boot .......  497 MiB (97.1%)  ->   398 MiB (77.8%)
+#   peak, one turn ........  511 MiB (99.7%)  ->   429 MiB (83.7%)
+#   peak, one + one queued .   would OOM      ->   430 MiB (84.0%)
+#   headroom at peak ......  1.5 MiB          ->   81.7 MiB
+#   cold start ............  95 s             ->   80 s
 #
-#   idle, immediately after boot ......... 497 MiB  (97.1% of 512)
-#   peak during one normal turn .......... 511 MiB  (99.7%)
-#   boot to first healthy /health ........  95 s
-#   one turn .............................  34 s
+# The earlier configuration had no margin at all: a single turn fit and nothing
+# else did, and going over is SIGKILL - nothing in the application log, just a
+# bare 502 from Render and a restart. Three changes bought the margin, all
+# measured rather than assumed (docs/kg_measurements.md section 12):
 #
-# That is about 1.5 MiB of headroom. A single turn fits; nothing else does.
-# Anything extra - a second concurrent inference, ONNX arena growth, the
-# platform's own agent - pushes it over, and the kernel's response is SIGKILL.
-# The container is not asked politely to stop, so nothing appears in the
-# application log: Render reports a bare 502 and the process restarts.
+#   * INT8 embedder with the index re-embedded to match  -37 MiB, no quality cost
+#   * MALLOC_ARENA_MAX=2 (see Dockerfile)                -14 MiB
+#   * one ONNX intra-op thread                           -47 MiB, faster boot
+#   * serialised turns                                   caps peak at ONE turn
 #
-# Two reductions were measured and neither is worth taking:
-#   * disabling ONNX Runtime's CPU arena saves 1.4 MiB - noise;
-#   * an INT8 embedder saves 52-64 MiB, but its vectors drift to 0.986 min
-#     cosine against the fp32-built index, versus 0.99999999 for the fp32 ONNX
-#     encoder. Six orders of magnitude more drift, against an index that cannot
-#     be rebuilt cheaply, for 60 MiB. Not a trade worth making silently.
-#
-# So the free plan is under-specified for this image, not misconfigured. The
-# fix is the plan, not the code.
+# Disabling ONNX Runtime's CPU arena was also measured: 1.4 MiB, not worth it.
 #
 # Escalation: switching to Starter is one dropdown in the Render dashboard and
 # takes effect without a redeploy. If cold starts turn out to cost more tester
@@ -93,6 +89,27 @@ services:
         sync: false
       - key: GITAGUIDE_TELEMETRY_SESSION_SALT
         sync: false
+
+      # ---- models: sized for 512 MB ---------------------------------------
+      # INT8 is the *same* MiniLM, quantised. It is only safe because the index
+      # is embedded with it too: an INT8 query against an fp32-built index does
+      # not error, it quietly returns worse neighbours. Changing this REQUIRES
+      # re-running scripts/reembed_graph.py and re-importing to Aura.
+      #
+      # Measured no cost: hit rate 0.1750 -> 0.1750 on the 40-query gold set
+      # with deterministic intent (docs/kg_measurements.md section 12).
+      - key: GITAGUIDE_EMBEDDER_PRECISION
+        value: int8
+      # 0.1 CPU cannot run two intra-op threads in parallel; the second only
+      # costs memory. Measured -47 MiB and a faster cold start.
+      - key: GITAGUIDE_ONNX_INTRA_OP_THREADS
+        value: "1"
+      # One turn at a time. Two concurrent turns do not fit in 512 MB, and
+      # exceeding it is SIGKILL rather than an error.
+      - key: GITAGUIDE_PIPELINE_SERIALISE
+        value: "true"
+      - key: GITAGUIDE_PIPELINE_QUEUE_TIMEOUT_SECONDS
+        value: "30"
 
       # ---- backends -------------------------------------------------------
       - key: GITAGUIDE_USE_REAL_NEO4J

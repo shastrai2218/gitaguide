@@ -183,3 +183,78 @@ def test_the_default_is_to_trust_no_proxy_headers() -> None:
     from app.config import Settings
 
     assert Settings(mock_mode=True).rate_limit_trusted_proxy_hops == 0
+
+
+# --------------------------------------------------------------------------- #
+# Memory-critical settings
+#
+# These only work as a set. INT8 is chosen because 512 MB cannot hold the fp32
+# encoder; but INT8 alone still leaves a single turn at 84% of the cap, so
+# concurrent turns must also be prevented. Shipping one without the other looks
+# fine in every test and dies under the first burst.
+# --------------------------------------------------------------------------- #
+def _env_value(render_yaml: str, key: str) -> str | None:
+    match = re.search(rf'{key}\s*\n\s*value:\s*"?([^"\n]+)"?', render_yaml)
+    return match.group(1).strip() if match else None
+
+
+def test_production_uses_the_int8_encoder(render_yaml: str) -> None:
+    """The free tier cannot hold the fp32 encoder (497 MiB idle of 512)."""
+    assert _env_value(render_yaml, "GITAGUIDE_EMBEDDER_PRECISION") == "int8", (
+        "production must set GITAGUIDE_EMBEDDER_PRECISION=int8; the fp32 encoder "
+        "leaves ~1.5 MiB of headroom on a 512 MB instance"
+    )
+
+
+def test_int8_in_production_requires_serialised_turns(render_yaml: str) -> None:
+    """The pairing this test exists for.
+
+    INT8 buys headroom for *one* turn (429 MiB peak of 512). Two concurrent
+    turns exceed the cap, and the kernel's answer is SIGKILL - no traceback, a
+    bare 502 and a restart. So if the deployment is on INT8 because memory is
+    tight, it must also serialise; the two are one decision.
+    """
+    if _env_value(render_yaml, "GITAGUIDE_EMBEDDER_PRECISION") != "int8":
+        pytest.skip("not an INT8 deployment; the pairing does not apply")
+
+    assert _env_value(render_yaml, "GITAGUIDE_PIPELINE_SERIALISE") == "true", (
+        "GITAGUIDE_EMBEDDER_PRECISION=int8 says this deployment is memory-bound, "
+        "but GITAGUIDE_PIPELINE_SERIALISE is not true. INT8 leaves room for one "
+        "turn, not two. Set both or neither."
+    )
+
+
+def test_production_pins_one_onnx_thread(render_yaml: str) -> None:
+    """0.1 CPU cannot use a second intra-op thread; it only costs 47 MiB."""
+    assert _env_value(render_yaml, "GITAGUIDE_ONNX_INTRA_OP_THREADS") == "1"
+
+
+def test_the_queue_timeout_is_shorter_than_the_client_deadline(
+    render_yaml: str,
+) -> None:
+    """A queued turn must be shed before the browser gives up on it.
+
+    Otherwise the tester sees the frontend's timeout error for a request the
+    server was still willing to serve, which is the confusing half of both
+    failure modes at once.
+    """
+    timeout = _env_value(render_yaml, "GITAGUIDE_PIPELINE_QUEUE_TIMEOUT_SECONDS")
+    assert timeout is not None, "the queue timeout must be explicit in production"
+    assert float(timeout) < MIN_REQUEST_TIMEOUT_SECONDS, (
+        f"queue timeout {timeout}s is not shorter than the client's "
+        f"{MIN_REQUEST_TIMEOUT_SECONDS}s deadline"
+    )
+
+
+def test_serialisation_and_int8_default_safely_in_code() -> None:
+    """Config files can be lost; the defaults must not be the dangerous ones."""
+    from app.config import Settings
+
+    settings = Settings(mock_mode=True)
+    # Serialisation defaults ON: the safe direction, since off risks an OOM.
+    assert settings.pipeline_serialise is True
+    # Precision defaults to fp32: the safe direction, because an fp32 encoder
+    # against an fp32 index is correct, and switching is what needs deliberate
+    # action plus a re-embed.
+    assert settings.embedder_precision == "fp32"
+

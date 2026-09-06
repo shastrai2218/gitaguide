@@ -46,6 +46,19 @@ EXPOSE 8000
 # Render supplies $PORT; the default keeps `docker run` working unchanged.
 ENV PORT=8000
 
+# Two memory settings, both measured under the free tier's 512 MB on 7 Sep 2026.
+#
+# MALLOC_ARENA_MAX=2: glibc gives each thread its own malloc arena, and the
+# resident cost of those arenas is pure overhead for a single-worker service.
+# Capping it saved 14.5 MiB (459.8 -> 445.3 idle).
+#
+# One ONNX thread: the free instance has 0.1 CPU, so a second intra-op thread
+# cannot run in parallel with the first - it only adds an arena and contention.
+# Dropping to one saved a further 47.1 MiB (445.3 -> 398.2 idle) and made the
+# cold start *faster* (105s -> 80s).
+ENV MALLOC_ARENA_MAX=2 \
+    OMP_NUM_THREADS=1
+
 HEALTHCHECK --interval=30s --timeout=5s --start-period=180s --retries=3 \
     CMD curl -fsS "http://localhost:${PORT}/health" || exit 1
 

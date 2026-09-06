@@ -28,9 +28,26 @@ Set aside about 90 minutes. The Aura node import is the long part.
 
 ## Before you start
 
+> ### The graph must match the serving encoder
+> **Production runs the INT8 encoder** (`GITAGUIDE_EMBEDDER_PRECISION=int8`).
+> The stored vectors and the query encoder are one decision, not two: an INT8
+> query against an fp32-built index does not error, it quietly returns worse
+> neighbours. So the graph you export must have been embedded with INT8.
+>
+> If your local graph is on fp32, re-embed before exporting:
+>
+> ```bash
+> GITAGUIDE_EMBEDDER_PRECISION=int8 python -m scripts.reembed_graph
+> ```
+>
+> This measured no retrieval cost - hit rate 0.1750 either way on the 40-query
+> gold set with deterministic intent (kg_measurements.md section 12) - but it
+> must be done, and it must be re-done whenever the precision changes.
+
 On your machine, with the local stack running:
 
 ```bash
+GITAGUIDE_EMBEDDER_PRECISION=int8 python -m scripts.reembed_graph   # if not already
 python -m scripts.export_neo4j --out data/graph_export
 ```
 
@@ -166,6 +183,10 @@ the API's first boot. Reasoning and the verification queries:
    | `GITAGUIDE_RATE_LIMIT_GLOBAL_PER_MINUTE` | `16` | **this is the one protecting the NIM budget** |
    | `GITAGUIDE_RATE_LIMIT_GLOBAL_BURST` | `6` | |
    | `GITAGUIDE_RATE_LIMIT_TRUSTED_PROXY_HOPS` | `1` | Render is one proxy; at `0` the per-IP limit keys on Render's own address |
+   | `GITAGUIDE_EMBEDDER_PRECISION` | `int8` | fp32 does not fit in 512 MB; **the graph must be embedded with the same encoder** |
+   | `GITAGUIDE_ONNX_INTRA_OP_THREADS` | `1` | 0.1 CPU cannot use a second thread; it costs 47 MiB |
+   | `GITAGUIDE_PIPELINE_SERIALISE` | `true` | two concurrent turns exceed 512 MB |
+   | `GITAGUIDE_PIPELINE_QUEUE_TIMEOUT_SECONDS` | `30` | a queued turn waits this long, then gets the overload reply |
    | `GITAGUIDE_GENERATION_BUDGET_SECONDS` | `45` | must be ≥ 15 or the app refuses to boot |
    | `GITAGUIDE_TELEMETRY_ENABLED` | `true` | |
    | `GITAGUIDE_CONSENT_VERSION` | `v1` | must match the frontend's |
@@ -317,6 +338,9 @@ it running is harmless.
 | --- | --- |
 | `GET /health` → `components.telemetry_today` | `semantic_malformed_final` and `soft_cue_fallback_blocks` — the Day 3 residual risk, per day |
 | `GET /health` → `components.rate_limit` | `global_tokens` near zero means testers are queueing on the NIM budget |
+| `GET /health` → `components.pipeline_queue_depth` | persistently above zero means turns are waiting on each other |
+| telemetry `turns_shed` | turns refused because the queue timed out - if this is not ~0, the instance is undersized |
+| telemetry `turns_queued_then_served` | how often a tester waited behind someone else |
 | Render logs, `TURN_LATENCY` | per-stage wall clock for any turn a tester says was slow |
 | Render logs, `SAFETY_AUDIT` | every gate decision, including near-misses that did not block |
 | Supabase → `feedback` | what testers actually thought |
@@ -328,17 +352,26 @@ it running is harmless.
 
 Stated here rather than discovered later:
 
-- **Free plan: 512 MB is not enough for this image.** Measured under Render
-  Free's exact shape on 7 Sep 2026: **497 MiB resident at idle (97.1%)** and
-  **511 MiB at peak during one turn (99.7%)**. A single turn fits with about
-  1.5 MiB to spare; nothing else does. When it does go over, the kernel sends
-  SIGKILL - no application log line, just a 502 from Render and a restart.
-  Look for `Killed`, `exit 137`, or "Out of memory" in the Render logs.
+- **Free plan: 512 MB fits, with margin, only in the tuned configuration.**
+  Measured under Render Free's exact shape on 7 Sep 2026:
 
-  Neither available reduction helps: disabling ONNX Runtime's CPU arena saves
-  1.4 MiB, and an INT8 embedder saves 52-64 MiB but drifts to 0.986 min cosine
-  against the fp32-built vector index (the fp32 ONNX encoder is 0.99999999).
-  **Starter is the fix**, and it is one dropdown with no redeploy.
+  | | fp32, 2 threads | int8, 1 thread, serialised |
+  | --- | ---: | ---: |
+  | idle after boot | 497 MiB (97.1%) | **398 MiB (77.8%)** |
+  | peak, one turn | 511 MiB (99.7%) | **429 MiB (83.7%)** |
+  | peak, one + one queued | would OOM | **430 MiB (84.0%)** |
+  | headroom at peak | 1.5 MiB | **81.7 MiB** |
+  | cold start | 95 s | 80 s |
+
+  The left column is what produced the 502s: a single turn fit and nothing else
+  did. Going over is SIGKILL - no application log line, just a bare 502 and a
+  restart. If you see one, look for `Killed`, `exit 137` or "Out of memory" in
+  the Render logs, not for a Python traceback.
+
+  All four settings above are load-bearing together, and
+  `tests/test_deploy_config.py` asserts they travel as a set. **Starter remains
+  the escalation** if the margin proves thin under real traffic; it is one
+  dropdown with no redeploy.
 - **Free plan: the instance also sleeps.** After ~15 minutes idle it spins down,
   and the next request waits 30-60s for it to wake and load both ONNX models -
   95s under the measured 0.1 CPU. The keep-warm ping makes this uncommon during
