@@ -12,11 +12,17 @@ Two of those assumptions are invisible at runtime and expensive to get wrong:
   zero, every request keys on the proxy's own address and the per-IP bucket
   collapses into a second global one.
 
-Neither shows up in a smoke test - the production limiter looked broken for a
-completely different reason (a sequential burst cannot drain a token bucket
-when each request takes longer than the refill interval), and while chasing
-that, a worker bump would have been indistinguishable. So the config is asserted
-here, where changing it fails loudly.
+* **Turns can legitimately run for over a minute.** A 45s generation budget plus
+  the intent call, retrieval and persistence, against a frontend that waits
+  150s. Any process manager with a shorter request timeout kills the worker
+  mid-turn, which the platform reports as a 502 with nothing in the application
+  log to explain it - the request simply stops existing.
+
+Neither of the first two shows up in a smoke test - the production limiter
+looked broken for a completely different reason (a sequential burst cannot drain
+a token bucket when each request takes longer than the refill interval), and
+while chasing that, a worker bump would have been indistinguishable. So the
+config is asserted here, where changing it fails loudly.
 """
 
 from __future__ import annotations
@@ -67,11 +73,66 @@ def test_the_production_start_command_runs_exactly_one_worker(dockerfile: str) -
     )
 
 
+#: The longest a request may take before the process manager may kill it.
+#:
+#: Matches ``REQUEST_TIMEOUT_MS`` in ``frontend/src/api.js``: the server must not
+#: give up before the client does, or the tester sees a 502 where they would
+#: otherwise have seen either an answer or an honest timeout message.
+MIN_REQUEST_TIMEOUT_SECONDS = 150
+
+
+def test_the_start_command_allows_long_requests(dockerfile: str) -> None:
+    """A turn can exceed a minute; the server must not cut it short.
+
+    Plain uvicorn imposes no request deadline, so the pipeline's own generation
+    budget stays the only thing deciding when a turn has taken too long. A
+    process manager may be introduced later, but only with a timeout at least as
+    long as the frontend is willing to wait.
+    """
+    cmd = next(
+        (line for line in dockerfile.splitlines() if line.startswith("CMD") and "uvicorn" in line),
+        None,
+    )
+    assert cmd is not None, "no uvicorn CMD found in the Dockerfile"
+
+    if "gunicorn" in cmd:
+        timeout = re.search(r"--timeout\s+(\d+)", cmd)
+        assert timeout is not None, (
+            "gunicorn is in the start command with no --timeout. Its default is "
+            "30s, and a GitaGuide turn routinely exceeds that: the worker is "
+            "killed mid-request and the platform reports a bare 502."
+        )
+        assert int(timeout.group(1)) >= MIN_REQUEST_TIMEOUT_SECONDS, (
+            f"--timeout is {timeout.group(1)}s, below the "
+            f"{MIN_REQUEST_TIMEOUT_SECONDS}s the frontend waits. The server would "
+            "abandon turns the client is still waiting for."
+        )
+    else:
+        # uvicorn has no equivalent flag; assert nothing has introduced one.
+        for flag in ("--timeout ", "--timeout-graceful-shutdown"):
+            if flag in cmd:
+                value = re.search(re.escape(flag) + r"\s*(\d+)", cmd)
+                assert value is not None and int(value.group(1)) >= MIN_REQUEST_TIMEOUT_SECONDS, (
+                    f"{flag.strip()} in the start command is shorter than the "
+                    f"{MIN_REQUEST_TIMEOUT_SECONDS}s the frontend waits"
+                )
+
+
 def test_gunicorn_is_not_used(dockerfile: str) -> None:
-    """gunicorn's default is multiple workers, which would break the same thing."""
-    assert "gunicorn" not in dockerfile.lower(), (
-        "gunicorn defaults to more than one worker; see the test above for why "
-        "that is not safe while the limiter is in-process"
+    """gunicorn's default is multiple workers, which would break the same thing.
+
+    And its default 30s worker timeout would kill turns mid-flight. If it is
+    ever adopted deliberately, both defaults have to be overridden and the test
+    above enforces the timeout half.
+    """
+    # Only the executable lines matter - the comment above the CMD explains
+    # why gunicorn is avoided, and must not itself trip this check.
+    executable = [
+        line for line in dockerfile.splitlines() if not line.lstrip().startswith("#")
+    ]
+    assert not any("gunicorn" in line.lower() for line in executable), (
+        "gunicorn defaults to more than one worker AND a 30s worker timeout; "
+        "see the two tests above for why neither is safe here"
     )
 
 

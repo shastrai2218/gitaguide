@@ -328,11 +328,22 @@ it running is harmless.
 
 Stated here rather than discovered later:
 
-- **Free plan: the instance sleeps.** After ~15 minutes idle it spins down, and
-  the next request waits 30-60s for it to wake and load both ONNX models. The
-  keep-warm ping makes this uncommon during testing hours but cannot eliminate
-  it, and the ping itself consumes the monthly instance-hour budget. Upgrading
-  to Starter removes the behaviour entirely and is one dropdown away.
+- **Free plan: 512 MB is not enough for this image.** Measured under Render
+  Free's exact shape on 7 Sep 2026: **497 MiB resident at idle (97.1%)** and
+  **511 MiB at peak during one turn (99.7%)**. A single turn fits with about
+  1.5 MiB to spare; nothing else does. When it does go over, the kernel sends
+  SIGKILL - no application log line, just a 502 from Render and a restart.
+  Look for `Killed`, `exit 137`, or "Out of memory" in the Render logs.
+
+  Neither available reduction helps: disabling ONNX Runtime's CPU arena saves
+  1.4 MiB, and an INT8 embedder saves 52-64 MiB but drifts to 0.986 min cosine
+  against the fp32-built vector index (the fp32 ONNX encoder is 0.99999999).
+  **Starter is the fix**, and it is one dropdown with no redeploy.
+- **Free plan: the instance also sleeps.** After ~15 minutes idle it spins down,
+  and the next request waits 30-60s for it to wake and load both ONNX models -
+  95s under the measured 0.1 CPU. The keep-warm ping makes this uncommon during
+  testing hours but cannot eliminate it, and the ping itself consumes the
+  monthly instance-hour budget.
 - **One instance, in-process counters.** Rate limits and telemetry counters
   live in memory. They reset on every restart and deploy — and on the free plan
   a spin-down is a restart, so a quiet period silently resets the day's

@@ -20,6 +20,31 @@
 # message. The frontend says so in plain language rather than hiding it behind
 # a spinner (see WaitingIndicator's 35s stage).
 #
+# MEASURED MEMORY - read this before keeping the free plan.
+#
+# Run under Render Free's exact shape (512 MB, 0.1 CPU) on 7 Sep 2026:
+#
+#   idle, immediately after boot ......... 497 MiB  (97.1% of 512)
+#   peak during one normal turn .......... 511 MiB  (99.7%)
+#   boot to first healthy /health ........  95 s
+#   one turn .............................  34 s
+#
+# That is about 1.5 MiB of headroom. A single turn fits; nothing else does.
+# Anything extra - a second concurrent inference, ONNX arena growth, the
+# platform's own agent - pushes it over, and the kernel's response is SIGKILL.
+# The container is not asked politely to stop, so nothing appears in the
+# application log: Render reports a bare 502 and the process restarts.
+#
+# Two reductions were measured and neither is worth taking:
+#   * disabling ONNX Runtime's CPU arena saves 1.4 MiB - noise;
+#   * an INT8 embedder saves 52-64 MiB, but its vectors drift to 0.986 min
+#     cosine against the fp32-built index, versus 0.99999999 for the fp32 ONNX
+#     encoder. Six orders of magnitude more drift, against an index that cannot
+#     be rebuilt cheaply, for 60 MiB. Not a trade worth making silently.
+#
+# So the free plan is under-specified for this image, not misconfigured. The
+# fix is the plan, not the code.
+#
 # Escalation: switching to Starter is one dropdown in the Render dashboard and
 # takes effect without a redeploy. If cold starts turn out to cost more tester
 # goodwill than the plan costs money, change it there and update this file.
