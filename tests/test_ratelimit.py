@@ -14,7 +14,7 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.ratelimit import RateLimiter, TokenBucket
+from app.api.ratelimit import RateLimiter, TokenBucket, client_ip_from
 from app.config import Settings
 from app.main import create_app
 
@@ -147,3 +147,119 @@ def test_one_session_hitting_its_limit_does_not_block_another(
 
     second = {"session_id": "rl-b", "message": "I am overworked"}
     assert limited_client.post("/api/chat", json=second).status_code == 200
+
+
+# --------------------------------------------------------------------------- #
+# Which address gets limited
+# --------------------------------------------------------------------------- #
+def test_without_a_declared_proxy_the_header_is_ignored() -> None:
+    """The default must not believe a client-supplied header."""
+    assert client_ip_from("1.2.3.4", "10.0.0.9", trusted_hops=0) == "10.0.0.9"
+    assert client_ip_from(None, "10.0.0.9", trusted_hops=0) == "10.0.0.9"
+
+
+def test_behind_one_proxy_the_appended_entry_is_used() -> None:
+    """Render appends the address it saw; that is the one to limit on."""
+    assert client_ip_from("203.0.113.7", "10.0.0.9", trusted_hops=1) == "203.0.113.7"
+
+
+def test_a_forged_forwarded_for_cannot_choose_its_own_bucket() -> None:
+    """The attack the hop count exists to stop.
+
+    A client sending its own X-Forwarded-For gets that value *prepended* to
+    what the proxy appends, so reading from the right still lands on their real
+    address. Reading from the left - which this used to do - would have let
+    anyone mint a fresh per-IP bucket per request.
+    """
+    forged = "1.2.3.4, 5.6.7.8, 203.0.113.7"
+    assert client_ip_from(forged, "10.0.0.9", trusted_hops=1) == "203.0.113.7"
+
+
+def test_a_missing_header_falls_back_to_the_socket_peer() -> None:
+    assert client_ip_from(None, "10.0.0.9", trusted_hops=1) == "10.0.0.9"
+    assert client_ip_from("   ", "10.0.0.9", trusted_hops=1) == "10.0.0.9"
+
+
+def test_a_header_shorter_than_the_claimed_hops_uses_the_leftmost() -> None:
+    """Misconfiguration degrades to the oldest entry, not to an index error."""
+    assert client_ip_from("203.0.113.7", "10.0.0.9", trusted_hops=3) == "203.0.113.7"
+
+
+def test_two_testers_behind_one_proxy_are_told_apart() -> None:
+    """The point of reading the header at all."""
+    first = client_ip_from("198.51.100.1", "10.0.0.9", trusted_hops=1)
+    second = client_ip_from("198.51.100.2", "10.0.0.9", trusted_hops=1)
+    assert first != second
+
+
+# --------------------------------------------------------------------------- #
+# Why production looked unlimited
+# --------------------------------------------------------------------------- #
+#: Production values, so this documents the real deployment rather than a toy.
+PROD = {
+    "session_per_minute": 5,
+    "session_burst": 3,
+    "ip_per_minute": 20,
+    "ip_burst": 8,
+    "global_per_minute": 16,
+    "global_burst": 6,
+}
+
+
+def _sequential_trips(latency_seconds: float, requests: int) -> bool:
+    """Send `requests` one at a time, `latency_seconds` apart. Did any get 429?"""
+    limiter = RateLimiter(**PROD)
+    for _ in range(requests):
+        if not limiter.check("caller", "203.0.113.7").allowed:
+            return True
+        for bucket in (
+            *limiter._sessions.values(),
+            *limiter._ips.values(),
+            limiter._global,
+        ):
+            bucket.updated_at -= latency_seconds
+    return False
+
+
+def test_a_sequential_caller_slower_than_the_refill_is_never_limited() -> None:
+    """The behaviour that made production look broken when it was not.
+
+    At 5 requests/minute the session bucket regains a token every 12s. Each
+    sequential request costs one token and returns ``latency/12`` of one, so the
+    net drain is ``1 - latency/12`` per request:
+
+    * below 12s the bucket empties eventually, and a long enough run trips;
+    * at or above 12s the drain is zero or negative and the bucket **never**
+      empties, no matter how many requests are sent.
+
+    Production turns take 5-25s and the observed p50 is 10.6s locally but higher
+    on the free tier, which is why the same sequential burst tripped the limiter
+    here and never tripped it in production. The limiter was correct throughout;
+    the test method was not.
+
+    Pinned so nobody "fixes" a working limiter in response to the same false
+    alarm - and so the numbers stay honest if the session rate is ever changed.
+    """
+    refill_interval = 60 / PROD["session_per_minute"]
+    many = 500  # far more than any burst the smoke test would send
+
+    # Just below the interval the drain is tiny (0.008 tokens/request at 11.9s),
+    # so it takes a long run - which is exactly why a 7-request burst proves
+    # nothing either way.
+    assert _sequential_trips(refill_interval - 0.1, requests=7) is False
+    assert _sequential_trips(refill_interval - 0.1, requests=many) is True
+
+    # At or above it, no run length is enough.
+    assert _sequential_trips(refill_interval, requests=many) is False
+    assert _sequential_trips(25.0, requests=many) is False, (
+        "a slow production turn must never trip the limiter sequentially"
+    )
+
+
+def test_a_concurrent_burst_is_limited_at_the_burst_capacity() -> None:
+    """How the limiter must actually be tested: no time passing between calls."""
+    limiter = RateLimiter(**PROD)
+    allowed = sum(limiter.check("caller", "203.0.113.7").allowed for _ in range(7))
+    assert allowed == PROD["session_burst"], (
+        "a genuine burst must be cut off at the session burst capacity"
+    )

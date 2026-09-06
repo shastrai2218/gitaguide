@@ -19,6 +19,9 @@ look healthy while being wrong:
 * A blocked turn that still ran retrieval and generation would mean the gate
   short-circuit is not short-circuiting.
 * Consent that is not enforced server-side makes the consent record worthless.
+* A rate limiter probed sequentially looks disabled even when it is working,
+  because a token bucket refills faster than a slow caller drains it - so the
+  burst here is sent concurrently.
 
 So this asserts the *evidence*, not the absence of errors.
 
@@ -34,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -268,29 +272,67 @@ class Smoke:
             self.check(body.get("rating") == "up", "the rating round-trips")
 
     def rate_limit(self) -> None:
+        """Send a genuine burst - concurrently.
+
+        This check used to send its requests one at a time, which cannot trip a
+        token bucket when each request takes longer than the refill interval.
+        At 5 requests/minute the session bucket regains a token every 12s, and
+        production turns take 5-25s, so the bucket was never drained and the
+        limiter looked disabled while working perfectly. It passed locally only
+        because local turns happened to sit just under 12s.
+
+        Sent together, the burst is a burst. This is also *cheaper* than the
+        sequential version: rejected requests are refused before the pipeline
+        runs, so only the ones inside the burst capacity spend NIM budget.
+        """
         self.section("7. the rate limiter is really on")
-        print(f"{INFO} sending a burst; this consumes NIM budget")
-        seen_429 = False
-        for attempt in range(1, 8):
-            status, body, headers = self.request(
-                "/api/chat", {"session_id": self.session, "message": f"burst {attempt}"}
+        burst = 7
+        print(f"{INFO} sending {burst} concurrent requests; only the allowed ones cost NIM")
+
+        results: list[tuple[int, object, dict[str, str]]] = []
+        lock = threading.Lock()
+
+        def send(index: int) -> None:
+            outcome = self.request(
+                "/api/chat", {"session_id": self.session, "message": f"burst {index}"}
             )
-            if status == 429:
-                seen_429 = True
-                retry_after = headers.get("Retry-After") or headers.get("retry-after")
-                self.check(
-                    retry_after is not None and int(retry_after) >= 1,
-                    "429 carries a usable Retry-After",
-                    f"Retry-After={retry_after}",
-                )
-                detail = body.get("detail", {}) if isinstance(body, dict) else {}
-                self.check(
-                    bool(detail.get("message")),
-                    "429 carries a human-readable message",
-                    str(detail.get("message"))[:60],
-                )
-                break
-        self.check(seen_429, "the limiter engages under a burst")
+            with lock:
+                results.append(outcome)
+
+        threads = [threading.Thread(target=send, args=(index,)) for index in range(burst)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        statuses = [status for status, _, _ in results]
+        limited = [item for item in results if item[0] == 429]
+        print(f"{INFO} statuses: {sorted(statuses)}")
+
+        # The detail is only meaningful on failure; printing "none refused" next
+        # to a PASS would be the same kind of misleading output this script
+        # exists to catch.
+        detail = (
+            f"{len(limited)}/{burst} refused"
+            if limited
+            else f"{burst} sent, none refused - the limiter is not protecting the NIM budget"
+        )
+        if not self.check(bool(limited), "the limiter engages under a concurrent burst", detail):
+            return
+
+        _, body, headers = limited[0]
+        retry_after = headers.get("Retry-After") or headers.get("retry-after")
+        self.check(
+            retry_after is not None and retry_after.isdigit() and int(retry_after) >= 1,
+            "429 carries a usable Retry-After",
+            f"Retry-After={retry_after}",
+        )
+        detail = body.get("detail", {}) if isinstance(body, dict) else {}
+        self.check(
+            bool(detail.get("message")),
+            "429 carries a human-readable message",
+            str(detail.get("message"))[:60],
+        )
 
     # ------------------------------------------------------------------ run
     def run(self, skip_rate_limit: bool) -> int:

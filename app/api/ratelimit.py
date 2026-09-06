@@ -170,6 +170,37 @@ class RateLimiter:
             }
 
 
+def client_ip_from(
+    forwarded_for: str | None, peer: str | None, trusted_hops: int
+) -> str | None:
+    """The address to rate-limit on, given the proxy topology.
+
+    ``X-Forwarded-For`` is written by clients as freely as by proxies, so it is
+    only consulted when the deployment says how many trusted proxies stand in
+    front of it. With ``trusted_hops=1`` this reads the **last** entry - the one
+    the platform proxy appended - not the first, which is whatever the client
+    chose to send. A client that forges ``X-Forwarded-For: 1.2.3.4`` therefore
+    gets ``1.2.3.4, <their real address>`` and is still limited on their real
+    address.
+
+    With ``trusted_hops=0`` the header is ignored entirely and the socket peer
+    is used, which is correct for local development and for any deployment not
+    behind a proxy.
+    """
+    if trusted_hops <= 0 or not forwarded_for:
+        return peer
+
+    hops = [item.strip() for item in forwarded_for.split(",") if item.strip()]
+    if not hops:
+        return peer
+
+    # Count in from the right: with N trusted proxies, the Nth-from-last entry
+    # is the address the outermost trusted proxy observed. If the header is
+    # shorter than claimed, the leftmost entry is the best available answer.
+    index = max(0, len(hops) - trusted_hops)
+    return hops[index] if index < len(hops) else hops[0]
+
+
 #: Message shown to a rate-limited tester. Deliberately not an error tone: in a
 #: closed beta the usual cause is other testers, not misuse.
 RATE_LIMITED_MESSAGE = (

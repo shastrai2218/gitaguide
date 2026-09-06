@@ -84,6 +84,13 @@ services:
         value: "5"
       - key: GITAGUIDE_RATE_LIMIT_SESSION_BURST
         value: "3"
+      # Render terminates TLS and proxies to the container, so exactly one
+      # trusted proxy stands in front of this process. Without this the per-IP
+      # limit would key on the socket peer - the proxy - and collapse into a
+      # second global bucket. Set it to the real number of proxies: a larger
+      # value lets a client pick its own bucket by forging X-Forwarded-For.
+      - key: GITAGUIDE_RATE_LIMIT_TRUSTED_PROXY_HOPS
+        value: "1"
       - key: GITAGUIDE_RATE_LIMIT_IP_PER_MINUTE
         value: "20"
       - key: GITAGUIDE_RATE_LIMIT_IP_BURST

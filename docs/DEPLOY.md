@@ -165,6 +165,7 @@ the API's first boot. Reasoning and the verification queries:
    | `GITAGUIDE_RATE_LIMIT_IP_BURST` | `8` | |
    | `GITAGUIDE_RATE_LIMIT_GLOBAL_PER_MINUTE` | `16` | **this is the one protecting the NIM budget** |
    | `GITAGUIDE_RATE_LIMIT_GLOBAL_BURST` | `6` | |
+   | `GITAGUIDE_RATE_LIMIT_TRUSTED_PROXY_HOPS` | `1` | Render is one proxy; at `0` the per-IP limit keys on Render's own address |
    | `GITAGUIDE_GENERATION_BUDGET_SECONDS` | `45` | must be ≥ 15 or the app refuses to boot |
    | `GITAGUIDE_TELEMETRY_ENABLED` | `true` | |
    | `GITAGUIDE_CONSENT_VERSION` | `v1` | must match the frontend's |

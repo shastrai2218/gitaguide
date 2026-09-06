@@ -203,6 +203,18 @@ class Settings(BaseSettings):
     #: so the global bucket is the one that actually protects the budget -
     #: per-session and per-IP limits only stop one tester monopolising it.
     rate_limit_enabled: bool = True
+    #: How many trusted reverse proxies sit between the client and this process.
+    #:
+    #: Controls how ``X-Forwarded-For`` is read for the per-IP limit. The header
+    #: is client-supplied and therefore forgeable, so the default is **0: do not
+    #: trust it at all** and use the socket peer. A deployment behind exactly one
+    #: platform proxy - Render, Fly, most PaaS - sets this to 1, which reads the
+    #: entry that proxy appended rather than anything the client wrote.
+    #:
+    #: Setting it higher than the real number of proxies lets a client choose
+    #: its own rate-limit bucket by forging earlier entries, so it must match
+    #: the deployment rather than being set generously.
+    rate_limit_trusted_proxy_hops: int = 0
     #: Per session: comfortable for a person thinking between messages.
     rate_limit_session_per_minute: float = 5.0
     rate_limit_session_burst: float = 3.0

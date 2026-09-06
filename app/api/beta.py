@@ -48,7 +48,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
-from app.api.ratelimit import RATE_LIMITED_MESSAGE, RateLimiter
+from app.api.ratelimit import RATE_LIMITED_MESSAGE, RateLimiter, client_ip_from
 from app.api.routes import OrchestratorDep
 from app.db.repository import FeedbackRecord
 from app.pipeline.orchestrator import GuidanceOrchestrator
@@ -246,16 +246,20 @@ async def _require_consent(
 # Rate limiting
 # --------------------------------------------------------------------------- #
 def _client_ip(request: Request) -> str | None:
-    """Best-effort client address.
+    """The address to rate-limit this request on.
 
-    ``X-Forwarded-For`` is honoured because the beta will sit behind a proxy,
-    but only its first hop and only as a *rate-limit key* - it is never trusted
-    for anything security-relevant, since a client can set it freely.
+    Delegates the proxy reasoning to
+    :func:`app.api.ratelimit.client_ip_from`, which reads ``X-Forwarded-For``
+    only as far as the configured number of trusted proxies allows. Used solely
+    as a rate-limit key; nothing security-relevant is decided from it.
     """
-    forwarded = request.headers.get("x-forwarded-for", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip() or None
-    return request.client.host if request.client else None
+    settings = getattr(request.app.state, "settings", None)
+    hops = settings.rate_limit_trusted_proxy_hops if settings is not None else 0
+    return client_ip_from(
+        request.headers.get("x-forwarded-for"),
+        request.client.host if request.client else None,
+        hops,
+    )
 
 
 def _enforce_rate_limit(request: Request, session_id: str | None) -> None:
