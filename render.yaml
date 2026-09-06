@@ -5,15 +5,30 @@
 # contains a key, a password, or a connection string - see .env.production.example
 # for the shape of each value and docs/DEPLOY.md for the order to set them in.
 #
-# Plan: Starter. Not Free - a free instance sleeps, and the first request after
-# a sleep pays the full ONNX model load, which is minutes, not seconds. Testers
-# would read that as the app being broken.
+# Plan: Free, deliberately, for the closed beta.
+#
+# The trade-off, stated plainly because it is a real cost and not a footnote:
+# a Free instance spins down after ~15 minutes with no traffic, and the next
+# request pays a cold start - roughly 30-60s on this image, because the process
+# also loads both ONNX models before the health check passes.
+#
+# The compensating control is .github/workflows/keepwarm.yml, which pings
+# /health every 10 minutes so the instance rarely gets the chance to sleep
+# during a testing session. That is a mitigation, not a fix: GitHub's cron is
+# best-effort, the Free tier has a monthly instance-hour budget the ping itself
+# consumes, and a genuinely quiet night will still produce one slow first
+# message. The frontend says so in plain language rather than hiding it behind
+# a spinner (see WaitingIndicator's 35s stage).
+#
+# Escalation: switching to Starter is one dropdown in the Render dashboard and
+# takes effect without a redeploy. If cold starts turn out to cost more tester
+# goodwill than the plan costs money, change it there and update this file.
 
 services:
   - type: web
     name: gitaguide-api
     runtime: docker
-    plan: starter
+    plan: free
     region: singapore # closest to the testers; change if yours are elsewhere
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
