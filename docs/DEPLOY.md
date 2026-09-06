@@ -37,9 +37,8 @@ You should see 3,836 verses and 14,709 relationships across five types. The
 exporter refuses to write a partial graph, so if it printed files, it exported
 everything. Details and the expected counts: [DATA_MIGRATION.md](DATA_MIGRATION.md).
 
-You will also need `cypher-shell` installed (it ships with Neo4j Desktop, or
-`brew install cypher-shell`). The node file is ~33 MB and the browser console
-cannot take it.
+No `cypher-shell` needed. The import runs through the Neo4j Python driver you
+already have installed, sending the graph as query *parameters*.
 
 ---
 
@@ -47,37 +46,49 @@ cannot take it.
 
 1. <https://console.neo4j.io> → **New Instance** → **AuraDB Free**.
 2. Name it `gitaguide-beta`. Choose the region closest to your testers.
-3. **Download the credentials file when it is offered.** It is shown once. You
-   need the `NEO4J_URI` (the `neo4j+s://…` form) and the generated password.
+3. **Download the credentials file when it is offered.** It is shown once.
 4. Wait until the instance shows **Running** — roughly 3 minutes.
 
-Import, from your `data/graph_export` directory, **in this order**:
+> **Aura Free names things after the instance id.** For instance `1c4ad18d`, the
+> URI is `neo4j+s://1c4ad18d.databases.neo4j.io` and **both the username and the
+> database name are `1c4ad18d`** — not `neo4j`, which is what every tutorial
+> shows and what this app defaults to. Read all four values off the credentials
+> file rather than assuming any of them.
+
+Set the four connection variables in your shell, then run the importer. It reads
+them from the environment; it never prompts for a password and nothing is typed
+where your shell history can keep it:
 
 ```bash
-cypher-shell -a "neo4j+s://<your-instance>.databases.neo4j.io" -u neo4j --file 01_constraints.cypher
-cypher-shell -a "neo4j+s://<your-instance>.databases.neo4j.io" -u neo4j --file 02_nodes.cypher
-cypher-shell -a "neo4j+s://<your-instance>.databases.neo4j.io" -u neo4j --file 03_relationships.cypher
+export GITAGUIDE_NEO4J_URI=neo4j+s://<instance-id>.databases.neo4j.io
+export GITAGUIDE_NEO4J_USERNAME=<instance-id>
+export GITAGUIDE_NEO4J_DATABASE=<instance-id>
+read -rs GITAGUIDE_NEO4J_PASSWORD && export GITAGUIDE_NEO4J_PASSWORD
+
+python -m scripts.import_neo4j --source data/graph_export
 ```
 
-It prompts for the password — let it, rather than putting the password on the
-command line where it lands in your shell history. The node file takes a few
-minutes.
+It applies the constraints and indexes, loads the verses and relationships in
+parameterised batches, and then **verifies the target against `manifest.json`**.
+Expect it to finish with:
 
-**Check before moving on.** In the Aura console query editor:
-
-```cypher
-MATCH (v:Verse) RETURN count(v) AS verses, count(v.embedding) AS embedded;
+```
+  [ok] 3836 verses, all embedded
+  [ok] ADDRESSES_EMOTION: 1689
+  [ok] HAS_THEME: 5898
+  [ok] MENTIONS: 740
+  [ok] PART_OF: 3836
+  [ok] RELATED_TO: 2546
+  [ok] both indexes ONLINE
 ```
 
-Both must be **3836**. Then:
+**If it exits non-zero, it names exactly what did not match.** Just run it
+again: every write is a `MERGE` on a stable key, so a re-run repairs a partial
+import rather than duplicating anything. That is the documented recovery for a
+connection dropped mid-upload.
 
-```cypher
-SHOW INDEXES YIELD name, type, state WHERE type IN ['VECTOR','FULLTEXT'] RETURN name, type, state;
-```
-
-Both indexes must exist and be **`ONLINE`**. A vector index still `POPULATING`
-does not error — it just returns poor neighbours, and you would spend the rest
-of the day blaming the reranker.
+`--verify-only` re-runs the checks without writing, which is the quickest way to
+confirm an instance that has been sitting idle is still intact.
 
 ---
 
@@ -130,6 +141,8 @@ the API's first boot. Reasoning and the verification queries:
    | `GITAGUIDE_POSTGRES_DSN` | step 2, after both transformations |
    | `GITAGUIDE_NEO4J_URI` | step 1, the `neo4j+s://…` URI |
    | `GITAGUIDE_NEO4J_PASSWORD` | step 1, from the credentials file |
+   | `GITAGUIDE_NEO4J_USERNAME` | step 1 — on Aura Free this is the **instance id**, not `neo4j` |
+   | `GITAGUIDE_NEO4J_DATABASE` | step 1 — on Aura Free this is the **instance id** too |
    | `GITAGUIDE_TELEMETRY_SESSION_SALT` | any long random string, set once |
    | `GITAGUIDE_CORS_ORIGINS` | **leave blank for now** — step 5 |
 
@@ -186,6 +199,8 @@ If the smoke test fails, **stop here**. Common causes:
 | `TypeError … 'sslmode'` in the logs | `?sslmode=require` is still on the DSN |
 | `retrieval_backend` is `in-memory-hybrid` | Neo4j URI or password wrong; the retriever fell back |
 | Boot fails, "refusing to start" | a disarmed rule table, or a budget below 15 — the error names which |
+| `Unauthorized` from the importer | on Aura Free the username is the instance id, not `neo4j` |
+| `database does not exist` | same — `GITAGUIDE_NEO4J_DATABASE` is the instance id too |
 | `mock_mode: true` | `GITAGUIDE_MOCK_MODE` is not exactly `false` |
 
 ---

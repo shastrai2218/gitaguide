@@ -42,16 +42,21 @@ services:
         sync: false
       - key: GITAGUIDE_NEO4J_PASSWORD
         sync: false
+      # Not secrets, but not constants either: on AuraDB Free the username and
+      # the database name are both the instance id, not "neo4j". Prompted for
+      # rather than defaulted, because a hardcoded "neo4j" here fails with
+      # "Unauthorized" / "database does not exist" and neither message mentions
+      # Aura's naming.
+      - key: GITAGUIDE_NEO4J_USERNAME
+        sync: false
+      - key: GITAGUIDE_NEO4J_DATABASE
+        sync: false
       - key: GITAGUIDE_TELEMETRY_SESSION_SALT
         sync: false
 
       # ---- backends -------------------------------------------------------
       - key: GITAGUIDE_USE_REAL_NEO4J
         value: "true"
-      - key: GITAGUIDE_NEO4J_USERNAME
-        value: neo4j
-      - key: GITAGUIDE_NEO4J_DATABASE
-        value: neo4j
       - key: GITAGUIDE_LLM_PROVIDER
         value: nvidia
 

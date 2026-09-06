@@ -31,10 +31,22 @@ Read-only against the source; it prints the host but never a credential. Expect:
 
 | file | contents |
 | --- | --- |
-| `01_constraints.cypher` | constraints + vector index (384-dim, cosine) + full-text index |
-| `02_nodes.cypher` | 3,836 `:Verse` nodes with embeddings — **~33 MB** |
-| `03_relationships.cypher` | label/Scripture nodes and 14,709 edges — ~812 KB |
-| `manifest.json` | the counts to verify the import against |
+| `verses.jsonl` | 3,836 verses, one per line, embeddings included — **~33 MB** |
+| `relationships.json` | label/Scripture nodes and 14,709 edges |
+| `manifest.json` | the counts the import is verified against |
+
+**It writes data, not query text.** An earlier version generated `.cypher`
+files by interpolating `json.dumps()` output into `UNWIND [...] AS row`. That is
+invalid Cypher — JSON quotes its map keys (`{"verse_id": …}`) where Cypher
+requires bare identifiers (`{verse_id: …}`) — so every file was rejected at line
+1 by `cypher-shell`. It survived review because the checks were all on the
+writer: does it produce a file, does the file contain the right counts. Both
+passed. Neither ever executed a statement.
+
+The fix is not more careful escaping. Hand-built query text was the wrong tool:
+the importer now sends this data as query *parameters*, where the driver handles
+typing and escaping and no amount of unusual content in a verse can change the
+shape of a statement.
 
 Expected counts, which should match `manifest.json`:
 
@@ -55,44 +67,74 @@ was called `MENTIONS_CONCEPT` when it is actually `MENTIONS`, the query matched
 nothing, the export "succeeded", and 740 edges would have gone missing in
 production with no error anywhere.
 
-### Import into Aura
+### The Aura Free naming quirk
 
-**Do not paste `02_nodes.cypher` into the browser console.** It is ~33 MB; the
-Aura query editor will hang or truncate it. Use `cypher-shell`, which streams:
+Every Neo4j tutorial uses `neo4j` as both the username and the database name.
+**On AuraDB Free, both are the instance id.** For instance `1c4ad18d`:
+
+| variable | value |
+| --- | --- |
+| `GITAGUIDE_NEO4J_URI` | `neo4j+s://1c4ad18d.databases.neo4j.io` |
+| `GITAGUIDE_NEO4J_USERNAME` | `1c4ad18d` |
+| `GITAGUIDE_NEO4J_DATABASE` | `1c4ad18d` |
+
+The app's defaults are `neo4j` for both, so both must be set explicitly — in
+your shell for the import, and in Render for the service. A wrong username gives
+`Unauthorized`; a wrong database gives `database does not exist`. Neither
+mentions Aura's naming, so it is easy to spend a while suspecting the password.
+
+### Import
 
 ```bash
-cypher-shell -a "neo4j+s://<your-instance>.databases.neo4j.io" -u neo4j \
-  --file 01_constraints.cypher
+export GITAGUIDE_NEO4J_URI=neo4j+s://<instance-id>.databases.neo4j.io
+export GITAGUIDE_NEO4J_USERNAME=<instance-id>
+export GITAGUIDE_NEO4J_DATABASE=<instance-id>
+read -rs GITAGUIDE_NEO4J_PASSWORD && export GITAGUIDE_NEO4J_PASSWORD
+
+python -m scripts.import_neo4j --source data/graph_export
 ```
 
-Then `02_nodes.cypher`, then `03_relationships.cypher`, **in that order**.
-Constraints first, or every node gets scanned twice. Nodes before
-relationships, or the `MATCH` clauses find nothing and edges are silently
-skipped — the statements succeed, they just match zero rows.
+The importer reads those four variables and never prompts, so no credential
+reaches your shell history. It:
 
-`cypher-shell` will prompt for the password. Do not put it on the command line:
-it lands in your shell history.
+1. applies the constraints and both indexes with `IF NOT EXISTS`,
+2. loads verses in parameterised batches of 500, then the relationships,
+3. counts what is actually in the target and compares it against
+   `manifest.json`, **exiting non-zero and naming every mismatch** if they
+   disagree.
 
-The node import takes a few minutes on Aura Free. Verify afterwards:
+**It is safe to re-run.** Every write is a `MERGE` on a stable key, so a second
+run repairs a partial import rather than duplicating anything — which is the
+recovery when a connection drops 20 MB into a 33 MB upload. `--verify-only`
+re-runs just the checks.
 
-```cypher
-MATCH (v:Verse) RETURN count(v) AS verses,
-       count(v.embedding) AS embedded;
-CALL db.relationshipTypes() YIELD relationshipType
-CALL { WITH relationshipType
-  MATCH ()-[r]->() WHERE type(r) = relationshipType RETURN count(r) AS edges }
-RETURN relationshipType, edges ORDER BY relationshipType;
-SHOW INDEXES YIELD name, type, state WHERE type IN ['VECTOR','FULLTEXT']
-RETURN name, type, state;
-```
+Against a local container the whole thing takes about 10 seconds; Aura Free is
+slower but still minutes, not tens of minutes.
 
-Three things must be true before moving on:
+Three things must be true before moving on, and the importer asserts all three
+for you:
 
-1. `verses = 3836` **and** `embedded = 3836`. A verse without an embedding is
-   invisible to the vector channel and nothing reports it.
+1. `verses = 3836` **and** all 3,836 embedded. A verse without an embedding is
+   invisible to the vector channel and nothing else reports it.
 2. The five relationship counts match the table above.
 3. Both indexes exist and are **`ONLINE`**. A vector index still `POPULATING`
    returns poor neighbours rather than an error.
+
+### This path is round-trip tested
+
+`tests/test_graph_roundtrip.py` stands up a throwaway Neo4j container, runs the
+real export and the real import against it, and then asks the database what it
+holds — including that quotes and Devanagari survive intact, that the vector
+index is `ONLINE`, that a second run changes nothing, and that verification
+actually fails on a deliberately damaged graph. It is opt-in because it needs
+Docker:
+
+```bash
+GITAGUIDE_RUN_GRAPH_ROUNDTRIP=1 pytest tests/test_graph_roundtrip.py
+```
+
+A test that only inspects the exporter's output is what missed the invalid
+Cypher, so this one refuses to look at files.
 
 ### Capacity
 
