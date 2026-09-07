@@ -51,9 +51,14 @@ GITAGUIDE_EMBEDDER_PRECISION=int8 python -m scripts.reembed_graph   # if not alr
 python -m scripts.export_neo4j --out data/graph_export
 ```
 
-You should see 3,836 verses and 14,709 relationships across five types. The
-exporter refuses to write a partial graph, so if it printed files, it exported
-everything. Details and the expected counts: [DATA_MIGRATION.md](DATA_MIGRATION.md).
+You should see `encoder verified : all-MiniLM-L6-v2-onnx-int8 (min cosine
+1.000000 over 12 verses)`, then 3,836 verses and 14,709 relationships across
+five types. The exporter re-embeds a sample to prove the vectors really came
+from the configured encoder and refuses to write a partial or mislabelled graph,
+so if it printed files, it exported everything and the manifest's
+`embedder_precision` is measured, not assumed. The importer then refuses a
+manifest whose precision differs from the environment importing it. Details and
+the expected counts: [DATA_MIGRATION.md](DATA_MIGRATION.md).
 
 No `cypher-shell` needed. The import runs through the Neo4j Python driver you
 already have installed, sending the graph as query *parameters*.

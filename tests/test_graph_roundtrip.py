@@ -115,6 +115,9 @@ def neo4j_container() -> Iterator[dict[str, str]]:
             "GITAGUIDE_NEO4J_DATABASE": "neo4j",
             "GITAGUIDE_MOCK_MODE": "false",
             "GITAGUIDE_USE_REAL_NEO4J": "true",
+            # Export and import must agree on the encoder, or the import
+            # refuses (test_graph_manifest.py covers the refusal offline).
+            "GITAGUIDE_EMBEDDER_PRECISION": "fp32",
         }
     finally:
         docker("rm", "-f", CONTAINER, check=False)
@@ -172,7 +175,11 @@ def export_dir(tmp_path_factory: pytest.TempPathFactory, neo4j_container: dict[s
         driver.close()
 
     out = tmp_path_factory.mktemp("graph_export")
-    result = run_module("scripts.export_neo4j", neo4j_container, "--out", str(out))
+    # The fixture's vectors are synthetic ([0.1] * 384); no encoder wrote them,
+    # so the precision check is skipped here and exercised offline instead.
+    result = run_module(
+        "scripts.export_neo4j", neo4j_container, "--out", str(out), "--skip-precision-check"
+    )
     assert result.returncode == 0, f"export failed:\n{result.stdout}\n{result.stderr}"
 
     # Wipe, so the import has to create everything rather than finding it.
@@ -301,6 +308,27 @@ def test_the_import_is_idempotent(
     assert result.returncode == 0, f"re-import failed:\n{result.stdout}\n{result.stderr}"
 
     assert graph_counts(neo4j_container["GITAGUIDE_NEO4J_URI"]) == before
+
+
+def test_the_import_refuses_an_export_from_the_other_encoder(
+    neo4j_container: dict[str, str], export_dir: Path
+) -> None:
+    """Same files, same database, a different GITAGUIDE_EMBEDDER_PRECISION: refused.
+
+    The real script, the real environment path, exit code 2 before a single
+    connection is made.
+    """
+    refused = run_module(
+        "scripts.import_neo4j",
+        {**neo4j_container, "GITAGUIDE_EMBEDDER_PRECISION": "int8"},
+        "--source",
+        str(export_dir),
+    )
+    assert refused.returncode == 2
+    assert "fp32" in refused.stderr and "int8" in refused.stderr
+
+    # And nothing changed in the target.
+    assert graph_counts(neo4j_container["GITAGUIDE_NEO4J_URI"])["verses"] == 2
 
 
 def test_verification_fails_on_a_partial_graph(

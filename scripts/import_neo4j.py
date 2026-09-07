@@ -58,6 +58,37 @@ class ImportVerificationError(RuntimeError):
     """The target graph does not match the manifest."""
 
 
+def manifest_precision_problem(manifest: dict[str, Any], settings: Settings) -> str | None:
+    """Why this manifest must not be imported for this environment, or ``None``.
+
+    The vectors in an export were written by one encoder; the service that will
+    query them is configured with ``GITAGUIDE_EMBEDDER_PRECISION``. If those
+    differ, the import succeeds, every count matches, and retrieval quietly
+    returns worse neighbours (0.986 min cosine, measured). This happened once
+    already on 8 Sep 2026: an fp32 export sat ready to load into an INT8
+    deployment and nothing in the manifest could say so. So the operator's
+    environment has to state the precision production runs, and the manifest
+    has to agree with it.
+    """
+    recorded = manifest.get("embedder_precision")
+    if recorded is None:
+        return (
+            "manifest.json records no embedder_precision, so nothing says which encoder "
+            "wrote its vectors (exports before 8 Sep 2026 did not record it). Re-export "
+            "with the current scripts/export_neo4j.py, which measures it."
+        )
+    if recorded != settings.embedder_precision:
+        return (
+            f"the export's vectors were written by the {recorded} encoder, but this "
+            f"environment has GITAGUIDE_EMBEDDER_PRECISION={settings.embedder_precision}. "
+            "Importing would put one encoder's vectors behind a service that queries with "
+            "another: no error anywhere, just worse neighbours. Set "
+            f"GITAGUIDE_EMBEDDER_PRECISION={recorded} for this import if that is what "
+            "production runs, or re-embed and re-export at the precision it does."
+        )
+    return None
+
+
 #: Verses per statement. Each carries a 384-float embedding, so 500 keeps a
 #: batch around 1.5 MB - large enough to be fast, small enough that a retry
 #: after a dropped connection is cheap.
@@ -281,6 +312,22 @@ def main(argv: list[str] | None = None) -> int:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     settings: Settings = get_settings()
+
+    # Before credentials, before any connection: the one mismatch the count
+    # checks cannot see. Fails the same way with or without --verify-only.
+    problem = manifest_precision_problem(manifest, settings)
+    if problem:
+        print(f"[FAIL] {problem}", file=sys.stderr)
+        return 2
+    if not manifest.get("embedder_precision_verified", False):
+        print(
+            "[WARN] the export did not verify its encoder against the graph "
+            "(--skip-precision-check): embedder_precision is what the exporter was "
+            "configured with, not what it measured. Fine for a synthetic graph; not "
+            "for production.",
+            file=sys.stderr,
+        )
+
     if not settings.neo4j_password:
         print(
             "[FAIL] GITAGUIDE_NEO4J_PASSWORD is not set. Set the four connection "
@@ -307,6 +354,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  user     : {settings.neo4j_username}")
     print(f"  database : {settings.neo4j_database}")
     print(f"  source   : {source.resolve()}")
+    print(
+        f"  exported : {manifest.get('exported_at', 'unknown')}, vectors from the "
+        f"{manifest['embedder_precision']} encoder"
+    )
     print(
         f"  expecting: {manifest['verses']} verses, "
         f"{manifest['relationships_total']} relationships\n"

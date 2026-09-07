@@ -33,7 +33,47 @@ Read-only against the source; it prints the host but never a credential. Expect:
 | --- | --- |
 | `verses.jsonl` | 3,836 verses, one per line, embeddings included — **~33 MB** |
 | `relationships.json` | label/Scripture nodes and 14,709 edges |
-| `manifest.json` | the counts the import is verified against |
+| `manifest.json` | the counts, **the encoder that wrote the vectors**, and the export time — the import is verified against all three |
+
+### The manifest says which encoder wrote the vectors
+
+The stored vectors and the serving encoder must be the same encoder. An INT8
+query against fp32-built vectors does not error; it returns worse neighbours
+(0.986 min cosine, measured — `kg_measurements.md` section 12). On 8 Sep 2026
+`data/graph_export` held an fp32 export while the local graph had been
+re-embedded to INT8 and production was configured for INT8, and **every count
+in the manifest matched**. Only re-embedding a sample and comparing cosines told
+the two apart.
+
+So the exporter now makes that measurement itself, **before writing any file**:
+it re-embeds twelve verses (evenly spaced through the id order, so both
+scriptures are covered) with the encoder `GITAGUIDE_EMBEDDER_PRECISION` selects
+and requires the stored vectors to agree to cosine ≥ 0.999. The same encoder
+gives 1.000000; the other precision of the same MiniLM gives ~0.986. A mismatch
+is `PrecisionMismatchError`, exit 1, nothing written — because a manifest that
+labels the vectors wrongly is worse than no manifest.
+
+The result is recorded:
+
+```json
+"exported_at": "2026-09-07T20:41:12+00:00",
+"embedder_precision": "int8",
+"embedder_precision_verified": true,
+"precision_check": {"encoder": "all-MiniLM-L6-v2-onnx-int8", "sampled": 12,
+                    "min_cosine": 1.0, "threshold": 0.999}
+```
+
+And the importer **refuses** a manifest whose `embedder_precision` differs from
+the `GITAGUIDE_EMBEDDER_PRECISION` of the environment running the import — exit
+2, before credentials are read or a connection is made, with a message naming
+both sides. So set that variable to what **production** runs (`int8`) before
+importing to Aura; the local `.env` should already say so. A manifest with no
+`embedder_precision` at all (any export before 8 Sep) is refused too: re-export.
+
+`--skip-precision-check` exists for synthetic graphs whose vectors no encoder
+produced (the round-trip test fixture). The manifest then records
+`embedder_precision_verified: false` and the importer prints a warning. Never
+use it for the production export.
 
 **It writes data, not query text.** An earlier version generated `.cypher`
 files by interpolating `json.dumps()` output into `UNWIND [...] AS row`. That is
@@ -97,9 +137,11 @@ python -m scripts.import_neo4j --source data/graph_export
 The importer reads those four variables and never prompts, so no credential
 reaches your shell history. It:
 
-1. applies the constraints and both indexes with `IF NOT EXISTS`,
-2. loads verses in parameterised batches of 500, then the relationships,
-3. counts what is actually in the target and compares it against
+1. refuses, before connecting, a manifest whose `embedder_precision` is not
+   the `GITAGUIDE_EMBEDDER_PRECISION` of your environment (see above),
+2. applies the constraints and both indexes with `IF NOT EXISTS`,
+3. loads verses in parameterised batches of 500, then the relationships,
+4. counts what is actually in the target and compares it against
    `manifest.json`, **exiting non-zero and naming every mismatch** if they
    disagree.
 
