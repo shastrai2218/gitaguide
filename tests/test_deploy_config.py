@@ -246,15 +246,67 @@ def test_the_queue_timeout_is_shorter_than_the_client_deadline(
     )
 
 
-def test_serialisation_and_int8_default_safely_in_code() -> None:
-    """Config files can be lost; the defaults must not be the dangerous ones."""
+def test_serialisation_and_int8_default_safely_in_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Config files can be lost; the defaults must not be the dangerous ones.
+
+    Asks for the *code* default: no dotenv, and the variable removed from the
+    environment. Without that, a developer whose .env matches an INT8 local
+    graph would see this test fail for a reason that has nothing to do with the
+    default.
+    """
     from app.config import Settings
 
-    settings = Settings(mock_mode=True)
+    monkeypatch.delenv("GITAGUIDE_EMBEDDER_PRECISION", raising=False)
+    settings = Settings(mock_mode=True, _env_file=None)
     # Serialisation defaults ON: the safe direction, since off risks an OOM.
     assert settings.pipeline_serialise is True
     # Precision defaults to fp32: the safe direction, because an fp32 encoder
     # against an fp32 index is correct, and switching is what needs deliberate
     # action plus a re-embed.
     assert settings.embedder_precision == "fp32"
+
+
+# --------------------------------------------------------------------------- #
+# CORS
+#
+# The service is Blueprint managed, so a sync applies whatever render.yaml says.
+# A `sync: false` entry with a value typed into the dashboard is exactly what a
+# sync would clear, and the failure is every /api call from the UI refused by
+# the browser while the server reports nothing wrong.
+# --------------------------------------------------------------------------- #
+FRONTEND_ORIGIN = "https://gitaguide-livid.vercel.app"
+
+
+def _cors_origins(render_yaml: str) -> list[str]:
+    """The origins render.yaml pins, parsed the way the app would parse them."""
+    import json
+
+    from app.config import Settings
+
+    # Not `_env_value`: that helper stops at the first double quote, and this
+    # value is a JSON list wrapped in single quotes so its quotes survive YAML.
+    match = re.search(r"GITAGUIDE_CORS_ORIGINS\s*\n\s*value:\s*(.+)", render_yaml)
+    assert match is not None, (
+        "render.yaml does not pin GITAGUIDE_CORS_ORIGINS. Left to the dashboard, a "
+        "Blueprint sync clears it and the UI is refused by CORS."
+    )
+    raw = match.group(1).strip().strip("'\"")
+    parsed = json.loads(raw) if raw.startswith("[") else raw
+    return Settings(mock_mode=True, cors_origins=parsed).cors_origins
+
+
+def test_render_pins_the_frontend_origin_for_cors(render_yaml: str) -> None:
+    origins = _cors_origins(render_yaml)
+    assert FRONTEND_ORIGIN in origins, f"the deployed UI origin is missing from {origins}"
+
+
+def test_cors_origins_are_exact_https_origins(render_yaml: str) -> None:
+    """A trailing slash or a path is not an origin, and the browser will not match it."""
+    for origin in _cors_origins(render_yaml):
+        assert origin.startswith("https://"), f"{origin!r} is not https"
+        assert not origin.endswith("/"), f"{origin!r} has a trailing slash"
+        assert origin.count("/") == 2, f"{origin!r} carries a path; an origin has none"
+        assert "*" not in origin, "a wildcard would open the API to any site"
 

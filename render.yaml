@@ -157,8 +157,12 @@ services:
       - key: GITAGUIDE_TELEMETRY_PATH
         value: /app/logs/telemetry.jsonl
 
-      # ---- CORS: set to the Vercel URL once the frontend exists ------------
-      # Left blank on purpose. The frontend is deployed after the API, so this
-      # is filled in on the second pass (docs/DEPLOY.md step 4).
+      # ---- CORS: the deployed frontend's origin --------------------------
+      # Pinned here, not left to the dashboard. This service is Blueprint
+      # managed, so a sync applies whatever this file says: a `sync: false`
+      # entry with a value typed into the dashboard is exactly what a sync
+      # would clear, and the failure is every /api call from the UI refused by
+      # the browser with nothing wrong on the server. Exact origin, https, no
+      # trailing slash; JSON list so a second origin is an unambiguous edit.
       - key: GITAGUIDE_CORS_ORIGINS
-        sync: false
+        value: '["https://gitaguide-livid.vercel.app"]'

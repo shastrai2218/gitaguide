@@ -38,6 +38,10 @@ OFFLINE_ENV: dict[str, str] = {
     # Pin the 16-verse sample: a locally built 701-verse corpus/data/gita.json
     # would otherwise change what the app-level tests retrieve.
     "GITAGUIDE_CORPUS_PATH": "corpus/data/sample_corpus.json",
+    # The developer's .env sets this to int8 to match the local graph, and
+    # Settings reads .env. Tests that want INT8 ask for it explicitly; the rest
+    # must see the code default rather than whatever the local graph needs.
+    "GITAGUIDE_EMBEDDER_PRECISION": "fp32",
 }
 
 
