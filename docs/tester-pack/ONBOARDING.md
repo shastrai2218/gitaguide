@@ -15,6 +15,13 @@ It is **not** a doctor, therapist, counsellor, or astrologer, and it can be
 wrong. It offers perspective, not advice you should follow blindly, and never
 medical or mental-health treatment.
 
+## Where it is
+
+Open **https://gitaguide-livid.vercel.app** in any modern browser, on a phone
+or a laptop. There is nothing to install and no account to create: the first
+screen asks you to read and accept the beta notice, and that is the whole
+sign-up.
+
 ## What to try
 
 - Bring real (or realistic) situations: a career dilemma, a family
@@ -36,6 +43,10 @@ medical or mental-health treatment.
   That's a limit protecting the beta, not an error.
 - If your message expresses serious distress, GitaGuide will step aside and
   point you to real human support instead of scripture. That is deliberate.
+- The Arthashastra passages are quoted from a century-old public-domain
+  translation (Shamasastry, 1915), so their wording is archaic — "the king
+  shall…" — and sometimes hard going. That is the text, not a glitch; do tell
+  us when a passage was too opaque to be useful.
 
 ## If you are struggling
 

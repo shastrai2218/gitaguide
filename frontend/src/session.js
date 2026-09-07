@@ -10,7 +10,9 @@
  */
 
 const SESSION_KEY = 'gitaguide.session_id'
-const CONSENT_KEY = 'gitaguide.consent.v1'
+// Keyed by notice version, so a browser that accepted an older notice sees the
+// gate again at once rather than after its first message comes back 409.
+const CONSENT_KEY = 'gitaguide.consent.beta-1'
 
 let memorySessionId = null
 let memoryConsent = false

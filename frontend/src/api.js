@@ -25,8 +25,14 @@
  * `detail.code === "consent_required"` for a session that has not recorded it.
  */
 
-/** Version of the consent notice this build shows. Must match the server's. */
-export const CONSENT_VERSION = 'v1'
+/**
+ * Version of the consent notice this build shows. Must match the server's
+ * (`GITAGUIDE_CONSENT_VERSION`; tests/test_deploy_config.py holds the two
+ * together). `beta-1` is the version printed on the Privacy Notice and the
+ * Disclaimer themselves, so what a tester reads, what they accept, and what
+ * the server records are one string.
+ */
+export const CONSENT_VERSION = 'beta-1'
 
 /** Thrown when the server says this session has not consented. */
 export const CONSENT_REQUIRED = 'consent_required'

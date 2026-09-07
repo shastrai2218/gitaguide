@@ -25,6 +25,15 @@ PROJECT_ROOT: Path = Path(__file__).resolve().parent.parent
 CORPUS_DATA_DIR: Path = PROJECT_ROOT / "corpus" / "data"
 SAMPLE_CORPUS_PATH: Path = CORPUS_DATA_DIR / "sample_corpus.json"
 
+#: The consent notice testers are currently asked to accept.
+#:
+#: This is the version printed on ``docs/tester-pack/PRIVACY.md`` and
+#: ``DISCLAIMER.md``, the version the frontend sends (``CONSENT_VERSION`` in
+#: ``frontend/src/api.js``), and the version ``/api/consent`` records. One
+#: string in four places; ``tests/test_tester_pack.py`` holds them together.
+#: A session that consented to any earlier version is asked again.
+CURRENT_CONSENT_VERSION = "beta-1"
+
 
 class LLMProviderName(str, Enum):
     """Which concrete :class:`app.llm.base.LLMProvider` to instantiate."""
@@ -230,8 +239,9 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------- consent
     #: The consent text the tester agreed to. Bump when the wording changes in a
     #: way a tester would want to see again; a session consented to an older
-    #: version is treated as not consented.
-    consent_version: str = "v1"
+    #: version is treated as not consented. ``v1`` was the pre-launch
+    #: placeholder; ``beta-1`` is the notice the tester pack carries.
+    consent_version: str = CURRENT_CONSENT_VERSION
     #: Server-side enforcement. Off only for tests that are not about consent -
     #: never in anything a tester touches, or the record is worthless.
     consent_required: bool = True

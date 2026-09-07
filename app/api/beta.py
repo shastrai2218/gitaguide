@@ -51,6 +51,7 @@ from pydantic import BaseModel, Field
 from app.api.concurrency import PipelineBusyError, PipelineGate
 from app.api.ratelimit import RATE_LIMITED_MESSAGE, RateLimiter, client_ip_from
 from app.api.routes import OrchestratorDep
+from app.config import CURRENT_CONSENT_VERSION
 from app.db.repository import FeedbackRecord
 from app.pipeline.generation import OVERLOADED_ANSWER, PROVIDER_OVERLOADED
 from app.pipeline.orchestrator import GuidanceOrchestrator
@@ -223,7 +224,9 @@ async def _require_consent(
     if settings is not None and not settings.consent_required:
         return
 
-    required = settings.consent_version if settings is not None else "v1"
+    required = (
+        settings.consent_version if settings is not None else CURRENT_CONSENT_VERSION
+    )
     record = await orchestrator.repository.get_session(session_id) if session_id else None
     if record is not None and record.consent_version == required:
         return
@@ -404,7 +407,9 @@ async def beta_consent(
     thing that happens, before any message exists to create one.
     """
     settings = getattr(request.app.state, "settings", None)
-    required = settings.consent_version if settings is not None else "v1"
+    required = (
+        settings.consent_version if settings is not None else CURRENT_CONSENT_VERSION
+    )
     if payload.version != required:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

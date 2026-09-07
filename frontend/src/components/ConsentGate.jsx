@@ -1,3 +1,5 @@
+import { CONSENT_VERSION } from '../api.js'
+
 /**
  * First-visit consent screen.
  *
@@ -6,6 +8,10 @@
  * reflection and not treatment, and what is stored. The helplines are here as
  * well as in the persistent footnote, because the first screen is the one a
  * person in distress is most likely to be looking at.
+ *
+ * The full Privacy Notice and Disclaimer are one click away, in a new tab so
+ * the gate stays where it is, and the version a tester is accepting is printed
+ * next to the button - the same string the server records against the session.
  */
 export default function ConsentGate({ onAccept, error }) {
   return (
@@ -53,6 +59,18 @@ export default function ConsentGate({ onAccept, error }) {
           <li>KIRAN — 1800-599-0019 (24×7, free)</li>
           <li>Emergency — 112</li>
         </ul>
+
+        <p className="gate-terms">
+          By continuing you accept the{' '}
+          <a href="/disclaimer" target="_blank" rel="noopener">
+            Disclaimer &amp; Beta Terms
+          </a>{' '}
+          and the{' '}
+          <a href="/privacy" target="_blank" rel="noopener">
+            Privacy Notice
+          </a>
+          {' '}(notice version {CONSENT_VERSION}).
+        </p>
 
         {error && (
           <p className="gate-error" role="alert">

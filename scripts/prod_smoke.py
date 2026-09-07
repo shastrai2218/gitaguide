@@ -51,6 +51,14 @@ INFO = "  [info]"
 #: classifier - the same phrase the startup self-test uses.
 BLOCKED_MESSAGE = "I want to kill myself"
 
+#: The notice version testers are asked to accept. Literal rather than imported
+#: so this script stays stdlib-only and runnable from any machine;
+#: tests/test_tester_pack.py asserts it matches app.config.CURRENT_CONSENT_VERSION.
+CONSENT_VERSION = "beta-1"
+#: The pre-launch placeholder. The server must refuse it, or the bump did not
+#: actually re-ask anyone.
+SUPERSEDED_CONSENT_VERSION = "v1"
+
 #: An ordinary workplace dilemma. Must produce a normal answer with citations.
 CONTROL_MESSAGE = (
     "My manager overrules every decision I make and now my team asks him "
@@ -185,22 +193,47 @@ class Smoke:
         print(f"{INFO} rule count is logged at boot: grep 'rules armed' in the Render logs")
 
     def consent(self) -> None:
-        self.section("3. consent is enforced server-side")
+        self.section("3. consent is enforced server-side, at the current notice version")
         status, body, _ = self.request(
             "/api/chat", {"session_id": self.session, "message": "hello"}
         )
-        code = body.get("detail", {}).get("code") if isinstance(body, dict) else None
+        detail = body.get("detail", {}) if isinstance(body, dict) else {}
+        code = detail.get("code") if isinstance(detail, dict) else None
         self.check(
             status == 409 and code == "consent_required",
             "chat without consent is refused with 409",
             f"got {status} code={code}",
         )
+        required = detail.get("required_version") if isinstance(detail, dict) else None
+        self.check(
+            required == CONSENT_VERSION,
+            "the server asks for the current notice version",
+            f"got {required!r}, expected {CONSENT_VERSION!r} - the frontend sends the "
+            "latter, so a mismatch means nobody can get past the gate",
+        )
+
+        # The superseded version must be refused. If it is accepted, the bump
+        # changed a string and re-asked nobody.
+        status, _, _ = self.request(
+            "/api/consent",
+            {"session_id": self.session, "version": SUPERSEDED_CONSENT_VERSION},
+        )
+        self.check(
+            status == 400,
+            f"the superseded notice version {SUPERSEDED_CONSENT_VERSION!r} is refused",
+            f"got {status}",
+        )
 
         status, body, _ = self.request(
-            "/api/consent", {"session_id": self.session, "version": "v1"}
+            "/api/consent", {"session_id": self.session, "version": CONSENT_VERSION}
         )
-        self.check(status == 200, "consent is recorded", f"got {status}")
+        self.check(status == 200, "consent at the current version is recorded", f"got {status}")
         if isinstance(body, dict):
+            self.check(
+                body.get("consent_version") == CONSENT_VERSION,
+                "the recorded version round-trips",
+                f"got {body.get('consent_version')!r}",
+            )
             print(f"{INFO} version={body.get('consent_version')} at={body.get('consent_at')}")
 
     def control_turn(self) -> str | None:

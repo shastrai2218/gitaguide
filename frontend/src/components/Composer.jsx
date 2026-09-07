@@ -70,7 +70,16 @@ export default function Composer({ onSend, busy }) {
 
         <p className="footnote">
           GitaGuide offers reflection, not medical or mental-health care. In
-          distress? Tele-MANAS 14416 · emergency 112.
+          distress? Tele-MANAS 14416 · emergency 112.{' '}
+          <span className="footnote-links">
+            <a href="/privacy" target="_blank" rel="noopener">
+              Privacy
+            </a>
+            {' · '}
+            <a href="/disclaimer" target="_blank" rel="noopener">
+              Disclaimer
+            </a>
+          </span>
         </p>
       </div>
     </div>

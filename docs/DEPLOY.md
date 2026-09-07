@@ -189,7 +189,7 @@ the API's first boot. Reasoning and the verification queries:
    | `GITAGUIDE_PIPELINE_QUEUE_TIMEOUT_SECONDS` | `30` | a queued turn waits this long, then gets the overload reply |
    | `GITAGUIDE_GENERATION_BUDGET_SECONDS` | `45` | must be ≥ 15 or the app refuses to boot |
    | `GITAGUIDE_TELEMETRY_ENABLED` | `true` | |
-   | `GITAGUIDE_CONSENT_VERSION` | `v1` | must match the frontend's |
+   | `GITAGUIDE_CONSENT_VERSION` | `beta-1` | the version printed on the Privacy Notice and Disclaimer, and the one the frontend sends; a mismatch means nobody can pass the gate |
 
    Full annotated list: [`.env.production.example`](../.env.production.example).
 
@@ -272,7 +272,8 @@ will refuse it until step 5.
 
 **Final check.** In the browser, on the Vercel URL:
 
-- [ ] the consent gate appears on a fresh visit
+- [ ] the consent gate appears on a fresh visit, says *notice version beta-1*,
+      and its Privacy Notice / Disclaimer links open `/privacy` and `/disclaimer`
 - [ ] "I understand — begin" is accepted (this writes the consent row)
 - [ ] a workplace message returns a reflection **with verse leaves**
 - [ ] the meta line shows a real model name and per-stage latency

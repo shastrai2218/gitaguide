@@ -150,8 +150,12 @@ services:
       # ---- consent and telemetry ------------------------------------------
       - key: GITAGUIDE_CONSENT_REQUIRED
         value: "true"
+      # The version printed on the Privacy Notice and the Disclaimer in the
+      # tester pack, and the one the frontend sends. Sessions that agreed to the
+      # pre-launch placeholder "v1" are asked again. tests/test_tester_pack.py
+      # holds this to app.config.CURRENT_CONSENT_VERSION.
       - key: GITAGUIDE_CONSENT_VERSION
-        value: v1
+        value: beta-1
       - key: GITAGUIDE_TELEMETRY_ENABLED
         value: "true"
       - key: GITAGUIDE_TELEMETRY_PATH
