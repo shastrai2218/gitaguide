@@ -19,6 +19,26 @@ Enforcement is mechanical, not hopeful:
    is composed from the retrieved verses, so an ungrounded answer can never
    reach the user;
 4. a missing "Why this verse" section is appended from the graph paths.
+
+Grounding is not coherence
+--------------------------
+On 8 Sep 2026 the fallback model served a tester this, verbatim::
+
+    I'll just try a different.
+    Actually, let you can be the.
+    I see the the the
+    I the I the
+    ### Why this verse
+    - **AS-7.9.7**: This verse was retrieved because ...
+
+Every check above passed: the "Why this verse" section was well formed and cited
+three retrieved ids, so the turn was ``grounded=True`` with no hallucinations,
+and the output safety gate found nothing harmful in it. Nothing in this module
+looked at whether the *body* was language. :func:`assess_answer` now does -
+word count, repetition, and stutter (one word or one word pair repeated back to
+back) over the body before the explanation section - and
+:meth:`GroundedGenerator._complete_guarded` retries once on a degenerate
+answer, then serves the overload reply rather than word salad.
 """
 
 from __future__ import annotations
@@ -27,9 +47,11 @@ import logging
 import re
 import time
 from collections.abc import Collection, Sequence
+from dataclasses import dataclass
 
+from app import telemetry
 from app.config import Settings, get_settings
-from app.llm.base import TASK_ANSWER, BudgetExhaustedError, LLMProvider, LLMResponse
+from app.llm.base import TASK_ANSWER, BudgetExhaustedError, LLMError, LLMProvider, LLMResponse
 from app.pipeline.memory import MemoryContext
 from app.pipeline.schemas import (
     EmotionResult,
@@ -56,6 +78,131 @@ OVERLOADED_ANSWER = (
 )
 
 WHY_HEADING = "### Why this verse"
+
+
+# --------------------------------------------------------------------------- #
+# Output sanity guard
+# --------------------------------------------------------------------------- #
+#: Letters in any script. Digits, punctuation and verse ids are not words.
+WORD_RE = re.compile(r"[^\W\d_]+")
+#: The explanation heading, however the model or ``_ensure_why_section`` wrote it.
+WHY_HEADING_RE = re.compile(r"^#{1,6}\s*why this verse\b", re.IGNORECASE | re.MULTILINE)
+#: One word this many times in a row ("the the the") is not prose.
+STUTTER_WORD_RUN = 3
+#: One word pair this many times back to back ("I the I the") is not prose.
+STUTTER_BIGRAM_RUN = 2
+
+
+class DegenerateOutputError(LLMError):
+    """Two completions in a row read as word salad; nothing fit to serve."""
+
+
+@dataclass(frozen=True)
+class AnswerQuality:
+    """What :func:`assess_answer` measured, and why it objected if it did."""
+
+    words: int
+    distinct: int
+    repetition: float
+    longest_word_run: int
+    longest_bigram_run: int
+    reasons: tuple[str, ...]
+
+    @property
+    def degenerate(self) -> bool:
+        return bool(self.reasons)
+
+    def summary(self) -> str:
+        measured = (
+            f"words={self.words} distinct={self.distinct} repetition={self.repetition:.2f} "
+            f"word_run={self.longest_word_run} bigram_run={self.longest_bigram_run}"
+        )
+        return f"{measured}; {'; '.join(self.reasons)}" if self.reasons else measured
+
+
+def answer_body(text: str) -> str:
+    """The answer before its "Why this verse" section.
+
+    The explanation section is built from graph paths and verse ids, so it is
+    coherent whether or not the answer above it is - the production salad had
+    a perfectly formed one. Judging the whole text would let the section
+    launder the body: 21 words of noise plus 170 of explanation scored as 193
+    words with 112 distinct. Only the body is a claim about language.
+    """
+    match = WHY_HEADING_RE.search(text)
+    if match is None:
+        return text
+    body = text[: match.start()]
+    return body if body.strip() else text
+
+
+def _longest_run(items: Sequence[object]) -> int:
+    longest = current = 0
+    previous: object = None
+    for item in items:
+        current = current + 1 if item == previous else 1
+        previous = item
+        longest = max(longest, current)
+    return longest
+
+
+def _longest_bigram_run(words: Sequence[str]) -> int:
+    """How many times one word pair repeats back to back, at either alignment."""
+    longest = 0
+    for offset in (0, 1):
+        pairs = [tuple(words[index : index + 2]) for index in range(offset, len(words) - 1, 2)]
+        longest = max(longest, _longest_run(pairs))
+    return longest
+
+
+def assess_answer(text: str, settings: Settings | None = None) -> AnswerQuality:
+    """Decide whether a completion reads as an answer at all.
+
+    Three cheap measurements over the body's words, each of which the 8 Sep
+    reply fails or nearly fails and no legitimate reply observed comes near:
+
+    * **length** - below ``output_guard_min_words`` the text is a fragment, not
+      an answer to a prompt that asked for 180-320 words;
+    * **repetition** - ``1 - distinct/total`` above ``output_guard_max_repetition``
+      is a loop ("I the I the I the ..."); prose sits near 0.4-0.5;
+    * **stutter** - one word ``STUTTER_WORD_RUN`` times in a row, or one word
+      pair ``STUTTER_BIGRAM_RUN`` times back to back. This is the check that
+      catches the actual production text ("the the the", "I the I the"), whose
+      21 words and 0.38 repetition would have passed the other two.
+
+    It is a language check, not a quality check: a coherent wrong answer passes,
+    and should - the citation enforcer and the output gate judge those.
+    """
+    settings = settings or get_settings()
+    words = [word.lower() for word in WORD_RE.findall(answer_body(text))]
+    total = len(words)
+    distinct = len(set(words))
+    repetition = 1.0 - distinct / total if total else 1.0
+    word_run = _longest_run(words)
+    bigram_run = _longest_bigram_run(words)
+
+    reasons: list[str] = []
+    floor = settings.output_guard_min_words
+    if total < floor:
+        reasons.append(f"{total} words in the body, below the floor of {floor}")
+    elif repetition > settings.output_guard_max_repetition:
+        reasons.append(
+            f"repetition {repetition:.2f} above {settings.output_guard_max_repetition:.2f}"
+        )
+    if word_run >= STUTTER_WORD_RUN:
+        reasons.append(f"one word repeated {word_run} times in a row")
+    if bigram_run >= STUTTER_BIGRAM_RUN:
+        reasons.append(f"one word pair repeated {bigram_run} times back to back")
+
+    return AnswerQuality(
+        words=total,
+        distinct=distinct,
+        repetition=round(repetition, 4),
+        longest_word_run=word_run,
+        longest_bigram_run=bigram_run,
+        reasons=tuple(reasons),
+    )
+
 
 SYSTEM_PROMPT = """You are GitaGuide, a guidance companion grounded in the Bhagavad Gita and \
 Kautilya's Arthashastra.
@@ -244,10 +391,13 @@ class GroundedGenerator:
             )
 
         prompt = build_answer_prompt(query, retrieval, emotion, intent, memory)
+        guard_notes: list[str] = []
         try:
-            response = await self._complete(prompt)
+            response = await self._complete_guarded(prompt, guard_notes)
         except BudgetExhaustedError as exc:
             return self._overloaded_result(started, exc)
+        except DegenerateOutputError as exc:
+            return self._degenerate_result(started, exc)
         answer, citations, hallucinated = self._validate(response.text, allowed)
 
         if hallucinated or not citations:
@@ -257,9 +407,11 @@ class GroundedGenerator:
                 query, retrieval, emotion, intent, memory, corrective_note=note
             )
             try:
-                retry = await self._complete(retry_prompt)
+                retry = await self._complete_guarded(retry_prompt, guard_notes)
             except BudgetExhaustedError as exc:
                 return self._overloaded_result(started, exc)
+            except DegenerateOutputError as exc:
+                return self._degenerate_result(started, exc)
             retry_answer, retry_citations, retry_hallucinated = self._validate(
                 retry.text, allowed
             )
@@ -308,9 +460,70 @@ class GroundedGenerator:
             prompt_tokens=response.prompt_tokens,
             completion_tokens=response.completion_tokens,
             latency_ms=round((time.perf_counter() - started) * 1000, 2),
+            quality_guard="retried" if guard_notes else "",
+            quality_guard_detail=" | ".join(guard_notes),
         )
 
     # ---------------------------------------------------------------- pieces
+    async def _complete_guarded(self, prompt: str, notes: list[str]) -> LLMResponse:
+        """One completion, retried once if it reads as word salad.
+
+        The retry goes back through the same chain, so the primary model gets
+        the first attempt at it even when the salad came from the fallback -
+        which is where the 8 Sep reply came from. If the second answer is also
+        degenerate, or the provider returned nothing, nothing fit to serve
+        exists and :class:`DegenerateOutputError` says so; the caller turns
+        that into the overload reply. Never the salad, never a template dressed
+        as an answer.
+
+        An *empty* first completion is left to the existing path (citation
+        check, corrective rewrite, template): it is a provider failure, not
+        language, and it was handled before this guard existed.
+        """
+        response = await self._complete(prompt)
+        quality = assess_answer(response.text, self.settings)
+        if not response.text.strip() or not quality.degenerate:
+            return response
+
+        telemetry.count("degenerate_output_detected")
+        first = response.model or response.provider
+        logger.warning("degenerate answer from %s (%s); retrying once", first, quality.summary())
+
+        retry = await self._complete(prompt)
+        retry_quality = assess_answer(retry.text, self.settings)
+        if retry.text.strip() and not retry_quality.degenerate:
+            telemetry.count("degenerate_output_recovered")
+            notes.append(f"first answer from {first} was degenerate ({quality.summary()})")
+            return retry
+
+        telemetry.count("degenerate_output_shed")
+        second = retry.model or retry.provider
+        raise DegenerateOutputError(
+            f"first answer from {first}: {quality.summary()}; retry from {second}: "
+            + (retry_quality.summary() if retry.text.strip() else "empty completion")
+        )
+
+    def _degenerate_result(self, started: float, exc: DegenerateOutputError) -> GenerationResult:
+        """The overload reply, for a turn where both completions were word salad.
+
+        The same shape and text as a budget-exhausted turn - the tester is told
+        the guide could not answer, not shown the noise - but marked
+        ``quality_guard="shed"`` with the models and measurements in the detail,
+        so the two causes stay separable in the database and in telemetry.
+        """
+        logger.error("degenerate output twice; serving the overload reply (%s)", exc)
+        return GenerationResult(
+            answer=OVERLOADED_ANSWER,
+            citations=[],
+            why_this_verse={},
+            grounded=False,
+            provider=PROVIDER_OVERLOADED,
+            model="",
+            quality_guard="shed",
+            quality_guard_detail=str(exc),
+            latency_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
+
     def _overloaded_result(
         self, started: float, exc: BudgetExhaustedError
     ) -> GenerationResult:

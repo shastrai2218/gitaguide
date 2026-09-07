@@ -347,6 +347,7 @@ it running is harmless.
 | `GET /health` → `components.pipeline_queue_depth` | persistently above zero means turns are waiting on each other |
 | telemetry `turns_shed` | turns refused because the queue timed out - if this is not ~0, the instance is undersized |
 | telemetry `turns_queued_then_served` | how often a tester waited behind someone else |
+| telemetry `degenerate_output_detected` / `_recovered` / `_shed` | the output guard: word salad caught, fixed by one retry, or replaced by the overload reply. `shed` above ~0 means a model is misbehaving, not the tester |
 | Render logs, `TURN_LATENCY` | per-stage wall clock for any turn a tester says was slow |
 | Render logs, `SAFETY_AUDIT` | every gate decision, including near-misses that did not block |
 | Supabase → `feedback` | what testers actually thought |

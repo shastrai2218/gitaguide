@@ -91,7 +91,12 @@ async def test_missing_why_section_is_appended(
     settings: Settings, trace: RetrievalTrace
 ) -> None:
     first = trace.verse_ids[0]
-    llm = FakeLLMProvider(scripted=[f"Consider {first}: act without clinging to the result."])
+    llm = FakeLLMProvider(
+        scripted=[
+            f"Consider {first}: act on the work in front of you without clinging to "
+            "the result it may or may not bring."
+        ]
+    )
     result = await GroundedGenerator(llm, settings).generate("I am anxious", trace)
     assert WHY_HEADING in result.answer
     assert first in result.why_this_verse
@@ -103,8 +108,12 @@ async def test_hallucinated_citation_triggers_a_retry(
     good = trace.verse_ids[0]
     llm = FakeLLMProvider(
         scripted=[
-            "As BG-99.99 teaches, everything is fine.",  # invented id
-            f"As {good} teaches, do the work in front of you.",  # corrected
+            # invented id
+            "As BG-99.99 teaches, everything is fine once you stop measuring yourself "
+            "by outcomes you never controlled.",
+            # corrected
+            f"As {good} teaches, do the work in front of you and let the verdict on "
+            "it arrive in its own time.",
         ]
     )
     result = await GroundedGenerator(llm, settings).generate("I am anxious", trace)
@@ -117,7 +126,12 @@ async def test_persistent_hallucination_falls_back_to_a_template(
     settings: Settings, trace: RetrievalTrace
 ) -> None:
     llm = FakeLLMProvider(
-        scripted=["BG-99.99 says so.", "Still BG-98.1, trust me."]
+        scripted=[
+            "BG-99.99 says so, and it says it about exactly the kind of situation you "
+            "have described here.",
+            "Still BG-98.1, trust me: it speaks to the same worry from the other side "
+            "of the same choice.",
+        ]
     )
     result = await GroundedGenerator(llm, settings).generate("I am anxious", trace)
     assert result.citations, "template fallback must still cite retrieved verses"
@@ -130,7 +144,12 @@ async def test_uncited_answer_triggers_a_retry(
 ) -> None:
     good = trace.verse_ids[0]
     llm = FakeLLMProvider(
-        scripted=["Here is some advice with no citation at all.", f"See {good}."]
+        scripted=[
+            "Here is some advice with no citation at all: name the choice in front of "
+            "you and take the first small step.",
+            f"See {good}: the work in front of you is yours to do, and the result of "
+            "it is not yours to hold.",
+        ]
     )
     result = await GroundedGenerator(llm, settings).generate("I am anxious", trace)
     assert result.citations == [good]
@@ -286,7 +305,14 @@ async def test_answer_body_carries_no_uncitable_id(
 
 async def test_template_fallback_is_also_clean(settings: Settings) -> None:
     """Even the deterministic fallback answer must not name a seed verse."""
-    stubborn = FakeLLMProvider(scripted=["BG-99.99 only.", "BG-98.1 only."])
+    stubborn = FakeLLMProvider(
+        scripted=[
+            "BG-99.99 only, because that is the verse that speaks most directly to "
+            "what you have described.",
+            "BG-98.1 only, for the same reason: it names the exact tension you are "
+            "sitting inside right now.",
+        ]
+    )
     trace = _leaky_trace()
     result = await GroundedGenerator(stubborn, settings).generate("q", trace)
 

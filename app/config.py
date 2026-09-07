@@ -218,6 +218,19 @@ class Settings(BaseSettings):
     #: "try again" than by a queue they cannot see.
     pipeline_queue_timeout_seconds: float = 30.0
 
+    # --------------------------------------------------- output sanity guard
+    #: Fewest words the answer body (before "Why this verse") may have and
+    #: still count as an answer. The system prompt asks for 180-320; the
+    #: shortest legitimate production reply seen is ~45. The degenerate reply
+    #: served on 8 Sep 2026 had 21, so this floor alone would not have caught
+    #: it - the stutter check in ``generation.assess_answer`` did. The floor
+    #: catches the fragments ("I the I the") that a stutter check on four
+    #: words cannot.
+    output_guard_min_words: int = 12
+    #: ``1 - distinct/total`` over the body's words. Real prose of 100-300
+    #: words sits near 0.4-0.5; a loop ("I the I the ...") goes to 0.9+.
+    output_guard_max_repetition: float = 0.6
+
     # ------------------------------------------------------- generation budget
     #: Total wall clock allowed for one turn's generation, across the whole
     #: fallback chain. The Day 3 worst observed turn was 14.4s and a later UI

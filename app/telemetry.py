@@ -53,6 +53,18 @@ RISK_COUNTERS = (
     "audit_only_near_miss",
 )
 
+#: Counters for the output sanity guard (``generation.assess_answer``). A
+#: production turn on 8 Sep 2026 served word salad from the fallback model with
+#: every existing check green: grounded, cited, output gate clear. These count
+#: how often the guard fires, how often one retry fixes it, and how often the
+#: tester gets the overload reply instead. Always present, so "not shown" can
+#: never be read as "not happening".
+QUALITY_COUNTERS = (
+    "degenerate_output_detected",
+    "degenerate_output_recovered",
+    "degenerate_output_shed",
+)
+
 
 def hash_session(session_id: str | None, salt: str) -> str:
     """Stable pseudonym for a session: groupable, not reversible to the id."""
@@ -92,9 +104,9 @@ class DailyCounters:
         with self._lock:
             bucket = self._days.get(day, Counter())
             counts = dict(bucket)
-        # The risk counters are always present, at zero, so "not shown" can
-        # never be mistaken for "not happening".
-        for name in RISK_COUNTERS:
+        # The risk and quality counters are always present, at zero, so "not
+        # shown" can never be mistaken for "not happening".
+        for name in (*RISK_COUNTERS, *QUALITY_COUNTERS):
             counts.setdefault(name, 0)
         return counts
 
@@ -143,6 +155,8 @@ def build_event(
         "fallback_steps": generation.fallback_steps if generation else 0,
         "grounded": generation.grounded if generation else None,
         "citations": len(generation.citations) if generation else 0,
+        # "", "retried" or "shed" - a label, never the text it judged.
+        "quality_guard": generation.quality_guard if generation else "",
         "stages": dict(result.timings),
         "total_ms": round(result.total_latency_ms, 1),
         "memory_turn_count": result.memory.turn_count,
@@ -229,9 +243,11 @@ class Telemetry:
             counters.increment("llm_fallback_used")
         if event["provider"] == "fake":
             counters.increment("fake_provider_answered")
-        if event["provider"] == "overloaded":
+        if event["provider"] == "overloaded" and event["quality_guard"] != "shed":
             # The wall-clock budget ran out. Counted so "the beta felt slow"
-            # can be checked against how often it actually gave up.
+            # can be checked against how often it actually gave up. A turn shed
+            # by the output guard wears the same reply but is counted under
+            # degenerate_output_shed by the generator, not here.
             counters.increment("overloaded_turns")
 
     def _emit(self, event: dict[str, Any]) -> None:

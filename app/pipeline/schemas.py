@@ -324,6 +324,13 @@ class GenerationResult(BaseModel):
     prompt_tokens: int = 0
     completion_tokens: int = 0
     latency_ms: float = 0.0
+    #: What the output sanity guard did on this turn: ``""`` when the first
+    #: completion read as an answer, ``"retried"`` when it was word salad and
+    #: the retry was not, ``"shed"`` when both were and the overload reply went
+    #: out instead. The detail names the models and the measurements, so a
+    #: shed turn can be told apart from a budget-exhausted one in the database.
+    quality_guard: str = ""
+    quality_guard_detail: str = ""
 
 
 # ----------------------------------------------------------------- top level
