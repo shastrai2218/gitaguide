@@ -17,7 +17,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.concurrency import PipelineBusyError, PipelineGate
-from app.config import Settings
+from app.config import CURRENT_CONSENT_VERSION, Settings
 from app.main import create_app
 from app.pipeline.generation import OVERLOADED_ANSWER, PROVIDER_OVERLOADED
 
@@ -200,7 +200,8 @@ def test_health_and_consent_are_not_serialised(client: TestClient) -> None:
         assert client.get("/health").status_code == 200
         assert (
             client.post(
-                "/api/consent", json={"session_id": "not-blocked", "version": "v1"}
+                "/api/consent",
+                json={"session_id": "not-blocked", "version": CURRENT_CONSENT_VERSION},
             ).status_code
             == 200
         )
