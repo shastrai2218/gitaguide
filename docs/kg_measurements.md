@@ -679,3 +679,182 @@ The stored vectors and the serving encoder are now one decision, not two. After
 changing `GITAGUIDE_EMBEDDER_PRECISION`, the graph **must** be re-embedded
 (`scripts/reembed_graph.py`) and re-exported to Aura. An index and a query
 encoder that disagree do not error; they quietly return worse neighbours.
+
+---
+
+## 13. Day 7 Production / Closed Beta Baseline — 8 Sep 2026
+
+The first measurements taken from the deployment testers will actually use, on
+the live stack, through the real browser. Small sample by design: five turns,
+gathered during an acceptance walk-through rather than a benchmark run. **Not a
+statistically robust benchmark** — n=4 for normal turns, one blocked turn, one
+observed cold start. Treated as a baseline to compare against, not a result.
+
+### Deployment under test
+
+| | |
+| --- | --- |
+| Backend | `https://gitaguide-api.onrender.com` (Render Free, 512 MB / 0.1 CPU, 1 instance, 1 worker) |
+| Frontend | `https://gitaguide-livid.vercel.app` (Vercel) |
+| Commit | `452c47e` (backend and frontend from the same tree) |
+| Consent version | `beta-1`, enforced server-side; `v1` refused with 400 |
+| Embedding precision | `int8`, index and query encoder both — self-consistent (section 12) |
+| Graph | Neo4j AuraDB Free, `neo4j-hybrid-cypher`, 3,836 verses / 14,709 edges |
+| Persistence | Supabase PostgreSQL, reported by `/health` as `postgresql+asyncpg`, `database_ok: true` |
+| Emotion | `onnx-int8-go_emotions` (the real model, not the lexicon fallback) |
+| LLM chain | `fallback(nvidia:nemotron-3-super-120b-a12b, nvidia:nemotron-3.5-lightning-30b-a3b)` — **no fake last resort** |
+| Turn admission | serialised, `Semaphore(1)`, 30 s queue timeout |
+
+`scripts/prod_smoke.py`: **33/33 checks passed**.
+
+### Normal-turn latency (n=4, live browser session `web-4a22c4bd…`)
+
+All four were served by the **primary** model at `fallback_steps=0`. Stage
+figures are the pipeline's own wall clock, in milliseconds, as persisted on the
+message row.
+
+| # | query | total | emotion | intent | gate | memory | retrieval | generation | out | citations |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | "Is patience a virtue or an excuse?" | **11.5 s** | 47.9 | 3881.3 | 0.1 | 35.2 | 77.5 | 7442.0 | 0.6 | 3 |
+| 2 | "My manager takes credit for my work…" | **14.3 s** | 99.0 | 1116.5 | 0.1 | 28.7 | 102.7 | 12936.0 | 0.5 | 5 |
+| 3 | "A trusted vendor has been overbilling us…" | **15.3 s** | 105.3 | 1659.4 | 0.2 | 34.8 | 151.2 | 13265.4 | 0.4 | 2 |
+| 4 | short probe message | **37.2 s** | 100.7 | 18056.8 | 0.1 | 31.1 | 71.8 | 18701.0 | 0.2 | 5 |
+
+All four `grounded=True` with no hallucinated citations. `persist` is not in the
+row's own timings by design — a stage cannot time the write that stores it; it
+measured 102.1 ms on the smoke turn, where the response carries it.
+
+**What the spread is made of.** Fastest 11.5 s, slowest 37.2 s, and the
+difference is *not* the corpus or the graph: emotion is 48-105 ms, the gate is
+sub-millisecond, memory is ~30 ms and **retrieval is 72-151 ms** in every case.
+The whole variance lives in the two NIM calls. Turn 4's intent call took
+**18.1 s** against 1.1 s on turn 2 — an 16× spread on the same prompt shape —
+and `/health` recorded **11 `upstream_503` retries** across the day, which is
+where that time went. The lesson for the beta is that tester-perceived latency
+is a property of NVIDIA's free tier, not of this pipeline; local stages account
+for under 2% of a turn.
+
+A fifth normal turn, from the smoke session, cost 31.6 s wall clock
+(generation 16.3 s, intent 13.7 s, retrieval 809.4 ms — the first retrieval
+after boot, before the driver's connection pool is warm).
+
+### Blocked-turn latency (n=1)
+
+Message: "I think everyone would be better off without me." Blocked by the
+deterministic `perceived_burdensomeness` rule, with the semantic layer agreeing
+at crisis 0.95.
+
+| total | emotion | intent | safety_input | memory | retrieval | generation | safety_output |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **4.5 s** | 88.7 | 4336.3 | **0.3** | — | — | — | — |
+
+**The short-circuit is visible in what is missing.** No `memory`, `retrieval`,
+`generation` or `safety_output` stage exists on the row, because none of them
+ran — which is what the architecture requires and what the smoke test asserts
+independently. The gate's own decision cost **0.3 ms**; the 4.3 s is the intent
+call that feeds its semantic layer. In the browser the turn showed the crisis
+panel with all five helplines and **zero verse leaves**.
+
+At 4.5 s against 11.5-37.2 s for a normal turn, a blocked turn is also the
+fastest thing the system does — which is the right direction for someone in
+distress.
+
+### Cold start (observed, not induced)
+
+The first request of the session paid **52.5 s** to `/health` on an instance
+that had spun down after ~15 minutes idle. Consistent with the 80 s measured
+under `--cpus=0.1` in section 12 (the container measurement is the pessimistic
+bound; Render's shared CPU was kinder here). Not induced: production was not
+restarted for a number.
+
+### Observed fallback outlier (preserved from 7 Sep)
+
+Session `smoke-d75ff5f76d5b`: the **Lightning** fallback answered at
+`fallback_steps=1` after Super was cut off, generation **39.1 s** of a
+**50.8 s** total. **An outlier, not typical latency** — no turn in today's
+sample reached the fallback at all. It is kept because it is the worst
+end-to-end a tester could plausibly meet while the chain is still working, and
+it sits inside the 45 s generation budget and the frontend's 150 s deadline by
+construction.
+
+### Telemetry after the smoke and the walk-through
+
+`GET /health` → `components.telemetry_today`, 8 Sep (UTC day, in-process, reset
+by any restart):
+
+| counter | value | reading |
+| --- | ---: | --- |
+| `turns` | 9 | turns that reached the pipeline |
+| `blocked_turns` | 2 | crisis short-circuits (smoke + walk-through) |
+| `turns_served_immediately` | 8 | admitted without waiting |
+| `turns_queued_then_served` | 1 | waited behind another turn, then ran |
+| `turns_shed` | 2 | refused after 30 s in the queue — both from the deliberate burst |
+| `rate_limited` / `rate_limited_session` | 7 / 7 | all refusals were the per-session bucket; per-IP and global never engaged |
+| `upstream_retry` / `upstream_503` | 11 / 11 | every upstream retry today was a NIM 503 |
+| `semantic_retried` | 0 | no malformed intent output needed a retry |
+| `semantic_malformed_final` | 0 | the semantic safety layer was never blind |
+| `soft_cue_fallback_blocks` | 0 | the conservative fallback was not needed |
+| `audit_only_near_miss` | 0 | no non-blocking gate signals |
+| `degenerate_output_detected` / `_recovered` / `_shed` | 0 / 0 / 0 | the output guard is armed and fired on nothing |
+
+`turns_shed: 2` is the pipeline gate doing its job, not a defect: four
+concurrent requests were sent deliberately to verify the rate limiter, three
+were admitted, and two of those exceeded the 30 s queue timeout and received
+the overload reply instead of pushing peak memory past 512 MB. A shed turn
+persists no message row, which is why the session holds five assistant turns
+rather than seven.
+
+### The output sanity guard, against the incident that caused it
+
+Section 12's deployment shipped with the guard added the same day. Its
+measurement over the actual 7 Sep production reply
+(`4002cb8d…`, Lightning, `fallback_steps=1`):
+
+| text judged | words | distinct | repetition | word run | bigram run | verdict |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| the reply's body | 21 | 13 | 0.381 | **3** | **2** | **degenerate** |
+| whole reply incl. explanation section | 191 | 112 | 0.414 | 3 | 2 | degenerate |
+| a real short refusal ("burst 0", 7 Sep) | 53 | 46 | 0.132 | 1 | 1 | clean |
+
+Two things worth recording. First, **the stutter check is what catches it**:
+21 words is above the 12-word floor and 0.381 repetition is well under the 0.6
+cap, so length and repetition alone would both have passed the salad. Second,
+the whole-text row shows why the body is judged separately — 191 words with 112
+distinct is indistinguishable from prose on every aggregate measure, and only
+the run-length checks survive the dilution. Guarding the body means the
+explanation section cannot launder a broken answer.
+
+In production the guard has not yet fired: `degenerate_output_detected: 0` over
+9 turns. That is expected — the incident was one reply from the fallback model
+under upstream pressure, and today no turn reached the fallback.
+
+### Known post-beta items, confirmed against today's output
+
+**1. `ADDRESSES_EMOTION` on a secondary emotion.** On 7 Sep, "My co-founder is
+quietly building alliances with investors against me" detected `confusion`
+0.554 / `curiosity` 0.420 / `neutral` 0.311, and `curiosity` pulled `AS-11.1.7`
+(covert operations near sacred sites) into the top 5 at `graph_score` 1.000. The
+message is not curious. The retriever expands on the top *three* emotion labels
+regardless of margin, so a 0.42 secondary label carries the same graph weight as
+a 0.55 primary. **Post-beta retrieval-ranking investigation** — candidates are
+weighting the hop by the label's score, or expanding only on labels within some
+margin of the primary. Not changed during Day 7: it degrades ranking, it does
+not produce harmful output, and changing the reranker would invalidate every
+figure above.
+
+**2. The `(None)` graph-path placeholder is not user-visible.** Checked
+directly today: across the four normal turns, **18** graph-path descriptions in
+the stored traces contain `None` (a 2-hop path whose intermediate verse is
+outside the candidate set renders as
+`(AS-7.9.7) -[:RELATED_TO]- (None) -[:ADDRESSES_EMOTION]-> 'None'`), and
+**0** of the fields the beta UI renders contain it. The beta adapter projects
+`source`, `ref` and `text` per citation and nothing else, so those strings
+reach `GET /explain` and the research surface only. **Post-beta**, in the
+explain surface, not a beta blocker.
+
+**3. Reasoning-like narration did not reproduce.** On 7 Sep one Super answer
+opened "The user is asking for help from the Arthashastra. The context provides
+one Arthashastra verse: AS-7.18.8…" — the model narrating its own deliberation
+instead of addressing the person. All four turns today read as direct address.
+Left as a **beta note**: it is a prompt-adherence wobble to watch in tester
+feedback, not a defect with a reproduction.
