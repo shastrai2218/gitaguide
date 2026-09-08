@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 
 /**
  * The message composer.
@@ -7,9 +7,14 @@ import { useEffect, useRef, useState } from 'react'
  * content up to a cap set in CSS. The footnote below it is persistent by
  * design: the disclaimer and the helpline must be on screen at every moment of
  * the conversation, not only on the consent screen.
+ *
+ * The text is owned by `App`, not by this component (changed 9 Sep 2026). It
+ * has to be, because a failed turn puts the message back here so nothing is
+ * lost — tester item 9: *"I asked same queries 1st time but not get response
+ * but in second time I am getting answer perfectly."* Losing what they typed
+ * on top of that is the avoidable half of the problem.
  */
-export default function Composer({ onSend, busy }) {
-  const [text, setText] = useState('')
+export default function Composer({ value, onChange, onSend, busy, online = true }) {
   const textareaRef = useRef(null)
 
   useEffect(() => {
@@ -20,12 +25,11 @@ export default function Composer({ onSend, busy }) {
     // and shows a scrollbar on a single line of text.
     const border = node.offsetHeight - node.clientHeight
     node.style.height = `${node.scrollHeight + border}px`
-  }, [text])
+  }, [value])
 
   function submit() {
-    const trimmed = text.trim()
+    const trimmed = value.trim()
     if (!trimmed || busy) return
-    setText('')
     onSend(trimmed)
   }
 
@@ -39,6 +43,12 @@ export default function Composer({ onSend, busy }) {
   return (
     <div className="composer-wrap">
       <div className="column">
+        {!online && (
+          <p className="composer-offline" role="status" aria-live="polite">
+            You are offline. Whatever you have typed stays here.
+          </p>
+        )}
+
         <form
           className="composer"
           onSubmit={(event) => {
@@ -53,16 +63,16 @@ export default function Composer({ onSend, busy }) {
             id="composer-input"
             ref={textareaRef}
             rows={1}
-            value={text}
+            value={value}
             placeholder="Write what is on your mind…"
-            onChange={(event) => setText(event.target.value)}
+            onChange={(event) => onChange(event.target.value)}
             onKeyDown={handleKeyDown}
             disabled={busy}
           />
           <button
             type="submit"
             className="send-button"
-            disabled={busy || !text.trim()}
+            disabled={busy || !value.trim()}
           >
             Send
           </button>

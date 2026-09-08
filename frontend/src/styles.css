@@ -599,6 +599,18 @@ textarea {
   cursor: not-allowed;
 }
 
+/* Offline notice above the composer. No alarm colour: the palette has none,
+ * and a dropped connection is not the tester's fault. */
+.composer-offline {
+  margin: 0 0 0.6rem;
+  padding: 0.5rem 0.75rem;
+  border-left: 2px solid var(--accent);
+  background: var(--field);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
 .footnote {
   margin: 0.7rem 0 0;
   font-size: 0.78rem;

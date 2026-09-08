@@ -63,8 +63,32 @@ export const SHOW_META = import.meta.env.VITE_SHOW_META !== '0'
  */
 export const REQUEST_TIMEOUT_MS = 150_000
 
+/**
+ * What went wrong, in the terms the UI has to act on.
+ *
+ * `offline`  the browser says it has no connection. Nothing was sent.
+ * `network`  the request left and the connection failed. Retryable.
+ * `timeout`  no answer inside REQUEST_TIMEOUT_MS. NOT auto-retried: the server
+ *            is probably still working, and a second request would double the
+ *            load on a 0.1-CPU instance for the same answer.
+ * `server`   the server answered with a status. The message came from it.
+ */
+export const FAILURE = {
+  OFFLINE: 'offline',
+  NETWORK: 'network',
+  TIMEOUT: 'timeout',
+  SERVER: 'server',
+}
+
+/** Delay before the single automatic retry of a failed connection. */
+export const NETWORK_RETRY_DELAY_MS = 1200
+
+export const OFFLINE_MESSAGE =
+  'You appear to be offline. Your message is still here — send it again once '
+  + 'you are back on the network.'
+
 export class ApiError extends Error {
-  constructor(message, status, retryAfterSeconds = null, code = null) {
+  constructor(message, status, retryAfterSeconds = null, code = null, kind = FAILURE.SERVER) {
     super(message)
     this.name = 'ApiError'
     this.status = status
@@ -72,7 +96,23 @@ export class ApiError extends Error {
     this.retryAfterSeconds = retryAfterSeconds
     /** Machine-readable reason, e.g. `consent_required`. Null if unstructured. */
     this.code = code
+    /** One of `FAILURE`. Decides whether a retry is worth making. */
+    this.kind = kind
   }
+
+  get offline() {
+    return this.kind === FAILURE.OFFLINE
+  }
+
+  /** True when sending the same message again is a reasonable thing to do. */
+  get retryable() {
+    return this.kind !== FAILURE.SERVER || this.status === 0 || this.status >= 500
+  }
+}
+
+/** Whether the browser believes it is offline. `false` when it cannot tell. */
+export function isOffline() {
+  return typeof navigator !== 'undefined' && navigator.onLine === false
 }
 
 // --------------------------------------------------------------------------- //
@@ -177,7 +217,47 @@ function normaliseCitations(raw) {
 // Live calls
 // --------------------------------------------------------------------------- //
 
+/**
+ * Send one turn, with a single automatic retry of a failed connection.
+ *
+ * Tester item 9 pairs "I asked the same query, no response the first time,
+ * perfect the second" with "internet disconnected" and "taking long time" in
+ * one sentence, and the server-side evidence agrees: turns were admitted to
+ * the pipeline and then never completed, which is what a client that goes away
+ * mid-request looks like. So a dropped connection is retried once here, before
+ * the tester ever sees an error.
+ *
+ * What is deliberately NOT retried:
+ *
+ * * the 150s deadline — the server is very likely still working on it, and a
+ *   second request would spend another two NIM calls and another turn's memory
+ *   on a 0.1-CPU instance to get the same answer;
+ * * anything the server answered, including 429 and 5xx — the message it sent
+ *   is better than a guess, and 429 in particular already carries the wait;
+ * * a caller cancellation — the user did that on purpose.
+ */
 async function postChatLive(sessionId, message, signal) {
+  if (isOffline()) {
+    throw new ApiError(OFFLINE_MESSAGE, 0, null, null, FAILURE.OFFLINE)
+  }
+
+  try {
+    return await postChatAttempt(sessionId, message, signal)
+  } catch (error) {
+    const retryable =
+      error instanceof ApiError && error.kind === FAILURE.NETWORK && !signal?.aborted
+    if (!retryable) throw error
+
+    // The connection failed. Wait a moment for it to come back, then try once.
+    await sleep(NETWORK_RETRY_DELAY_MS, signal)
+    if (isOffline()) {
+      throw new ApiError(OFFLINE_MESSAGE, 0, null, null, FAILURE.OFFLINE)
+    }
+    return await postChatAttempt(sessionId, message, signal)
+  }
+}
+
+async function postChatAttempt(sessionId, message, signal) {
   // Two reasons a request can be abandoned: the caller cancelled it (New
   // session, unmount) or it exceeded the deadline. They are told apart below,
   // because the first must stay silent and the second must be reported.
@@ -201,13 +281,21 @@ async function postChatLive(sessionId, message, signal) {
     if (cause?.name === 'AbortError') {
       throw new ApiError(
         `GitaGuide did not answer within ${Math.round(REQUEST_TIMEOUT_MS / 1000)} seconds. `
-          + 'The server may still be waking up — please try again.',
+          + 'It may still be waking up — your message is still here, so you can send '
+          + 'it again.',
         0,
+        null,
+        null,
+        FAILURE.TIMEOUT,
       )
     }
     throw new ApiError(
-      'Could not reach GitaGuide. Is the backend running on port 8000?',
+      'Could not reach GitaGuide — the connection dropped. Your message is still '
+        + 'here; send it again when you are ready.',
       0,
+      null,
+      null,
+      FAILURE.NETWORK,
     )
   } finally {
     clearTimeout(timer)
@@ -378,6 +466,11 @@ const MOCK_CRISIS_TEXT =
   + 'reflection is not what this moment needs. Please talk to someone who can '
   + 'help you directly. You deserve real support, not verses.'
 
+/**
+ * A cancellable delay. Used by the mock's latency simulation and by the live
+ * path's single network retry, which is why it is not mock-only despite living
+ * in this section.
+ */
 function sleep(ms, signal) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(resolve, ms)

@@ -4,6 +4,7 @@ import {
   ApiError,
   CONSENT_REQUIRED,
   fetchSessionMessages,
+  isOffline,
   recordConsentOnServer,
   sendMessage,
 } from './api.js'
@@ -53,6 +54,10 @@ export default function App() {
   const [sessionId, setSessionId] = useState(getSessionId)
   const [entries, setEntries] = useState([])
   const [busy, setBusy] = useState(false)
+  // The composer's text lives here so a failed turn can put it back. Tester
+  // item 9: a message that vanishes into an error is worse than the error.
+  const [draft, setDraft] = useState('')
+  const [online, setOnline] = useState(() => !isOffline())
   const bottomRef = useRef(null)
   const abortRef = useRef(null)
 
@@ -62,6 +67,20 @@ export default function App() {
 
   // Abandon an in-flight request if the component goes away.
   useEffect(() => () => abortRef.current?.abort(), [])
+
+  // Connection state, so the composer can say so before a send fails. The
+  // events are the only reliable signal: `navigator.onLine` is a snapshot and
+  // polling it would still miss the moment it changed.
+  useEffect(() => {
+    const goOnline = () => setOnline(true)
+    const goOffline = () => setOnline(false)
+    window.addEventListener('online', goOnline)
+    window.addEventListener('offline', goOffline)
+    return () => {
+      window.removeEventListener('online', goOnline)
+      window.removeEventListener('offline', goOffline)
+    }
+  }, [])
 
   // Restore an earlier conversation on reload. The history endpoint is
   // optional: `fetchSessionMessages` returns null when it is not implemented,
@@ -100,8 +119,10 @@ export default function App() {
 
         // The server is the authority on consent. If it says this session has
         // none - cleared storage, a second browser, a rotated session - show
-        // the gate again rather than leaving the tester at a dead end.
+        // the gate again rather than leaving the tester at a dead end. The
+        // draft goes back so the message survives being asked to consent.
         if (error instanceof ApiError && error.code === CONSENT_REQUIRED) {
+          setDraft(text)
           clearConsent()
           setConsented(false)
           return
@@ -113,6 +134,10 @@ export default function App() {
             : 'Something went wrong on the way to GitaGuide.'
         const retryAfterSeconds =
           error instanceof ApiError ? error.retryAfterSeconds : null
+        // Put the message back in the composer. The error turn keeps its own
+        // copy and its own Retry, so there are two ways forward: resend as
+        // written, or edit it first.
+        setDraft(text)
         setEntries((current) => [
           ...current,
           { kind: 'error', text, message, retryAfterSeconds },
@@ -125,6 +150,23 @@ export default function App() {
     [sessionId],
   )
 
+  /**
+   * Send from the composer.
+   *
+   * If the last thing in the transcript is a failure for this exact text, this
+   * is a retry rather than a new message, so it replaces the error entry
+   * instead of stacking a second identical user bubble underneath it.
+   */
+  const sendFromComposer = useCallback(
+    (text) => {
+      setDraft('')
+      const last = entries[entries.length - 1]
+      const isRetryOfSameText = last?.kind === 'error' && last.text === text
+      send(text, { replaceLast: isRetryOfSameText })
+    },
+    [entries, send],
+  )
+
   const [consentError, setConsentError] = useState(null)
 
   function handleNewSession() {
@@ -133,6 +175,7 @@ export default function App() {
     setBusy(false)
     setSessionId(rotateSessionId())
     setEntries([])
+    setDraft('')
   }
 
   async function handleAccept() {
@@ -198,7 +241,13 @@ export default function App() {
         <div ref={bottomRef} />
       </main>
 
-      <Composer onSend={send} busy={busy} />
+      <Composer
+        value={draft}
+        onChange={setDraft}
+        onSend={sendFromComposer}
+        busy={busy}
+        online={online}
+      />
     </div>
   )
 }
