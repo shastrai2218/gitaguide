@@ -191,7 +191,7 @@ def detect_register(text: str) -> RegisterResult:
 REGISTER_INSTRUCTIONS: dict[Register, str] = {
     Register.ENGLISH: (
         "Reply in English - plain, warm, everyday English. Verse ids stay exactly "
-        "as given (BG-2.47)."
+        "as given in ALLOWED CITATION IDS."
     ),
     Register.HINGLISH: (
         "Reply in Hinglish: everyday spoken Hindi written in Roman script, keeping "
@@ -199,13 +199,14 @@ REGISTER_INSTRUCTIONS: dict[Register, str] = {
         "manager, team, decision, promotion). Write the way people actually text - "
         "\"aapko lagta hai ki\", not \"bhavatah cintanam\". Do NOT transliterate "
         "Sanskrit, do not use Devanagari, and do not write formal or scriptural "
-        "Hindi. Verse ids stay exactly as given (BG-2.47)."
+        "Hindi. Verse ids stay in Latin script, exactly as given in ALLOWED "
+        "CITATION IDS."
     ),
     Register.HINDI: (
         "Reply in Hindi, in Devanagari script, in plain conversational Hindi - not "
         "literary or scriptural Hindi. Keep ordinary English technical words where "
-        "a Hindi speaker would use them. Verse ids stay in Latin script exactly as "
-        "given (BG-2.47)."
+        "a Hindi speaker would use them. Verse ids stay in Latin script, exactly as "
+        "given in ALLOWED CITATION IDS."
     ),
 }
 

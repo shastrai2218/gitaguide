@@ -79,27 +79,60 @@ async def test_answer_is_grounded_and_cited(
     assert result.hallucinated_citations == []
 
 
-async def test_why_this_verse_section_is_present(
+async def test_the_explanation_is_returned_but_not_pasted_into_the_reply(
     llm: FakeLLMProvider, settings: Settings, trace: RetrievalTrace
 ) -> None:
+    """The response contract of 9 Sep 2026, and the claim it must not cost.
+
+    The graph-path explanation used to be a "### Why this verse" section in the
+    answer body. It is still produced for every citation - that is the
+    project's explainability claim - but it is delivered in
+    ``why_this_verse`` (and by ``GET /explain``, and beside each verse in the
+    UI) rather than appended to a reply that is now capped at 80-150 words.
+    """
     result = await GroundedGenerator(llm, settings).generate("I am anxious", trace)
-    assert "why this verse" in result.answer.lower()
-    assert set(result.why_this_verse) == set(result.citations)
+
+    assert set(result.why_this_verse) == set(result.citations), (
+        "every citation must still carry the path that surfaced it"
+    )
+    assert all(result.why_this_verse.values()), "the paths must not be empty strings"
+    assert "why this verse" not in result.answer.lower(), (
+        "the explanation belongs beside the citation, not inside the reply"
+    )
 
 
-async def test_missing_why_section_is_appended(
+async def test_a_why_section_the_model_writes_anyway_is_stripped(
     settings: Settings, trace: RetrievalTrace
 ) -> None:
+    """The prompt asks for no heading; habit means one arrives regardless."""
     first = trace.verse_ids[0]
     llm = FakeLLMProvider(
         scripted=[
-            f"Consider {first}: act on the work in front of you without clinging to "
-            "the result it may or may not bring."
+            f"Act on the work in front of you, {first}, without clinging to the result "
+            f"it may or may not bring.\n\n{WHY_HEADING}\n\n- **{first}** - matched by vector"
         ]
     )
     result = await GroundedGenerator(llm, settings).generate("I am anxious", trace)
-    assert WHY_HEADING in result.answer
-    assert first in result.why_this_verse
+
+    assert WHY_HEADING not in result.answer
+    assert "matched by vector" not in result.answer
+    assert result.answer.startswith("Act on the work")
+    assert first in result.why_this_verse, "stripping the prose must not drop the data"
+
+
+async def test_a_reply_that_is_only_a_why_section_is_not_emptied(
+    settings: Settings, trace: RetrievalTrace
+) -> None:
+    """Stripping must never hand the user a blank turn.
+
+    If the model wrote nothing but the section, there is no body to keep; the
+    text is left intact so the quality guard judges it instead of the reader
+    receiving an empty reply.
+    """
+    first = trace.verse_ids[0]
+    llm = FakeLLMProvider(scripted=[f"{WHY_HEADING}\n\n- **{first}** - matched by vector"] * 2)
+    result = await GroundedGenerator(llm, settings).generate("I am anxious", trace)
+    assert result.answer.strip(), "an empty answer must never reach the user"
 
 
 async def test_hallucinated_citation_triggers_a_retry(

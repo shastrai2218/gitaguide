@@ -331,6 +331,16 @@ class GenerationResult(BaseModel):
     #: shed turn can be told apart from a budget-exhausted one in the database.
     quality_guard: str = ""
     quality_guard_detail: str = ""
+    #: The register the answer was asked to mirror - "english", "hinglish" or
+    #: "hindi", detected from the user's own message
+    #: (:mod:`app.pipeline.register`). Recorded so register match can be
+    #: measured on real traffic rather than assumed from the prompt.
+    #:
+    #: Named ``answer_register`` and not ``register`` because pydantic's
+    #: metaclass derives from ``ABCMeta``, whose ``register`` classmethod a
+    #: field of that name shadows - pydantic warns about it, and a warning
+    #: shipped is a warning nobody reads.
+    answer_register: str = ""
 
 
 # ----------------------------------------------------------------- top level

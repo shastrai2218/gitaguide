@@ -4,10 +4,7 @@ Research-pipeline role
 ---------------------
 The model is allowed to reason, but not to source. Everything it asserts about
 the texts must come from the verses handed to it in the CONTEXT block, and every
-verse it uses must be cited by id (``BG-2.47``, ``AS-1.2.3``). The answer must
-also end with a **"Why this verse"** section that restates the graph path that
-caused each verse to be retrieved - that section is the user-facing form of the
-system's explainability claim.
+verse it uses must be cited by id (``BG-2.47``, ``AS-1.2.3``).
 
 Enforcement is mechanical, not hopeful:
 
@@ -18,7 +15,18 @@ Enforcement is mechanical, not hopeful:
 3. if it still fails, the offending ids are stripped and a deterministic answer
    is composed from the retrieved verses, so an ungrounded answer can never
    reach the user;
-4. a missing "Why this verse" section is appended from the graph paths.
+4. the graph path that surfaced each cited verse is returned in
+   ``why_this_verse`` - the explainability claim, delivered beside the citation
+   rather than appended to the reply (see :func:`strip_why_section`).
+
+The response contract (tester feedback, 9 Sep 2026)
+--------------------------------------------------
+Testers asked for shorter, more conversational answers that reference verses
+instead of pasting them, in their own language, drawing on both texts at once.
+That is enforced here in four places: the system prompt's shape and 80-150 word
+limit, :data:`CROSS_SOURCE_INSTRUCTION` added only when the retrieved set truly
+spans both scriptures, the register mirrored from the user's own message, and
+:func:`asks_for_detail` as the only release from the limit.
 
 Grounding is not coherence
 --------------------------
@@ -53,6 +61,7 @@ from app import telemetry
 from app.config import Settings, get_settings
 from app.llm.base import TASK_ANSWER, BudgetExhaustedError, LLMError, LLMProvider, LLMResponse
 from app.pipeline.memory import MemoryContext
+from app.pipeline.register import detect_register, register_instruction
 from app.pipeline.schemas import (
     EmotionResult,
     GenerationResult,
@@ -61,7 +70,7 @@ from app.pipeline.schemas import (
     RetrievalTrace,
     RetrievedVerse,
 )
-from corpus.schemas import VERSE_ID_RE, extract_verse_ids
+from corpus.schemas import VERSE_ID_RE, ScriptureSource, extract_verse_ids
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +94,9 @@ WHY_HEADING = "### Why this verse"
 # --------------------------------------------------------------------------- #
 #: Letters in any script. Digits, punctuation and verse ids are not words.
 WORD_RE = re.compile(r"[^\W\d_]+")
-#: The explanation heading, however the model or ``_ensure_why_section`` wrote it.
+#: The explanation heading, in whatever form a model writes it. Used to find the
+#: body for :func:`assess_answer` and to strip the section in
+#: :func:`strip_why_section`.
 WHY_HEADING_RE = re.compile(r"^#{1,6}\s*why this verse\b", re.IGNORECASE | re.MULTILINE)
 #: One word this many times in a row ("the the the") is not prose.
 STUTTER_WORD_RUN = 3
@@ -134,6 +145,45 @@ def answer_body(text: str) -> str:
         return text
     body = text[: match.start()]
     return body if body.strip() else text
+
+
+def strip_why_section(text: str) -> str:
+    """Remove a "Why this verse" section from the answer body.
+
+    Why the explanation moved out of the chat
+    -----------------------------------------
+    The section used to be required by the system prompt and appended by the
+    generator when the model forgot it. It was the user-facing form of the
+    project's explainability claim, and it is being **kept** - but not in the
+    reply, because it cannot coexist with an 80-150 word answer. Testers asked
+    for shorter answers (item 1) and for references rather than pasted verses
+    (item 4); the section was 50-170 words of restated graph paths on top of
+    every reply.
+
+    So the explanation is now delivered structurally instead of in prose:
+    ``GenerationResult.why_this_verse`` still carries verse id -> graph path for
+    every citation, ``GET /explain/{id}`` still returns the whole trace, and the
+    beta UI shows the path next to each verse. Nothing about the claim is lost;
+    what changes is that the reader gets it beside the citation instead of
+    inside the answer.
+
+    The prompt now asks the model not to write the section, and this strips it
+    if the model writes one anyway - which it does out of habit, and which no
+    prompt can guarantee against.
+
+    >>> strip_why_section("Do the work.\\n\\n### Why this verse\\n\\n- BG-2.47 - x")
+    'Do the work.'
+    >>> strip_why_section("Just the answer.")
+    'Just the answer.'
+    """
+    match = WHY_HEADING_RE.search(text)
+    if match is None:
+        return text.strip()
+    body = text[: match.start()].strip()
+    # A model that wrote *only* the section left no answer to keep; returning
+    # the original lets the quality guard judge it rather than silently
+    # shipping an empty reply.
+    return body or text.strip()
 
 
 def _longest_run(items: Sequence[object]) -> int:
@@ -207,19 +257,64 @@ def assess_answer(text: str, settings: Settings | None = None) -> AnswerQuality:
 SYSTEM_PROMPT = """You are GitaGuide, a guidance companion grounded in the Bhagavad Gita and \
 Kautilya's Arthashastra.
 
+You are talking with a person, not answering a query. Speak to their situation first, in their \
+own terms, and only then bring the teaching to it.
+
 Absolute rules:
 1. Use ONLY the verses in the CONTEXT block. If they do not cover the question, say so plainly \
 instead of drawing on anything else you know.
-2. Cite every verse you use by its id in the form BG-2.47 or AS-1.2.3. Never invent an id, a \
+2. Cite by id, in the form BG-2.47 or AS-1.2.3, and cite AT MOST TWO. Never invent an id, a \
 chapter number or a translation.
-3. Do not present yourself as a therapist, doctor, lawyer or priest, and never tell someone to \
+3. Do NOT quote, paste or transliterate the verse text itself, and do not include Sanskrit. The \
+reader is shown each verse's reference and full text separately, so repeating it here makes the \
+answer twice as long and no more useful. Say what the verse means in your own words.
+4. Do not present yourself as a therapist, doctor, lawyer or priest, and never tell someone to \
 stop medical treatment.
-4. Speak to the person's actual situation in plain, warm, concrete language. No sermon, no \
-Sanskrit padding, no promises about outcomes.
-5. End with a section titled exactly "### Why this verse" that lists each cited verse and the \
-retrieval path that surfaced it, restated in one clause a lay reader can follow.
+5. Never narrate your own process - no "The user is asking...", no "The context provides...", no \
+"As an AI". Do not write a heading, a section title, or a bulleted list of your reasons.
 
-Length: 180-320 words before the "Why this verse" section."""
+Shape of the answer:
+- Open with the single thing you would most want them to take away, in one sentence.
+- Then two or three sentences connecting it to what they actually described, naming at most two \
+verses by id.
+- Close with one short question that would move things forward, when a question is natural. Not \
+every turn needs one.
+
+Length: 80-150 words in total. Go longer ONLY if the person explicitly asks for detail, for the \
+full verse, or for an explanation at length."""
+
+#: Added when the retrieved set spans both scriptures. Tester feedback item 3:
+#: "combine answer of both gita and arthasastra". Listing them one after the
+#: other is what the model does unprompted, and it reads like two answers.
+CROSS_SOURCE_INSTRUCTION = (
+    "BOTH TEXTS APPLY: the context holds verses from the Gita and from the Arthashastra. "
+    "Weave them into one thought rather than listing them - the Gita for the inner "
+    "disposition (what to hold onto, what to let go of), the Arthashastra for the practical "
+    "conduct (what to actually do, and in what order). Join them in a sentence; do not give "
+    "them a paragraph each."
+)
+
+#: Phrases that license a longer answer. Deliberately narrow: bare "explain" is
+#: how people ask ordinary questions ("can you explain what to do?"), so it is
+#: not here. Only an explicit request for *more* counts.
+DETAIL_REQUESTS: tuple[str, ...] = (
+    "in detail", "more detail", "in depth", "at length", "elaborate", "expand on",
+    "tell me more", "say more", "more about", "full verse", "full text", "whole verse",
+    "entire verse", "long answer", "detailed answer", "vistaar", "detail me",
+    "poora shlok", "pura shlok", "poori", "vistar se",
+)
+
+
+def asks_for_detail(query: str) -> bool:
+    """True when the person explicitly asked for a longer answer.
+
+    >>> asks_for_detail("what should I do?")
+    False
+    >>> asks_for_detail("Can you explain that in more detail?")
+    True
+    """
+    lowered = query.lower()
+    return any(phrase in lowered for phrase in DETAIL_REQUESTS)
 
 INTENT_FRAMING: dict[IntentLabel, str] = {
     IntentLabel.SEEK_GUIDANCE: (
@@ -285,6 +380,27 @@ def mask_foreign_verse_ids(
     return VERSE_ID_RE.sub(replace, text)
 
 
+#: Both scriptures present in one retrieved set - the case tester item 3 asks
+#: to be woven rather than listed.
+BOTH_SOURCES: frozenset[ScriptureSource] = frozenset(
+    {ScriptureSource.BHAGAVAD_GITA, ScriptureSource.ARTHASHASTRA}
+)
+
+
+def retrieved_sources(retrieval: RetrievalTrace) -> frozenset[ScriptureSource]:
+    """Which scriptures the retrieved set actually spans.
+
+    Read from the retrieval trace, not from the query or the intent: the
+    cross-source instruction must only fire when both texts are genuinely
+    available to cite, or it invites the model to reach for a verse it was
+    never given.
+
+    >>> retrieved_sources(RetrievalTrace(query="q", results=[])) == frozenset()
+    True
+    """
+    return frozenset(item.verse.source for item in retrieval.results)
+
+
 def format_context_block(results: Sequence[RetrievedVerse]) -> str:
     """Render retrieved verses in the exact shape the parsers expect.
 
@@ -322,7 +438,18 @@ def build_answer_prompt(
     memory: MemoryContext | None = None,
     corrective_note: str = "",
 ) -> str:
-    """Assemble the grounded-generation prompt."""
+    """Assemble the grounded-generation prompt.
+
+    Three instructions are conditional on the turn rather than fixed, so the
+    prompt says only what applies:
+
+    * the **register** to answer in, mirrored from the user's own message
+      (:mod:`app.pipeline.register`);
+    * the **cross-source** instruction, only when the retrieved set actually
+      spans both scriptures - telling the model to weave two texts when it has
+      verses from one invites it to invent the other;
+    * a **long-form** release, only when the person asked for detail.
+    """
     intent_label = intent.intent if intent else IntentLabel.SEEK_GUIDANCE
     emotion_line = "DETECTED EMOTION: not detected"
     if emotion is not None and emotion.labels:
@@ -331,12 +458,21 @@ def build_answer_prompt(
 
     memory_block = memory.render() if memory and not memory.is_empty else ""
     allowed = ", ".join(retrieval.verse_ids) or "none"
+    detected = detect_register(query)
 
     parts = [
         f"TASK: {TASK_ANSWER}",
+        f"REGISTER: {register_instruction(detected.register)}",
         emotion_line,
         f"DETECTED INTENT: {intent_label.value} - {INTENT_FRAMING.get(intent_label, '')}",
     ]
+    if retrieved_sources(retrieval) == BOTH_SOURCES:
+        parts.append(CROSS_SOURCE_INSTRUCTION)
+    if asks_for_detail(query):
+        parts.append(
+            "LENGTH OVERRIDE: they asked for more, so the 80-150 word limit does not apply "
+            "to this turn. Still do not paste the verse text."
+        )
     if memory_block:
         parts.append(memory_block)
     parts += [
@@ -435,7 +571,7 @@ class GroundedGenerator:
             logger.warning("LLM failed citation enforcement twice; used template answer")
 
         why_map = self._why_map(retrieval, citations)
-        answer = self._ensure_why_section(answer, why_map)
+        answer = strip_why_section(answer)
 
         fallback_steps = int(response.raw.get("fallback_steps", 0) or 0)
         if response.provider.startswith("fake"):
@@ -462,6 +598,7 @@ class GroundedGenerator:
             latency_ms=round((time.perf_counter() - started) * 1000, 2),
             quality_guard="retried" if guard_notes else "",
             quality_guard_detail=" | ".join(guard_notes),
+            answer_register=detect_register(query).register.value,
         )
 
     # ---------------------------------------------------------------- pieces
@@ -611,17 +748,6 @@ class GroundedGenerator:
         return out
 
     @staticmethod
-    def _ensure_why_section(answer: str, why_map: dict[str, str]) -> str:
-        """Append the explanation section when the model forgot it."""
-        if not why_map:
-            return answer
-        if "why this verse" in answer.lower():
-            return answer
-        lines = [answer.rstrip(), "", WHY_HEADING, ""]
-        lines += [f"- **{verse_id}** - {why}" for verse_id, why in why_map.items()]
-        return "\n".join(lines)
-
-    @staticmethod
     def _no_context_answer() -> str:
         return (
             "I could not find anything in the Bhagavad Gita or the Arthashastra that speaks "
@@ -637,24 +763,23 @@ class GroundedGenerator:
         retrieval: RetrievalTrace,
         emotion: EmotionResult | None,
     ) -> str:
-        """Deterministic grounded answer, used only if the LLM cannot comply."""
+        """Deterministic grounded answer, used only if the LLM cannot comply.
+
+        It used to paste each verse's full text, which is exactly what tester
+        item 4 asked us to stop doing ("Dont show direct slog directly just
+        give it reference link"). It now names the references and leaves the
+        text to the citation surface, like every other answer. Grounding is
+        unaffected: the ids are still in the body, so ``extract_verse_ids``
+        still finds them and ``grounded`` still holds.
+        """
         feeling = emotion.dominant if emotion and emotion.labels else "what you are carrying"
-        lines = [
+        references = [item.verse_id for item in retrieval.results[:2]]
+        named = " and ".join(references)
+        return (
+            f"The part you can act on is your own conduct and effort in the next step, not "
+            f"the outcome that follows it.\n\n"
             f"Reading your message, the strongest thread is {feeling}. "
-            "Here is what the texts actually say about it, quoted rather than paraphrased.",
-            "",
-        ]
-        for item in retrieval.results[:3]:
-            lines.append(f"**{item.verse.citation}** - {item.verse.text_english.strip()}")
-            lines.append("")
-        lines.append(
-            "Taken together: the part you control is your own conduct and effort in the next "
-            "step, not the outcome that follows it. Choose the one action you can take today, "
-            "and treat the rest as not yet yours to settle."
+            f"{named} speak to exactly this, and they are shown below with their full text "
+            f"so you can read them yourself rather than take my word for it.\n\n"
+            f"What is the one action here that is genuinely yours to take?"
         )
-        lines += ["", WHY_HEADING, ""]
-        citable = {item.verse_id for item in retrieval.results}
-        for item in retrieval.results[:3]:
-            why = mask_foreign_verse_ids(item.why(), citable)
-            lines.append(f"- **{item.verse_id}** - {why}")
-        return "\n".join(lines)

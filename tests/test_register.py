@@ -180,4 +180,20 @@ def test_the_hinglish_instruction_forbids_the_failure_mode_it_exists_for() -> No
 def test_verse_ids_stay_machine_readable_in_every_register() -> None:
     """Citation enforcement matches BG-2.47; a translated id would break it."""
     for register in Register:
-        assert "BG-2.47" in register_instruction(register)
+        assert "ALLOWED CITATION IDS" in register_instruction(register)
+
+
+@pytest.mark.parametrize("register", list(Register))
+def test_no_instruction_contains_a_concrete_verse_id(register: Register) -> None:
+    """A regression, caught by tests/test_generation.py on 9 Sep 2026.
+
+    These instructions go into every turn's prompt. An example id written out
+    in full - "keep ids as given (BG-2.47)" - is an id the model can see and
+    therefore cite, without ever having been handed that verse. That costs a
+    corrective retry and, if the retry also strays, degrades the turn to the
+    template answer. So the instructions name where the ids come from instead
+    of showing one.
+    """
+    from corpus.schemas import extract_verse_ids
+
+    assert extract_verse_ids(register_instruction(register)) == []
