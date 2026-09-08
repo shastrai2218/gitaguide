@@ -28,6 +28,7 @@ from app.llm.fake import FakeLLMProvider
 from app.pipeline.generation import (
     BOTH_SOURCES,
     CROSS_SOURCE_INSTRUCTION,
+    OVERLOADED_ANSWER,
     SYSTEM_PROMPT,
     GroundedGenerator,
     asks_for_detail,
@@ -300,3 +301,39 @@ def test_the_emotion_and_intent_framing_survived_the_rewrite() -> None:
     assert "DETECTED EMOTION: annoyance" in prompt
     assert "DETECTED INTENT:" in prompt
     assert "ALLOWED CITATION IDS: BG-2.47" in prompt
+
+
+async def test_a_failed_turn_still_records_the_register(settings: Settings) -> None:
+    """Found by the 9 Sep measurement run, not by a test.
+
+    A turn that exhausted the generation budget recorded an empty
+    answer_register, because only the success path set it. That undercounts
+    register match on precisely the turns worth investigating - the register
+    was detected fine, it was the answer that never arrived.
+    """
+    import asyncio
+
+    from app.llm.base import FallbackLLMProvider, LLMProvider, LLMResponse
+
+    class TooSlow(LLMProvider):
+        """Answers eventually. The chain's deadline is what fires, not this."""
+
+        name = "slow"
+        model = "slow"
+
+        async def complete(self, prompt: str, **kwargs: object) -> LLMResponse:
+            await asyncio.sleep(5.0)
+            return LLMResponse(text="too late", provider=self.name, model=self.model)
+
+    # A provider that merely *raises* BudgetExhaustedError is not the same
+    # thing: FallbackLLMProvider turns that into a plain LLMError, because
+    # nothing timed out. Only a real deadline produces the overload turn.
+    generator = GroundedGenerator(
+        FallbackLLMProvider([TooSlow()], budget_seconds=0.2), settings
+    )
+    result = await generator.generate("mujhe samajh nahi aa raha kya karu", trace_of(GITA))
+
+    assert result.answer == OVERLOADED_ANSWER
+    assert result.answer_register == Register.HINGLISH.value, (
+        "the register was detected; only the answer was missing"
+    )

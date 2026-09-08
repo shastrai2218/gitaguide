@@ -547,9 +547,9 @@ class GroundedGenerator:
         try:
             response = await self._complete_guarded(prompt, guard_notes)
         except BudgetExhaustedError as exc:
-            return self._overloaded_result(started, exc)
+            return self._overloaded_result(started, exc, query)
         except DegenerateOutputError as exc:
-            return self._degenerate_result(started, exc)
+            return self._degenerate_result(started, exc, query)
         answer, citations, hallucinated = self._validate(response.text, allowed)
 
         if hallucinated or not citations:
@@ -561,9 +561,9 @@ class GroundedGenerator:
             try:
                 retry = await self._complete_guarded(retry_prompt, guard_notes)
             except BudgetExhaustedError as exc:
-                return self._overloaded_result(started, exc)
+                return self._overloaded_result(started, exc, query)
             except DegenerateOutputError as exc:
-                return self._degenerate_result(started, exc)
+                return self._degenerate_result(started, exc, query)
             retry_answer, retry_citations, retry_hallucinated = self._validate(
                 retry.text, allowed
             )
@@ -656,7 +656,9 @@ class GroundedGenerator:
             + (retry_quality.summary() if retry.text.strip() else "empty completion")
         )
 
-    def _degenerate_result(self, started: float, exc: DegenerateOutputError) -> GenerationResult:
+    def _degenerate_result(
+        self, started: float, exc: DegenerateOutputError, query: str = ""
+    ) -> GenerationResult:
         """The overload reply, for a turn where both completions were word salad.
 
         The same shape and text as a budget-exhausted turn - the tester is told
@@ -674,11 +676,12 @@ class GroundedGenerator:
             model="",
             quality_guard="shed",
             quality_guard_detail=str(exc),
+            answer_register=detect_register(query).register.value if query else "",
             latency_ms=round((time.perf_counter() - started) * 1000, 2),
         )
 
     def _overloaded_result(
-        self, started: float, exc: BudgetExhaustedError
+        self, started: float, exc: BudgetExhaustedError, query: str = ""
     ) -> GenerationResult:
         """A normal-shaped turn saying the guide is overloaded.
 
@@ -698,6 +701,11 @@ class GroundedGenerator:
             grounded=False,
             provider=PROVIDER_OVERLOADED,
             model="",
+            # Recorded even though no answer was written. The 9 Sep measurement
+            # run showed an empty register on exactly the turn that failed,
+            # which undercounts register match on the turns most worth looking
+            # at: the register was detected, only the answer was missing.
+            answer_register=detect_register(query).register.value if query else "",
             latency_ms=round((time.perf_counter() - started) * 1000, 2),
         )
 

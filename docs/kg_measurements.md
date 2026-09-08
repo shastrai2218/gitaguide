@@ -858,3 +858,181 @@ one Arthashastra verse: AS-7.18.8…" — the model narrating its own deliberati
 instead of addressing the person. All four turns today read as direct address.
 Left as a **beta note**: it is a prompt-adherence wobble to watch in tester
 feedback, not a defect with a reproduction.
+
+---
+
+## 14. Tester feedback iteration - the response contract (measured 9 Sep 2026)
+
+First tester feedback on the closed beta arrived as ten items. Six of them
+were about the answers themselves: too long, too vague, don't paste the
+sloka, reply in Hinglish, combine both texts, be conversational. This
+section measures what changed.
+
+### What stack these numbers come from
+
+**Read this before comparing anything.** Section 4 forbids mixing offline and
+production retrieval numbers, and this section deliberately does not.
+
+| | before | after |
+| --- | --- | --- |
+| where | **production** (Render + Aura + NIM), old prompt | **local**: real NIM, real ONNX MiniLM (fp32) and GoEmotions, full 3,836-verse corpus, **in-memory retriever** |
+| why not both in production | - | the backend deploy is manual (`autoDeploy: false`) and had not run when these were taken |
+| why local is admissible here | - | word count, register and grounding are properties of the prompt and the model, both identical to production. They are not retrieval metrics. |
+| what is NOT comparable | - | **latency** (0.1 CPU vs a laptop) and **which verses were retrieved** (different retriever). Neither is claimed below. |
+
+Local Neo4j lives in Docker and Docker was not running, so the production
+retriever could not be used locally. Intent used the deterministic keyword
+prior, as `--deterministic-intent` does, so the run reproduces and costs one
+NIM call per turn rather than two.
+
+### Answer length (the headline item)
+
+*Before: 11 production assistant turns written under the old prompt
+(one real tester session of 7 Sep, one own repro of 9 Sep, and the Day 7
+walkthrough, which supplies the same-prompt baseline and is excluded from
+feedback analysis but not from a word count).*
+
+| | before (production, old prompt) | after (local, new contract) |
+| --- | ---: | ---: |
+| median words in the reply | **238** | **65** |
+| min / max | 116 / 365 | 33 / 89 |
+| inside the 80-150 budget | 1/11 | 1/13 |
+| carried a "Why this verse" section | 11/11 | 0/14 |
+
+The old prompt asked for 180-320 words *before* an explanation section, so a
+reply routinely passed 300; the longest measured was 365. The section itself
+was 40-172 of those words.
+
+#### The contract now undershoots its own floor
+
+Item 1 is fixed and then some: **238 words to 65**, a 73% reduction, and not
+one reply in fourteen pasted a verse or carried an explanation section. But
+**12 of 14 came in under the 80-word floor the contract states**, at 33-89
+words. The instruction was 80-150; the model is writing 65.
+
+The cause is in the prompt, and it is mine. The shape instruction and the word
+budget disagree with each other:
+
+> Open with the single thing you would most want them to take away, in one
+> sentence. Then two or three sentences connecting it to what they actually
+> described... Close with one short question.
+
+One sentence, plus two or three, plus a question is five or six sentences,
+which is 60-90 words - not 80-150. A model obeying the *shape* cannot reach the
+*budget*, and it obeyed the shape. Widening the shape to three or four
+connecting sentences would close the gap; lowering the stated budget to 60-120
+would be the other way to make them agree.
+
+**Why this is not obviously a win to leave as it is.** Tester B's complaint was
+that answers *"feel vague"* and needed *"more training/fine-tuning"*. Shorter
+and vaguer is a real risk: an answer of 65 words has room for a takeaway and
+one verse, and not much room to earn either. Cutting length was asked for;
+cutting substance was not. So the honest position is that item 1 is
+over-delivered against the spec, and whether 65 words reads as crisp or as
+thin is a question for the next round of tester feedback, not for this
+measurement.
+
+Left as measured rather than quietly retuned, because a prompt changed after
+the run is a prompt nobody has measured.
+
+### The other five items
+
+| item | measured | result |
+| --- | --- | ---: |
+| 5 - reply in the user's register | register recorded == register the prompt requires | **13/14** |
+| 4 - don't paste the sloka | a 40-character run of any retrieved verse appearing verbatim in the reply | **0/14** pasted |
+| 1 - at most two references | citations per reply <= 2 | **14/14** |
+| grounding must not regress | `grounded=True`, no hallucinated ids | **13/14**, 0 hallucinated |
+| 3 - combine both texts | retrieved set spanned both scriptures | 6/14 turns |
+
+Item 3 is the one this run cannot settle. Whether both scriptures appear in
+a retrieved set is a **retrieval** property, and this run used the in-memory
+retriever, so the count above says nothing about production. What is
+verified is the mechanism: the cross-source instruction is added only when
+the retrieved set genuinely spans both texts, read from the trace rather
+than from the query, and `tests/test_response_contract.py` pins both
+directions. The synthesis itself has to be judged on production traffic.
+
+### Per-turn detail
+
+| prompt | register | words | citations | grounded | pasted | model |
+| --- | --- | ---: | ---: | --- | --- | --- |
+| D7-1 manager credit | english (yes) | 56 | 1 | True | False | nemotron-3-super-120b-a12b |
+| D7-2 vendor overbilling | english (yes) | 50 | 2 | True | False | nemotron-3-super-120b-a12b |
+| D7-3 patience | english (yes) | 77 | 2 | True | False | nemotron-3-super-120b-a12b |
+| D7-4 career delay | english (yes) | 45 | 1 | True | False | nemotron-3-super-120b-a12b |
+| T-1 promotion fear | english (yes) | 71 | 2 | True | False | nemotron-3-super-120b-a12b |
+| T-2 layoffs | english (yes) | 49 | 2 | True | False | nemotron-3-super-120b-a12b |
+| T-3 safety report | english (yes) | 75 | 2 | True | False | nemotron-3-super-120b-a12b |
+| T-4 poaching | english (yes) | 65 | 2 | True | False | nemotron-3-super-120b-a12b |
+| T-5 hinglish boss | hinglish (yes) | 66 | 1 | True | False | nemotron-3-super-120b-a12b |
+| T-6 hinglish focus | hinglish (yes) | 59 | 2 | True | False | nemotron-3-super-120b-a12b |
+| T-7 hinglish resign |  (**NO**) | 33 | 0 | False | False | overloaded |
+| T-8 hindi duty | hindi (yes) | 89 | 2 | True | False | nemotron-3-super-120b-a12b |
+| T-9 hindi conflict | hindi (yes) | 71 | 2 | True | False | nemotron-3-super-120b-a12b |
+| T-10 detail request | english (yes) | 73 | 2 | True | False | nemotron-3-super-120b-a12b |
+
+The one deliberate exemption is `T-10 detail request`, which asks for detail explicitly and is released from the budget: it came back at 73 words.
+
+### A latent production bug, found by the new tests
+
+The output sanity guard shipped on 8 Sep flagged a word pair repeated twice
+back to back. That happens in ordinary English across a comma, and it
+happens in scripture: BG 6.6 renders as *"for the one who has mastered the
+self, the self is a friend"*. An answer containing it was judged degenerate,
+retried, and then **shed** - so a reader asking about self-mastery would have
+been told "the guide is overloaded" instead of receiving a correct reply.
+Exactly the silent quality failure the guard exists to prevent, caused by the
+guard.
+
+It had not fired in production (`degenerate_output_shed` was 0), but it was
+waiting for the first answer that paraphrased one of several such verses. The
+pair threshold is now 3, which has no natural reading, and the 8 Sep salad is
+still caught with no help from that signal at all - its body repeats one word
+three times in a row. Found because the offline provider quotes retrieved
+verses, so a corpus verse with a doubled pair made every offline turn
+degrade; a test now asserts the offline provider survives its own guard.
+
+### Cancellation accounting
+
+Phase 0 found 15 pipeline admissions against 2 completed turns in production
+and could only narrow the missing 13 to two candidates, because a cancelled
+request increments the admission counter and then skips **both**
+`record_turn` and the 500 handler: `asyncio.CancelledError` is a
+`BaseException`, so `except Exception` never sees it. `turns_cancelled` now
+closes that, so admitted == completed + shed + cancelled + 5xx and the 5xx
+count is the residue. The next report can name the cause instead of ranking
+candidates.
+
+### Frontend reliability, verified in a browser
+
+There is no JavaScript test runner in this repository, so these were driven
+through real DOM events against the dev server rather than asserted only in
+source:
+
+| behaviour | evidence |
+| --- | --- |
+| a dropped connection is retried **once** | a rejected `fetch` produced exactly 2 calls, not a loop |
+| the message is not lost | after the failure the text was back in the composer |
+| offline sends nothing at all | with `navigator.onLine` false, a send made **0** fetch calls |
+| the offline notice clears | it disappeared on the `online` event |
+| model output cannot create a link | of 4 anchors in an assistant turn, 4 were inside verse leaves and **0** in model prose |
+
+The 150s deadline is deliberately **not** auto-retried: the server is very
+likely still working, and a second request spends two more NIM calls and
+another turn's memory on a 0.1-CPU instance to obtain the same answer.
+
+### Not measured, and why
+
+* **Production latency after the change.** The backend deploy is manual and
+  had not run. A prompt edit changes latency only through token count, and
+  shorter answers should reduce generation time, but that is a prediction
+  and is not recorded here as a measurement.
+* **Retrieval quality.** Untouched this iteration by instruction; hit rate
+  remains 0.1750 (section 12). The reranker was not modified.
+* **Whether testers find the new answers less vague.** That is the question
+  the next round of feedback answers, and no local measurement substitutes
+  for it.
+* **`Downloads/arthashastra_dataset.json`** (150 chapter-level records, 9 Sep)
+  is left untouched, noted as a candidate for a chapter-level context layer
+  later. Our corpus is sutra-level at 3,135 records; the granularities differ.
