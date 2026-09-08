@@ -258,7 +258,23 @@ with an error naming the variable — that guard exists so you never ship a UI
 where every turn 404s silently. A successful build means it was set.
 
 Open the URL. You should see the consent gate. Do not send a message yet — CORS
-will refuse it until step 5.
+will refuse it until step 5. But **do open `/privacy` and `/disclaimer`**, which
+the gate links to:
+
+> ### `cleanUrls` must stay out of `vercel.json`
+> Those two paths are client-side routes with no file behind them: they work
+> because `vercel.json` rewrites every path to `/index.html`. Setting
+> `"cleanUrls": true` breaks that, because it makes Vercel **308-redirect**
+> `/index.html` to `/` — so the rewrite's destination is no longer a servable
+> file and every client-side route falls through to Vercel's 404 page.
+>
+> This was live in production on 8 Sep 2026: the consent gate said "you accept
+> the Disclaimer & Beta Terms and the Privacy Notice" and both links 404'd,
+> while `vercel.json` was demonstrably being read (its security headers were on
+> every response). `tests/test_frontend_routing.py` now holds the directive out.
+> If the notices 404 again, check that file before anything else, and confirm
+> with `curl -sI https://<your-project>.vercel.app/index.html` — a 308 there is
+> the tell.
 
 ---
 
