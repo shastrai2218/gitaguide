@@ -14,6 +14,7 @@ import asyncio
 from collections.abc import Iterator
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.api.concurrency import PipelineBusyError, PipelineGate
@@ -207,3 +208,82 @@ def test_health_and_consent_are_not_serialised(client: TestClient) -> None:
         )
     finally:
         gate._semaphore.release()
+
+
+# --------------------------------------------------------------------------- #
+# Cancellation accounting (added 9 Sep 2026)
+#
+# Production showed 15 pipeline admissions against 2 completed turns, and the
+# 13 missing ones could only be guessed at: a cancelled request bumps the
+# admission counter and then skips both record_turn and the 500 handler,
+# because CancelledError is a BaseException and `except Exception` never sees
+# it. So a client that hung up was indistinguishable from a server error.
+# --------------------------------------------------------------------------- #
+def test_a_cancelled_turn_is_counted_and_the_cancellation_propagates(
+    client: TestClient,
+) -> None:
+    """Counted, then re-raised unchanged.
+
+    Swallowing a cancellation would leave the ASGI server holding a request
+    nobody is waiting for, so the branch must not convert it into a response.
+    """
+    orchestrator = client.app.state.orchestrator
+    telemetry = client.app.state.telemetry
+    before = telemetry.counters.today().get("turns_cancelled", 0)
+
+    async def hang_up(turn):
+        raise asyncio.CancelledError
+
+    original = orchestrator.handle_turn
+    orchestrator.handle_turn = hang_up
+    try:
+        with pytest.raises(BaseException) as caught:
+            client.post("/api/chat", json={"session_id": "cancelled", "message": "hello"})
+    finally:
+        orchestrator.handle_turn = original
+
+    assert telemetry.counters.today()["turns_cancelled"] == before + 1
+    assert not isinstance(caught.value, HTTPException), (
+        "a cancellation must not become a 500 - it is not a pipeline failure"
+    )
+
+
+def test_the_semaphore_is_released_when_the_client_hangs_up(
+    client: TestClient,
+) -> None:
+    """A cancelled turn must not hold the gate shut behind it.
+
+    With a width of one, a leaked permit would wedge the whole service: every
+    later turn would queue for 30s and then be shed.
+    """
+    orchestrator = client.app.state.orchestrator
+    gate = client.app.state.pipeline_gate
+    assert gate is not None
+
+    async def hang_up(turn):
+        raise asyncio.CancelledError
+
+    original = orchestrator.handle_turn
+    orchestrator.handle_turn = hang_up
+    try:
+        with pytest.raises(BaseException):  # noqa: B017
+            client.post("/api/chat", json={"session_id": "cancelled-2", "message": "hello"})
+    finally:
+        orchestrator.handle_turn = original
+
+    assert gate.waiting == 0
+    # The gate still admits: prove it with a real turn rather than by reading
+    # the semaphore's internals.
+    assert client.post(
+        "/api/chat", json={"session_id": "cancelled-3", "message": "I feel stuck"}
+    ).status_code == 200
+
+
+def test_the_reliability_counters_are_always_present(client: TestClient) -> None:
+    """0 must be visible, or "not shown" reads as "not happening"."""
+    from app.telemetry import RELIABILITY_COUNTERS
+
+    today = client.get("/health").json()["components"]["telemetry_today"]
+    for name in RELIABILITY_COUNTERS:
+        assert name in today
+

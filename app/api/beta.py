@@ -41,6 +41,7 @@ rather than quietly served.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import Annotated, Literal
@@ -390,6 +391,20 @@ async def beta_chat(
             blocked=False,
             meta=BetaMeta(provider=PROVIDER_OVERLOADED, model=None, latency_ms=None),
         )
+    except asyncio.CancelledError:
+        # The client went away mid-turn: a closed tab, a dropped mobile
+        # connection, the frontend's own deadline. Counted and re-raised
+        # unchanged - swallowing a cancellation would leave the ASGI server
+        # waiting on a request nobody is listening for.
+        #
+        # This branch exists because the numbers were otherwise unreadable:
+        # CancelledError is a BaseException, so it slips past `except
+        # Exception` below, and an admitted-but-uncounted turn was
+        # indistinguishable from a 5xx. Now it is not.
+        if telemetry is not None:
+            telemetry.record_counter("turns_cancelled")
+        logger.info("turn cancelled by the client: session=%s", payload.session_id or "-")
+        raise
     except Exception as exc:
         logger.exception("pipeline failure on beta /api/chat")
         raise HTTPException(

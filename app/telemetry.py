@@ -53,6 +53,21 @@ RISK_COUNTERS = (
     "audit_only_near_miss",
 )
 
+#: Counters that account for every turn admitted to the pipeline.
+#:
+#: On 9 Sep 2026 production showed 15 pipeline admissions against 2 completed
+#: turns. The 13 missing ones could only be *inferred* - a 5xx or a client
+#: disconnect - because a cancelled request increments the admission counter,
+#: then skips both ``record_turn`` and the 500 handler: ``asyncio.CancelledError``
+#: is a ``BaseException``, so ``except Exception`` never sees it.
+#:
+#: ``turns_cancelled`` closes that gap. With it, admitted == completed + shed +
+#: cancelled + 5xx, and the residue is the 5xx count without needing the logs.
+RELIABILITY_COUNTERS = (
+    "turns_cancelled",
+    "turns_shed",
+)
+
 #: Counters for the output sanity guard (``generation.assess_answer``). A
 #: production turn on 8 Sep 2026 served word salad from the fallback model with
 #: every existing check green: grounded, cited, output gate clear. These count
@@ -106,7 +121,7 @@ class DailyCounters:
             counts = dict(bucket)
         # The risk and quality counters are always present, at zero, so "not
         # shown" can never be mistaken for "not happening".
-        for name in (*RISK_COUNTERS, *QUALITY_COUNTERS):
+        for name in (*RISK_COUNTERS, *QUALITY_COUNTERS, *RELIABILITY_COUNTERS):
             counts.setdefault(name, 0)
         return counts
 
