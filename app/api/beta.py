@@ -19,7 +19,7 @@ Contract::
           emotion {label, score},
           intent  {label, crisis_score},
           message_id,
-          citations [{source, ref, text}],
+          citations [{id, source, label, ref, text, url, why}],
           memory  {turn_count, summary_included, recent_turns_injected},
           meta    {provider, model, latency_ms, stage_latency_ms}}
 
@@ -55,6 +55,7 @@ from app.config import CURRENT_CONSENT_VERSION
 from app.db.repository import FeedbackRecord
 from app.pipeline.generation import OVERLOADED_ANSWER, PROVIDER_OVERLOADED
 from app.pipeline.orchestrator import GuidanceOrchestrator
+from app.pipeline.references import reference_label, reference_url
 from app.pipeline.schemas import GuidanceResult, UserTurn
 from app.telemetry import Telemetry
 
@@ -84,11 +85,35 @@ class BetaIntent(BaseModel):
 
 
 class BetaCitation(BaseModel):
-    """One cited verse, flattened to what the UI renders in a verse leaf."""
+    """One cited verse, flattened to what the UI renders in a verse leaf.
 
+    ``label``, ``url`` and ``why`` were added on 9 Sep 2026 to carry what the
+    reply stopped carrying. Tester item 4 asked for a reference and a link
+    instead of a pasted sloka, and item 1 for shorter answers, so the verse
+    text and the graph path that surfaced it moved out of the prose and into
+    this structure - the UI shows the reference, links it, and keeps the full
+    text one tap away.
+
+    The link is deliberately a field and not something the UI derives from the
+    answer text: ``Commentary.jsx`` renders a fixed grammar with no anchors, so
+    model output cannot introduce a URL into the page. Every link a reader can
+    click comes from here, for a verse the citation check already validated.
+    """
+
+    #: The machine id, as the prompt and the citation check use it (``BG-2.47``).
+    id: str = ""
     source: str
+    #: The human form of the id (``BG 2.47``), for display.
+    label: str = ""
+    #: Full human citation, e.g. "Bhagavad Gita 2.47 (BG-2.47)".
     ref: str
     text: str
+    #: Deep link to the authoritative edition, or "" when there is none.
+    #: See :mod:`app.pipeline.references` for why the Gita has one.
+    url: str = ""
+    #: The graph path that surfaced this verse - the explainability claim,
+    #: shown beside the citation now that it is no longer appended to the reply.
+    why: str = ""
 
 
 class BetaMemory(BaseModel):
@@ -192,6 +217,7 @@ def _citations_for(result: GuidanceResult) -> list[BetaCitation]:
         return []
 
     by_id = {item.verse.id: item.verse for item in result.retrieval.results}
+    why_by_id = result.generation.why_this_verse
     citations: list[BetaCitation] = []
     for verse_id in result.generation.citations:
         verse = by_id.get(verse_id)
@@ -199,9 +225,13 @@ def _citations_for(result: GuidanceResult) -> list[BetaCitation]:
             continue
         citations.append(
             BetaCitation(
+                id=verse.id,
                 source=verse.source.value,
+                label=reference_label(verse.id),
                 ref=verse.citation,
                 text=verse.text_english,
+                url=reference_url(verse.id, verse.source),
+                why=why_by_id.get(verse_id, ""),
             )
         )
     return citations

@@ -196,3 +196,82 @@ def test_beta_session_messages_unknown_session_is_empty(client: TestClient) -> N
     response = client.get("/api/sessions/no-such-session/messages")
     assert response.status_code == 200
     assert response.json()["messages"] == []
+
+
+# --------------------------------------------------------------------------- #
+# The citation surface (added 9 Sep 2026)
+#
+# The reply stopped carrying the verse text and the graph-path explanation, so
+# the citation payload has to carry both - otherwise "shorter answers" would
+# just mean "less evidence", which is the opposite of the point.
+# --------------------------------------------------------------------------- #
+def test_each_citation_carries_its_id_label_and_full_text(client: TestClient) -> None:
+    body = client.post(
+        "/api/chat",
+        json={"session_id": "cite-shape", "message": "I feel stuck between two jobs"},
+    ).json()
+
+    assert body["citations"], "a normal turn must cite something"
+    for citation in body["citations"]:
+        assert citation["id"], "the machine id must survive to the UI"
+        assert citation["label"] == citation["id"].replace("-", " ", 1)
+        assert citation["ref"]
+        assert citation["text"], "the full verse must still be available to the reader"
+        assert citation["source"] in {"bhagavad_gita", "arthashastra"}
+
+
+def test_the_explanation_travels_with_the_citation_not_the_reply(
+    client: TestClient,
+) -> None:
+    """The explainability claim, relocated rather than removed.
+
+    The graph path used to be a "Why this verse" section in the answer body.
+    It must now arrive per citation, and it must not be in the reply.
+    """
+    body = client.post(
+        "/api/chat",
+        json={"session_id": "cite-why", "message": "My team keeps missing deadlines"},
+    ).json()
+
+    assert body["citations"]
+    assert all(citation["why"] for citation in body["citations"]), (
+        "every cited verse must say why it was retrieved"
+    )
+    assert "why this verse" not in body["reply"].lower()
+
+
+def test_gita_citations_link_to_the_authoritative_edition(client: TestClient) -> None:
+    """Decision (b'): link BBT's edition, never store or transmit it.
+
+    A Gita citation deep-links vedabase.io at the verse the id names. The
+    Arthashastra has no canonical per-sutra URL and carries none.
+    """
+    seen_gita = False
+    for message in (
+        "I feel stuck between two jobs",
+        "My team keeps missing deadlines",
+        "I am anxious about my appraisal",
+    ):
+        body = client.post(
+            "/api/chat", json={"session_id": f"cite-url-{hash(message)}", "message": message}
+        ).json()
+        for citation in body["citations"]:
+            if citation["source"] == "bhagavad_gita":
+                seen_gita = True
+                chapter, verse = citation["id"].removeprefix("BG-").split(".")
+                assert citation["url"] == (
+                    f"https://vedabase.io/en/library/bg/{chapter}/{verse}"
+                )
+            else:
+                assert citation["url"] == "", "the Arthashastra has no per-sutra URL"
+    assert seen_gita, "the sample corpus should have produced at least one Gita citation"
+
+
+def test_a_blocked_turn_still_carries_no_citations_at_all(client: TestClient) -> None:
+    """The new fields must not become a way for a crisis turn to cite scripture."""
+    body = client.post(
+        "/api/chat",
+        json={"session_id": "cite-blocked", "message": "I want to kill myself"},
+    ).json()
+    assert body["blocked"] is True
+    assert body["citations"] == []

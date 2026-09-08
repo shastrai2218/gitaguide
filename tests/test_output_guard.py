@@ -89,11 +89,20 @@ def counters(tmp_path: Path):
 # The measurement
 # --------------------------------------------------------------------------- #
 def test_the_production_salad_is_degenerate(settings: Settings) -> None:
+    """Caught by the word run alone, which is what makes the pair threshold safe.
+
+    The salad's "I the I the" is a pair twice back to back, which stopped being
+    a signal on 9 Sep when the pair threshold rose to 3 to stop shedding real
+    scripture (see STUTTER_BIGRAM_RUN). It does not matter: "the the the" is
+    three of one word in a row, and that is enough on its own.
+    """
     quality = assess_answer(PRODUCTION_SALAD, settings)
     assert quality.degenerate
     assert quality.longest_word_run >= STUTTER_WORD_RUN, "'the the the' is the tell"
-    assert quality.longest_bigram_run >= STUTTER_BIGRAM_RUN, "'I the I the' is the other"
     assert any("in a row" in reason for reason in quality.reasons)
+    assert quality.longest_bigram_run == 2, (
+        "recorded but below the threshold - the measurement is still reported"
+    )
 
 
 def test_the_why_section_cannot_launder_the_body(settings: Settings) -> None:
@@ -159,13 +168,69 @@ async def test_the_fake_provider_is_clean(
 
 def test_the_stutter_thresholds_are_what_the_docstring_says() -> None:
     assert STUTTER_WORD_RUN == 3
-    assert STUTTER_BIGRAM_RUN == 2
+    assert STUTTER_BIGRAM_RUN == 3
     quality = assess_answer(
         "Better to do your own duty imperfectly than another's well, and to do it the the "
         "way you can today rather than the way you imagine you should.",
         Settings(mock_mode=True),
     )
     assert not quality.degenerate, "a single doubled word is a typo, not salad"
+
+
+# --------------------------------------------------------------------------- #
+# The false positive that the pair threshold was raised for (9 Sep 2026)
+# --------------------------------------------------------------------------- #
+#: BG 6.6, rendered the way the corpus renders it. The doubled pair across the
+#: comma is ordinary English, and at a pair threshold of 2 an answer containing
+#: it was shed - the reader got "the guide is overloaded" for a correct reply.
+BG_6_6 = (
+    "For the one who has mastered the self, the self is a friend; for the one who has "
+    "not, the self behaves like an enemy. Read against your situation, that means the "
+    "part you actually control is the effort and the conduct, not the verdict that "
+    "comes back to you afterwards."
+)
+
+
+def test_a_naturally_doubled_pair_in_scripture_is_not_salad(settings: Settings) -> None:
+    quality = assess_answer(BG_6_6, settings)
+    assert quality.longest_bigram_run == 2, "the doubled pair is really there"
+    assert not quality.degenerate, quality.summary()
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # Constructions of the same shape, all legitimate.
+        "It grew day by day, day by day, until the habit was simply mine.",
+        "He asked for more and more, more and more, and it was never enough.",
+        "The duty is yours, the duty is yours alone, and the outcome never was.",
+    ],
+)
+def test_comma_doubled_phrases_are_not_salad(text: str, settings: Settings) -> None:
+    assert not assess_answer(text, settings).degenerate
+
+
+def test_three_pairs_back_to_back_is_still_salad(settings: Settings) -> None:
+    """The threshold moved; the check did not stop working."""
+    quality = assess_answer("I the I the I the and nothing else here at all today", settings)
+    assert quality.degenerate
+    assert any("back to back" in reason for reason in quality.reasons)
+
+
+async def test_the_offline_provider_survives_its_own_guard(
+    settings: Settings, trace: RetrievalTrace
+) -> None:
+    """Mock mode must not shed its own answers.
+
+    This is how the false positive was found: the deterministic provider quotes
+    the retrieved verses, so a corpus verse with a doubled pair made every
+    offline turn degrade to the overload reply.
+    """
+    result = await GroundedGenerator(FakeLLMProvider(), settings).generate(
+        "I feel stuck between two jobs", trace
+    )
+    assert result.quality_guard == "", result.quality_guard_detail
+    assert result.citations
 
 
 # --------------------------------------------------------------------------- #

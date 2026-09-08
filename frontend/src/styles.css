@@ -276,7 +276,60 @@ textarea {
   font-size: 0.9rem;
   letter-spacing: 0.03em;
   color: var(--accent);
-  margin: 0 0 0.5rem;
+  margin: 0;
+}
+
+.leaf-ref a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  text-underline-offset: 3px;
+  transition: text-decoration-color 120ms ease;
+}
+
+.leaf-ref a:hover {
+  text-decoration-color: var(--accent);
+}
+
+/* The path that surfaced this verse. It sat in the reply as a "Why this verse"
+ * section until 9 Sep 2026; it belongs next to the citation it explains. */
+.leaf-why {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+/* The verse itself: present in full, collapsed by default. Testers asked for
+ * references rather than pasted slokas, not for the text to be unavailable. */
+.leaf-details {
+  margin-top: 0.7rem;
+}
+
+.leaf-details summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  list-style: none;
+}
+
+.leaf-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.leaf-details summary::before {
+  content: '+ ';
+  color: var(--accent);
+}
+
+.leaf-details[open] summary::before {
+  content: '– ';
+}
+
+.leaf-details summary:hover {
+  color: var(--ink);
 }
 
 .leaf-text {
@@ -284,12 +337,13 @@ textarea {
   font-weight: 600;
   font-size: 1.02rem;
   line-height: 1.85;
-  margin: 0;
+  margin: 0.7rem 0 0;
   overflow-wrap: anywhere;
 }
 
 .leaf-source {
-  margin: 0.6rem 0 0;
+  font-family: var(--font-ui);
+  font-weight: 400;
   font-size: 0.8rem;
   color: var(--ink-soft);
   letter-spacing: 0.04em;

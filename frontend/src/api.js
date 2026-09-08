@@ -11,7 +11,7 @@
  *     -> {reply, blocked,
  *         emotion {label, score},
  *         intent  {label, crisis_score},
- *         citations [{source, ref, text}],
+ *         citations [{id, source, label, ref, text, url, why}],
  *         memory  {turn_count, summary_included, recent_turns_injected},
  *         meta    {provider, model, latency_ms, stage_latency_ms}}
  *
@@ -136,15 +136,41 @@ function numberOrNull(value) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
+/**
+ * Normalise the citation list.
+ *
+ * `label`, `url` and `why` arrived on 9 Sep 2026, when the verse text and the
+ * graph-path explanation moved out of the reply and into the citation surface.
+ * All three are optional on the wire, so an older backend degrades to the
+ * previous rendering rather than breaking.
+ *
+ * `url` is only accepted as an https URL. It comes from the API, for a verse
+ * the citation check already validated — but this is the single place where a
+ * link becomes clickable in the page, so the check belongs here regardless of
+ * who is upstream.
+ */
+function safeUrl(value) {
+  if (typeof value !== 'string' || !value) return ''
+  try {
+    return new URL(value).protocol === 'https:' ? value : ''
+  } catch {
+    return ''
+  }
+}
+
 function normaliseCitations(raw) {
   if (!Array.isArray(raw)) return []
   return raw
     .map((item) => ({
+      id: item?.id ?? '',
       source: item?.source ?? '',
+      label: item?.label ?? '',
       ref: item?.ref ?? '',
       text: item?.text ?? '',
+      url: safeUrl(item?.url),
+      why: item?.why ?? '',
     }))
-    .filter((item) => item.ref || item.text)
+    .filter((item) => item.label || item.ref || item.text)
 }
 
 // --------------------------------------------------------------------------- //
@@ -319,17 +345,28 @@ export async function fetchSessionMessages(sessionId) {
 // Mock (UI preview only)
 // --------------------------------------------------------------------------- //
 
+// Kept in step with the wire format on purpose: this is what the UI preview
+// renders, so a field the real API sends and the mock omits is a field nobody
+// sees until production.
 const MOCK_CITATIONS = [
   {
+    id: 'BG-2.47',
     source: 'bhagavad_gita',
-    ref: 'Bhagavad Gita 2.47',
+    label: 'BG 2.47',
+    ref: 'Bhagavad Gita 2.47 (BG-2.47)',
+    url: 'https://vedabase.io/en/library/bg/2/47',
+    why: "detected emotion 'annoyance' <-[:ADDRESSES_EMOTION]- (BG-2.47)",
     text:
       'Let right deeds be thy motive, not the fruit which comes from them. '
       + 'Do not let thy life be spent in inaction.',
   },
   {
+    id: 'AS-1.7.1',
     source: 'arthashastra',
-    ref: 'Arthashastra 1.7',
+    label: 'AS 1.7.1',
+    ref: 'Arthashastra Book 1, Chapter 7, Sutra 1 (AS-1.7.1)',
+    url: '',
+    why: "(AS-1.7.1) -[:HAS_THEME]-> theme 'self-control'",
     text:
       'Whoever is well versed in the science of polity shall keep his senses '
       + 'under control, and shun another man’s wife, property and injury to others.',

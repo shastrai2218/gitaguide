@@ -100,8 +100,24 @@ WORD_RE = re.compile(r"[^\W\d_]+")
 WHY_HEADING_RE = re.compile(r"^#{1,6}\s*why this verse\b", re.IGNORECASE | re.MULTILINE)
 #: One word this many times in a row ("the the the") is not prose.
 STUTTER_WORD_RUN = 3
-#: One word pair this many times back to back ("I the I the") is not prose.
-STUTTER_BIGRAM_RUN = 2
+#: One word pair this many times back to back is not prose.
+#:
+#: Raised from 2 to 3 on 9 Sep 2026, because 2 was a false positive on real
+#: scripture. Paraphrasing BG 6.6 produces:
+#:
+#:     "for the one who has mastered the self, the self is a friend"
+#:
+#: - a doubled pair across a comma, which is ordinary English and appears in
+#: several verses. At a threshold of 2 that answer was judged degenerate,
+#: retried, and then **shed**, so a reader asking about self-mastery got "the
+#: guide is overloaded" instead of a correct reply. Exactly the silent quality
+#: failure this guard exists to prevent, caused by the guard.
+#:
+#: Three back to back ("I the I the I the") has no natural reading. The 8 Sep
+#: production salad is still caught without this signal at all: its body also
+#: repeats one word three times in a row, which :data:`STUTTER_WORD_RUN`
+#: catches on its own. Verified in tests/test_output_guard.py.
+STUTTER_BIGRAM_RUN = 3
 
 
 class DegenerateOutputError(LLMError):
