@@ -62,6 +62,7 @@ from app.config import Settings, get_settings
 from app.llm.base import TASK_ANSWER, BudgetExhaustedError, LLMError, LLMProvider, LLMResponse
 from app.pipeline.memory import MemoryContext
 from app.pipeline.register import detect_register, register_instruction
+from app.pipeline.router import Route
 from app.pipeline.schemas import (
     EmotionResult,
     GenerationResult,
@@ -69,6 +70,12 @@ from app.pipeline.schemas import (
     IntentResult,
     RetrievalTrace,
     RetrievedVerse,
+)
+from app.pipeline.textutils import WHY_HEADING_RE as _WHY_HEADING_RE
+from app.pipeline.tiers import (
+    CONVERSATIONAL_RULES,
+    GUIDANCE_TIER,
+    ReplyTier,
 )
 from corpus.schemas import VERSE_ID_RE, ScriptureSource, extract_verse_ids
 
@@ -96,8 +103,10 @@ WHY_HEADING = "### Why this verse"
 WORD_RE = re.compile(r"[^\W\d_]+")
 #: The explanation heading, in whatever form a model writes it. Used to find the
 #: body for :func:`assess_answer` and to strip the section in
-#: :func:`strip_why_section`.
-WHY_HEADING_RE = re.compile(r"^#{1,6}\s*why this verse\b", re.IGNORECASE | re.MULTILINE)
+#: :func:`strip_why_section`. Defined in :mod:`app.pipeline.textutils` and
+#: re-exported here, because :mod:`app.pipeline.memory` needs the same pattern
+#: and cannot import this module.
+WHY_HEADING_RE = _WHY_HEADING_RE
 #: One word this many times in a row ("the the the") is not prose.
 STUTTER_WORD_RUN = 3
 #: One word pair this many times back to back is not prose.
@@ -221,7 +230,9 @@ def _longest_bigram_run(words: Sequence[str]) -> int:
     return longest
 
 
-def assess_answer(text: str, settings: Settings | None = None) -> AnswerQuality:
+def assess_answer(
+    text: str, settings: Settings | None = None, floor: int | None = None
+) -> AnswerQuality:
     """Decide whether a completion reads as an answer at all.
 
     Three cheap measurements over the body's words, each of which the 8 Sep
@@ -238,6 +249,17 @@ def assess_answer(text: str, settings: Settings | None = None) -> AnswerQuality:
 
     It is a language check, not a quality check: a coherent wrong answer passes,
     and should - the citation enforcer and the output gate judge those.
+
+    ``floor`` overrides the configured word minimum for one call. It exists
+    because the floor was only ever meaningful *relative to what the prompt
+    asked for* - the docstring above says so: "an answer to a prompt that asked
+    for 180-320 words". Since Phase 1b, different routes ask for very different
+    lengths, and a global floor of 12 would judge a correct five-word reply to
+    "thanks" as a fragment, retry it, and then serve the overload text to
+    someone who was being polite. Each tier supplies its own floor
+    (:attr:`app.pipeline.tiers.ReplyTier.guard_floor`); the guidance floor is
+    unchanged, and the stutter and repetition checks are untouched by this
+    because word salad is word salad at any length.
     """
     settings = settings or get_settings()
     words = [word.lower() for word in WORD_RE.findall(answer_body(text))]
@@ -248,7 +270,7 @@ def assess_answer(text: str, settings: Settings | None = None) -> AnswerQuality:
     bigram_run = _longest_bigram_run(words)
 
     reasons: list[str] = []
-    floor = settings.output_guard_min_words
+    floor = settings.output_guard_min_words if floor is None else max(1, floor)
     if total < floor:
         reasons.append(f"{total} words in the body, below the floor of {floor}")
     elif repetition > settings.output_guard_max_repetition:
@@ -270,34 +292,60 @@ def assess_answer(text: str, settings: Settings | None = None) -> AnswerQuality:
     )
 
 
-SYSTEM_PROMPT = """You are GitaGuide, a guidance companion grounded in the Bhagavad Gita and \
-Kautilya's Arthashastra.
+#: True for every reply GitaGuide ever writes, whatever the route. Identity and
+#: the two safety rules live here and nowhere else, so no tier can be written
+#: that quietly drops them.
+BASE_SYSTEM_PROMPT = """You are GitaGuide, a guidance companion grounded in the Bhagavad Gita \
+and Kautilya's Arthashastra.
 
 You are talking with a person, not answering a query. Speak to their situation first, in their \
 own terms, and only then bring the teaching to it.
 
-Absolute rules:
-1. Use ONLY the verses in the CONTEXT block. If they do not cover the question, say so plainly \
-instead of drawing on anything else you know.
-2. Cite by id, in the form BG-2.47 or AS-1.2.3, and cite AT MOST TWO. Never invent an id, a \
-chapter number or a translation.
-3. Do NOT quote, paste or transliterate the verse text itself, and do not include Sanskrit. The \
-reader is shown each verse's reference and full text separately, so repeating it here makes the \
-answer twice as long and no more useful. Say what the verse means in your own words.
-4. Do not present yourself as a therapist, doctor, lawyer or priest, and never tell someone to \
+Absolute rules, in every reply:
+1. Do not present yourself as a therapist, doctor, lawyer or priest, and never tell someone to \
 stop medical treatment.
-5. Never narrate your own process - no "The user is asking...", no "The context provides...", no \
-"As an AI". Do not write a heading, a section title, or a bulleted list of your reasons.
+2. Never narrate your own process - no "The user is asking...", no "The context provides...", \
+no "As an AI". Do not write a heading, a section title, or a bulleted list of your reasons."""
 
-Shape of the answer:
-- Open with the single thing you would most want them to take away, in one sentence.
-- Then two or three sentences connecting it to what they actually described, naming at most two \
-verses by id.
-- Close with one short question that would move things forward, when a question is natural. Not \
-every turn needs one.
+#: Added only for the routes that retrieve. A greeting prompt that carried
+#: citation rules would be a prompt that mentions verses to a model that has
+#: none, which is an invitation to invent one.
+CITATION_RULES = """Using the verses:
+3. Use ONLY the verses in the CONTEXT block. If they do not cover the question, say so plainly \
+instead of drawing on anything else you know.
+4. Cite by id, in the form BG-2.47 or AS-1.2.3, and cite AT MOST TWO. Never invent an id, a \
+chapter number or a translation."""
 
-Length: 80-150 words in total. Go longer ONLY if the person explicitly asks for detail, for the \
-full verse, or for an explanation at length."""
+#: Added for every route that does not retrieve. Stated as a rule rather than
+#: left implicit, because the model has spent the whole conversation citing.
+NO_CITATION_RULE = """Using the verses:
+3. This turn has no verses and needs none. Do not cite a verse id, do not quote scripture, and \
+do not paraphrase a verse from memory. Answering this one without scripture is correct, not a \
+failure."""
+
+
+def system_prompt_for(tier: ReplyTier) -> str:
+    """Assemble the system prompt for one reply tier.
+
+    Composed rather than written out seven times, so the identity and the two
+    safety rules are physically the same string in every branch. What varies is
+    exactly what should: whether verses are in play, the shape, and the budget.
+    """
+    return "\n\n".join(
+        (
+            BASE_SYSTEM_PROMPT,
+            CITATION_RULES if tier.retrieves else NO_CITATION_RULE,
+            CONVERSATIONAL_RULES,
+            f"This turn:\n{tier.instruction}",
+            tier.budget_line(),
+        )
+    )
+
+
+#: The guidance tier's prompt, which is what "the system prompt" meant before
+#: routing existed. Kept as a name because the response contract's tests and the
+#: measurement scripts assert against the guidance contract specifically.
+SYSTEM_PROMPT = system_prompt_for(GUIDANCE_TIER)
 
 #: Added when the retrieved set spans both scriptures. Tester feedback item 3:
 #: "combine answer of both gita and arthasastra". Listing them one after the
@@ -453,10 +501,11 @@ def build_answer_prompt(
     intent: IntentResult | None = None,
     memory: MemoryContext | None = None,
     corrective_note: str = "",
+    tier: ReplyTier = GUIDANCE_TIER,
 ) -> str:
     """Assemble the grounded-generation prompt.
 
-    Three instructions are conditional on the turn rather than fixed, so the
+    Four instructions are conditional on the turn rather than fixed, so the
     prompt says only what applies:
 
     * the **register** to answer in, mirrored from the user's own message
@@ -464,7 +513,10 @@ def build_answer_prompt(
     * the **cross-source** instruction, only when the retrieved set actually
       spans both scriptures - telling the model to weave two texts when it has
       verses from one invites it to invent the other;
-    * a **long-form** release, only when the person asked for detail.
+    * a **long-form** release, only when the person asked for detail;
+    * the **verses already discussed** in this session, only on a follow-up,
+      so "explain that verse more" continues with the verse they mean rather
+      than reaching for whichever one scored highest this time.
     """
     intent_label = intent.intent if intent else IntentLabel.SEEK_GUIDANCE
     emotion_line = "DETECTED EMOTION: not detected"
@@ -486,9 +538,18 @@ def build_answer_prompt(
         parts.append(CROSS_SOURCE_INSTRUCTION)
     if asks_for_detail(query):
         parts.append(
-            "LENGTH OVERRIDE: they asked for more, so the 80-150 word limit does not apply "
-            "to this turn. Still do not paste the verse text."
+            f"LENGTH OVERRIDE: they asked for more, so the {tier.min_words}-{tier.max_words} "
+            "word budget does not apply to this turn. Still do not paste the verse text."
         )
+    if tier.route is Route.FOLLOWUP and memory is not None:
+        already = memory.cited_verse_ids()
+        if already:
+            parts.append(
+                "ALREADY DISCUSSED in this conversation: "
+                f"{', '.join(already)}. Prefer these - they are what 'that verse' means to "
+                "them. Introduce a new one only if what they are now asking is genuinely "
+                "not covered."
+            )
     if memory_block:
         parts.append(memory_block)
     parts += [
@@ -499,6 +560,88 @@ def build_answer_prompt(
     ]
     if corrective_note:
         parts.append(f"CORRECTION: {corrective_note}")
+    return "\n\n".join(parts)
+
+
+#: ``[BG-2.47]``, ``(BG-2.47)`` or a bare ``BG-2.47``, with the bracket or
+#: parenthesis it sits in, so removing it does not leave ``()`` behind.
+_WRAPPED_VERSE_ID_RE = re.compile(
+    r"\s*[\[(]?\b(?:BG|AS)-\d+(?:\.\d+)*\b[\])]?", re.IGNORECASE
+)
+
+
+def strip_verse_ids(text: str) -> tuple[str, list[str]]:
+    """Remove verse ids from a reply that has no retrieved set behind it.
+
+    Returns the cleaned text and the ids that were removed, so the caller can
+    say what it did rather than silently editing the model.
+
+    >>> strip_verse_ids("Hello! Ask me anything (BG-2.47).")
+    ('Hello! Ask me anything.', ['BG-2.47'])
+    >>> strip_verse_ids("Hello, how are you?")
+    ('Hello, how are you?', [])
+    """
+    found = extract_verse_ids(text)
+    if not found:
+        return text, []
+    cleaned = _WRAPPED_VERSE_ID_RE.sub("", text)
+    # An id removed from mid-sentence can leave a doubled space or a space
+    # before the full stop it was standing in front of.
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    cleaned = re.sub(r"\s+([.,;:!?])", r"\1", cleaned)
+    return cleaned.strip(), found
+
+
+#: Served only when the model returns nothing at all on a no-retrieval turn.
+#: Deliberately plain: a deterministic line is honest for a greeting in a way it
+#: could never be for guidance, because nothing here is a claim about scripture.
+FALLBACK_CONVERSATIONAL: dict[Route, str] = {
+    Route.GREETING: (
+        "Hello. I am GitaGuide - tell me what is on your mind and I will look for what the "
+        "Bhagavad Gita and the Arthashastra have to say about it. What has brought you here?"
+    ),
+    Route.META: (
+        "I am an AI guidance companion, not a person or a teacher. I search the Bhagavad "
+        "Gita (Purohit Swami translation, public domain) and Kautilya's Arthashastra for "
+        "passages that bear on your situation, and show you the reference for every one so "
+        "you can read it yourself. What would you like help thinking through?"
+    ),
+    Route.ACK_OR_CLOSE: "Take care. I am here whenever you want to pick this up again.",
+    Route.OUT_OF_SCOPE: (
+        "That is not something I can help with - I only work with the Bhagavad Gita and the "
+        "Arthashastra, on decisions and situations people are turning over. Is there "
+        "something like that on your mind?"
+    ),
+    Route.FOLLOWUP: "Could you say a little more about what you would like me to expand on?",
+    Route.GUIDANCE: "Could you tell me a little more about the situation?",
+    Route.CRISIS: "I am here. Tell me what is happening.",
+}
+
+
+def build_conversational_prompt(
+    query: str,
+    tier: ReplyTier,
+    memory: MemoryContext | None = None,
+) -> str:
+    """Prompt for a turn with no retrieved verses.
+
+    Structurally the smaller sibling of :func:`build_answer_prompt`: the same
+    register mirroring and the same history, and deliberately **no** CONTEXT
+    block, no ALLOWED CITATION IDS line and no mention of verses. A model shown
+    the words "ALLOWED CITATION IDS: none" tends to explain that it has no
+    verses, which is process narration about an absence the reader never needed
+    to know about.
+    """
+    detected = detect_register(query)
+    parts = [
+        f"TASK: {TASK_ANSWER}",
+        f"REGISTER: {register_instruction(detected.register)}",
+    ]
+    if memory is not None and not memory.is_empty:
+        block = memory.render(max_chars=800)
+        if block:
+            parts.append(block)
+    parts.append(f"USER MESSAGE: {query}")
     return "\n\n".join(parts)
 
 
@@ -528,10 +671,17 @@ class GroundedGenerator:
         emotion: EmotionResult | None = None,
         intent: IntentResult | None = None,
         memory: MemoryContext | None = None,
+        tier: ReplyTier = GUIDANCE_TIER,
     ) -> GenerationResult:
-        """Produce a grounded, cited answer for one turn."""
+        """Produce a grounded, cited answer for one turn.
+
+        ``tier`` carries the route's shape, budget and guard floor. It defaults
+        to guidance so that every existing caller - tests, the eval harness, the
+        doctests - keeps the behaviour it had before routing existed.
+        """
         started = time.perf_counter()
         allowed = set(retrieval.verse_ids)
+        system = system_prompt_for(tier)
 
         if not allowed:
             return GenerationResult(
@@ -542,28 +692,30 @@ class GroundedGenerator:
                 latency_ms=round((time.perf_counter() - started) * 1000, 2),
             )
 
-        prompt = build_answer_prompt(query, retrieval, emotion, intent, memory)
+        prompt = build_answer_prompt(query, retrieval, emotion, intent, memory, tier=tier)
         guard_notes: list[str] = []
         try:
-            response = await self._complete_guarded(prompt, guard_notes)
+            response = await self._complete_guarded(prompt, guard_notes, system, tier.guard_floor)
         except BudgetExhaustedError as exc:
-            return self._overloaded_result(started, exc, query)
+            return self._overloaded_result(started, exc, query, tier.route)
         except DegenerateOutputError as exc:
-            return self._degenerate_result(started, exc, query)
+            return self._degenerate_result(started, exc, query, tier.route)
         answer, citations, hallucinated = self._validate(response.text, allowed)
 
         if hallucinated or not citations:
             note = self._corrective_note(hallucinated, allowed)
             logger.warning("regenerating: %s", note)
             retry_prompt = build_answer_prompt(
-                query, retrieval, emotion, intent, memory, corrective_note=note
+                query, retrieval, emotion, intent, memory, corrective_note=note, tier=tier
             )
             try:
-                retry = await self._complete_guarded(retry_prompt, guard_notes)
+                retry = await self._complete_guarded(
+                    retry_prompt, guard_notes, system, tier.guard_floor
+                )
             except BudgetExhaustedError as exc:
-                return self._overloaded_result(started, exc, query)
+                return self._overloaded_result(started, exc, query, tier.route)
             except DegenerateOutputError as exc:
-                return self._degenerate_result(started, exc, query)
+                return self._degenerate_result(started, exc, query, tier.route)
             retry_answer, retry_citations, retry_hallucinated = self._validate(
                 retry.text, allowed
             )
@@ -615,10 +767,81 @@ class GroundedGenerator:
             quality_guard="retried" if guard_notes else "",
             quality_guard_detail=" | ".join(guard_notes),
             answer_register=detect_register(query).register.value,
+            answer_route=tier.route.value,
+        )
+
+    async def generate_conversational(
+        self,
+        query: str,
+        tier: ReplyTier,
+        memory: MemoryContext | None = None,
+    ) -> GenerationResult:
+        """Reply to a turn that needs no scripture at all.
+
+        Greetings, meta questions, acknowledgements and out-of-scope asks. No
+        retrieval ran, so there is no CONTEXT block, nothing to cite and nothing
+        to enforce citations against - ``grounded`` is ``True`` here in the
+        sense that matters, which is that the reply makes no claim about the
+        texts that is not checkable. A reply that cites nothing cannot cite
+        something it was not given.
+
+        The one thing that *is* enforced is the reverse of the usual rule: if
+        the model reaches for a verse id out of habit, it is stripped, because
+        an id the reader cannot open in the citation surface is a reference to
+        nothing. That happens after the fact rather than by retrying, because a
+        greeting is not worth a second NIM call.
+        """
+        started = time.perf_counter()
+        prompt = build_conversational_prompt(query, tier, memory)
+        guard_notes: list[str] = []
+        try:
+            response = await self._complete_guarded(
+                prompt, guard_notes, system_prompt_for(tier), tier.guard_floor
+            )
+        except BudgetExhaustedError as exc:
+            return self._overloaded_result(started, exc, query, tier.route)
+        except DegenerateOutputError as exc:
+            return self._degenerate_result(started, exc, query, tier.route)
+
+        answer = strip_why_section(response.text)
+        answer, stripped = strip_verse_ids(answer)
+        if stripped:
+            logger.warning(
+                "conversational reply for route=%s cited %s with nothing retrieved; "
+                "stripped before serving",
+                tier.route.value,
+                ", ".join(stripped),
+            )
+            guard_notes.append(f"stripped uncited verse ids: {', '.join(stripped)}")
+
+        if not answer.strip():
+            answer = FALLBACK_CONVERSATIONAL[tier.route]
+
+        return GenerationResult(
+            answer=answer.strip(),
+            citations=[],
+            why_this_verse={},
+            grounded=True,
+            provider=response.provider,
+            model=response.model,
+            fallback_steps=int(response.raw.get("fallback_steps", 0) or 0),
+            prompt_tokens=response.prompt_tokens,
+            completion_tokens=response.completion_tokens,
+            latency_ms=round((time.perf_counter() - started) * 1000, 2),
+            quality_guard="retried" if guard_notes else "",
+            quality_guard_detail=" | ".join(guard_notes),
+            answer_register=detect_register(query).register.value,
+            answer_route=tier.route.value,
         )
 
     # ---------------------------------------------------------------- pieces
-    async def _complete_guarded(self, prompt: str, notes: list[str]) -> LLMResponse:
+    async def _complete_guarded(
+        self,
+        prompt: str,
+        notes: list[str],
+        system: str | None = None,
+        floor: int | None = None,
+    ) -> LLMResponse:
         """One completion, retried once if it reads as word salad.
 
         The retry goes back through the same chain, so the primary model gets
@@ -633,8 +856,8 @@ class GroundedGenerator:
         check, corrective rewrite, template): it is a provider failure, not
         language, and it was handled before this guard existed.
         """
-        response = await self._complete(prompt)
-        quality = assess_answer(response.text, self.settings)
+        response = await self._complete(prompt, system)
+        quality = assess_answer(response.text, self.settings, floor)
         if not response.text.strip() or not quality.degenerate:
             return response
 
@@ -642,8 +865,8 @@ class GroundedGenerator:
         first = response.model or response.provider
         logger.warning("degenerate answer from %s (%s); retrying once", first, quality.summary())
 
-        retry = await self._complete(prompt)
-        retry_quality = assess_answer(retry.text, self.settings)
+        retry = await self._complete(prompt, system)
+        retry_quality = assess_answer(retry.text, self.settings, floor)
         if retry.text.strip() and not retry_quality.degenerate:
             telemetry.count("degenerate_output_recovered")
             notes.append(f"first answer from {first} was degenerate ({quality.summary()})")
@@ -657,7 +880,11 @@ class GroundedGenerator:
         )
 
     def _degenerate_result(
-        self, started: float, exc: DegenerateOutputError, query: str = ""
+        self,
+        started: float,
+        exc: DegenerateOutputError,
+        query: str = "",
+        route: Route = Route.GUIDANCE,
     ) -> GenerationResult:
         """The overload reply, for a turn where both completions were word salad.
 
@@ -677,11 +904,16 @@ class GroundedGenerator:
             quality_guard="shed",
             quality_guard_detail=str(exc),
             answer_register=detect_register(query).register.value if query else "",
+            answer_route=route.value,
             latency_ms=round((time.perf_counter() - started) * 1000, 2),
         )
 
     def _overloaded_result(
-        self, started: float, exc: BudgetExhaustedError, query: str = ""
+        self,
+        started: float,
+        exc: BudgetExhaustedError,
+        query: str = "",
+        route: Route = Route.GUIDANCE,
     ) -> GenerationResult:
         """A normal-shaped turn saying the guide is overloaded.
 
@@ -706,15 +938,16 @@ class GroundedGenerator:
             # which undercounts register match on the turns most worth looking
             # at: the register was detected, only the answer was missing.
             answer_register=detect_register(query).register.value if query else "",
+            answer_route=route.value,
             latency_ms=round((time.perf_counter() - started) * 1000, 2),
         )
 
 
-    async def _complete(self, prompt: str) -> LLMResponse:
+    async def _complete(self, prompt: str, system: str | None = None) -> LLMResponse:
         try:
             return await self.llm.complete(
                 prompt,
-                system=SYSTEM_PROMPT,
+                system=system or SYSTEM_PROMPT,
                 max_tokens=self.settings.llm_max_tokens,
                 temperature=self.settings.llm_temperature,
             )

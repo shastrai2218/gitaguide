@@ -12,6 +12,7 @@ from app.pipeline.memory import ConversationMemory
 from app.pipeline.orchestrator import (
     STAGE_GENERATION,
     STAGE_RETRIEVAL,
+    STAGE_ROUTER,
     STAGE_SAFETY_INPUT,
     STAGE_SAFETY_OUTPUT,
     GuidanceOrchestrator,
@@ -38,6 +39,10 @@ async def test_full_pipeline_runs_every_stage(orchestrator: GuidanceOrchestrator
         "intent",
         STAGE_SAFETY_INPUT,
         "memory",
+        # Phase 1b inserted routing here: after the gate, so a crisis turn has
+        # already returned, and after memory, so a follow-up has history to
+        # follow. Retrieval is downstream of it and is now conditional.
+        STAGE_ROUTER,
         STAGE_RETRIEVAL,
         STAGE_GENERATION,
         STAGE_SAFETY_OUTPUT,

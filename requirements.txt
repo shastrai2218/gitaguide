@@ -25,6 +25,13 @@ pydantic-settings==2.14.2
 python-multipart==0.0.32
 httpx==0.28.1
 
+# ---- conversational router ------------------------------------------------
+# Reads data/intent_lexicon.yaml only. A data file rather than a Python literal
+# so the greeting/acknowledgement terms can grow - in four languages - without
+# a code change or a test author's involvement. ~800 KB installed, no
+# transitive dependencies, and only `safe_load` is ever called.
+PyYAML==6.0.3
+
 # ---- corpus acquisition (scripts/download_arthashastra.py) ----------------
 requests==2.34.2
 beautifulsoup4==4.15.0

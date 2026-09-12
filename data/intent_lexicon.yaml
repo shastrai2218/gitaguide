@@ -1,0 +1,259 @@
+# GitaGuide conversational router - stage 1 lexicon
+# ============================================================================
+#
+# WHAT THIS IS FOR
+# ----------------
+# Before this file existed, "hi" went through emotion detection, intent
+# classification, hybrid retrieval and a grounded generation call, and the
+# tester got a verse about detachment from the fruits of action. Every message
+# was treated as a request for guidance because nothing ever asked whether it
+# was one.
+#
+# Stage 1 of the router answers that question for the cases where no model is
+# needed. A message of at most four words, made up ENTIRELY of terms below plus
+# fillers, is decided here at zero latency and zero cost. Everything else falls
+# through to stage 2 (a model call), which fails open to `guidance`.
+#
+# WHY "ENTIRELY"
+# --------------
+# Matching on *containment* would be a safety bug, not just a quality one.
+# "hi i want to die" contains "hi". The rule is whole-message consumption, so a
+# message with any token outside these lists cannot be decided here - it falls
+# through to the model, and a model failure falls through to guidance, which
+# retrieves. The cheap path can only ever skip retrieval for a message that is
+# nothing but greeting or acknowledgement.
+#
+# Crisis is not in this file and must never be. The safety gate runs BEFORE the
+# router and short-circuits the turn; the router is not consulted at all on a
+# blocked turn. See app/pipeline/router.py and tests/test_router.py.
+#
+# HOW TO GROW IT
+# --------------
+# Add the term to the right language list and nothing else. Matching is
+# case-insensitive, ignores punctuation and emoji, and collapses repeated
+# letters on both sides, so "hii", "hiii" and "okkk" need no entries of their
+# own. Multi-word phrases are fine and are matched longest-first. Do not add a
+# term that is also an ordinary word inside a real question ("help", "please",
+# "problem", "kaam", "matlab") - the whole-message rule is the only thing
+# standing between a mis-added term and a swallowed cry for help.
+
+version: 1
+
+# Words that carry no routing signal and may pad any stage-1 match.
+# "hey there" is a greeting; "there" on its own decides nothing.
+fillers:
+  - there
+  - again
+  - all
+  - everyone
+  - guys
+  - team
+  - sir
+  - madam
+  - ji
+  - bro
+  - bhai
+  - yaar
+  - dost
+  - friend
+  - please
+  - pls
+  - plz
+  - so
+  - much
+  - lot
+  - very
+  - bahut
+  - too
+  - and
+  - a
+  - u
+  - you
+
+routes:
+  # ------------------------------------------------------------------ greeting
+  # Opening a conversation. Wants a warm hello, not scripture.
+  greeting:
+    english:
+      - hi
+      - hie
+      - hello
+      - helo
+      - hey
+      - hiya
+      - yo
+      - howdy
+      - greetings
+      - good morning
+      - good afternoon
+      - good evening
+      - morning
+      - evening
+    hindi_roman:
+      - namaste
+      - namaskar
+      - namaskaar
+      - pranam
+      - pranaam
+      - ram ram
+      - jai shree krishna
+      - jai shri krishna
+      - radhe radhe
+      - sat sri akal
+      - aadab
+      - kaise ho
+      - kaisi ho
+      - kaise hain
+      - kaise hain aap
+      - kya haal hai
+      - kya haal
+      - kya haal chaal
+      - haal chaal
+      - kya chal raha hai
+      - kya ho raha hai
+    hindi_devanagari:
+      - नमस्ते
+      - नमस्कार
+      - प्रणाम
+      - राम राम
+      - राधे राधे
+      - जय श्री कृष्ण
+      - कैसे हो
+      - कैसी हो
+      - कैसे हैं
+      - क्या हाल है
+      - क्या हाल चाल
+      - सुप्रभात
+    gujarati_roman:
+      - kem cho
+      - kem chho
+      - kem che
+      - kem chhe
+      - jay shree krishna
+      - jay shri krishna
+    gujarati_script:
+      - કેમ છો
+      - કેમ છે
+      - નમસ્તે
+      - જય શ્રી કૃષ્ણ
+
+  # ------------------------------------------------------- acknowledge / close
+  # Receiving what was said, or ending. Wants mirroring, not a fresh teaching.
+  ack_or_close:
+    english:
+      - ok
+      - okay
+      - okey
+      - k
+      - kk
+      - thanks
+      - thank you
+      - thankyou
+      - ty
+      - thx
+      - got it
+      - gotcha
+      - understood
+      - noted
+      - makes sense
+      - i see
+      - alright
+      - all right
+      - cool
+      - nice
+      - great
+      - lovely
+      - sure
+      - fine
+      - right
+      - true
+      - yeah
+      - yep
+      - yup
+      - yes
+      - hmm
+      - hm
+      - mm
+      - mmm
+      - oh
+      - ah
+      - i understand
+      - perfect
+      - awesome
+      - helpful
+      - bye
+      - goodbye
+      - good night
+      - night
+      - see you
+      - see ya
+      - take care
+      - later
+      - farewell
+    hindi_roman:
+      - thik hai
+      - theek hai
+      - thik
+      - theek
+      - sahi hai
+      - sahi
+      - samajh gaya
+      - samajh gayi
+      - samjh gaya
+      - samjha
+      - samjhi
+      - achha
+      - accha
+      - acha
+      - badhiya
+      - bas
+      - haan
+      - han
+      - ha
+      - haan ji
+      - ji haan
+      - dhanyavaad
+      - dhanyawad
+      - dhanyavad
+      - shukriya
+      - shukriyaa
+      - alvida
+      - phir milenge
+      - chalo
+      - chalte hain
+      - subh ratri
+    hindi_devanagari:
+      - ठीक है
+      - ठीक
+      - सही है
+      - समझ गया
+      - समझ गयी
+      - समझ गई
+      - अच्छा
+      - बढ़िया
+      - बस
+      - हाँ
+      - हां
+      - जी
+      - जी हाँ
+      - धन्यवाद
+      - शुक्रिया
+      - अलविदा
+      - फिर मिलेंगे
+      - शुभ रात्रि
+    gujarati_roman:
+      - saras
+      - barabar
+      - samjai gayu
+      - samjaai gayu
+      - aabhar
+      - abhar
+      - avjo
+      - aavjo
+      - haa
+    gujarati_script:
+      - સરસ
+      - બરાબર
+      - આભાર
+      - આવજો
+      - હા

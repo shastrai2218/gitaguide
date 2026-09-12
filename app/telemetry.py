@@ -66,6 +66,12 @@ RISK_COUNTERS = (
 RELIABILITY_COUNTERS = (
     "turns_cancelled",
     "turns_shed",
+    #: The conversational router asked its model and could not use the answer -
+    #: timeout, transport error, malformed JSON or an unknown label. The turn is
+    #: still answered, as guidance, so this is a quality signal rather than an
+    #: error rate: while it is low the router is doing its job, and if it climbs
+    #: the fix is ``router_model_enabled=false``, not a redeploy.
+    "intent_router_fallback",
 )
 
 #: Counters for the output sanity guard (``generation.assess_answer``). A

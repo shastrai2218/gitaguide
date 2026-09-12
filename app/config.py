@@ -174,6 +174,23 @@ class Settings(BaseSettings):
     nvidia_retry_base_delay: float = 1.0
     nvidia_retry_max_delay: float = 20.0
 
+    # ------------------------------------------------- conversational router
+    #: Turns the stage-2 router model off, leaving only the zero-cost lexicon.
+    #: With it false every message the lexicon does not decide is treated as
+    #: guidance - which is exactly how the pipeline behaved before Phase 1b, so
+    #: this is the one-env-var way back if routing misbehaves in production.
+    router_model_enabled: bool = True
+    #: The cheap tier. Routing is a labelling task with a fixed output shape, so
+    #: it does not need the 120B model, and putting it on a *different* model
+    #: also puts it in a different NIM rate-limit bucket from generation.
+    router_model: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
+    #: Hard wall-clock ceiling for the router call. Past this the turn is routed
+    #: to guidance and answered normally: a slow router must cost latency, never
+    #: an answer.
+    router_timeout_seconds: float = 4.0
+    #: The reply is one small JSON object; anything longer is malformed.
+    router_max_tokens: int = 160
+
     # ---------------------------------------------------------- knowledge graph
     #: Labels (Theme/Concept) attached to more than this fraction of the corpus
     #: are ignored when building RELATED_TO edges. A label on a quarter of the

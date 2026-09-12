@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 TASK_INTENT = "intent_classification"
 TASK_ANSWER = "grounded_answer"
 TASK_SUMMARY = "conversation_summary"
+TASK_ROUTE = "conversation_route"
 
 _JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
 

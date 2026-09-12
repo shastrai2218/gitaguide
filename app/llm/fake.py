@@ -21,6 +21,7 @@ from collections.abc import Sequence
 from app.llm.base import (
     TASK_ANSWER,
     TASK_INTENT,
+    TASK_ROUTE,
     TASK_SUMMARY,
     LLMProvider,
     LLMResponse,
@@ -35,6 +36,9 @@ VERSE_BLOCK_RE = re.compile(
 TEXT_LINE_RE = re.compile(r"^Text:\s*(.+)$", re.MULTILINE)
 WHY_LINE_RE = re.compile(r"^Why retrieved:\s*(.+)$", re.MULTILINE)
 USER_MESSAGE_RE = re.compile(r"^USER MESSAGE:\s*(.+)$", re.MULTILINE)
+#: The routing prompt labels the message ``MESSAGE:`` (not ``USER MESSAGE:``),
+#: so the two cannot pick up each other's line.
+ROUTE_MESSAGE_RE = re.compile(r"^MESSAGE:\s*(.+)$", re.MULTILINE)
 EMOTION_LINE_RE = re.compile(r"^DETECTED EMOTION:\s*(.+)$", re.MULTILINE)
 
 
@@ -70,6 +74,8 @@ class FakeLLMProvider(LLMProvider):
             body = self._answer(prompt)
         elif task == TASK_SUMMARY:
             body = self._summary(prompt)
+        elif task == TASK_ROUTE:
+            body = self._route(prompt)
         else:
             body = "I do not have enough grounded material to answer that yet."
         return self._respond(body, prompt)
@@ -111,6 +117,51 @@ class FakeLLMProvider(LLMProvider):
                 "rationale": "keyword prior over the six-class taxonomy (offline provider)",
             }
         )
+
+    @staticmethod
+    def _route(prompt: str) -> str:
+        """Offline conversational routing: a transparent keyword heuristic.
+
+        Deliberately weak, and deliberately biased toward ``guidance``. The
+        stage-1 lexicon has already handled greetings and acknowledgements
+        before any provider is called, so what reaches here is meta, follow-up,
+        guidance or out-of-scope - and of those, guidance is the only one whose
+        mis-routing costs a user a real answer. So only an unambiguous meta or
+        follow-up marker moves it off the default.
+
+        This is not a model and must not be reported as router accuracy: the
+        Phase 1b measurement runs against the real cheap tier.
+        """
+        match = ROUTE_MESSAGE_RE.search(prompt)
+        message = (match.group(1) if match else "").strip().lower()
+        has_history = "PREVIOUS EXCHANGE: none" not in prompt
+
+        meta_markers = (
+            "who are you", "what are you", "is this ai", "are you ai", "are you a bot",
+            "what can you do", "how do you work", "edition", "translation do you",
+            "can i trust", "who made you", "what is arthashastra", "what is the gita",
+            "tum kya kar sakte ho", "tum kaun ho", "aap kaun ho",
+        )
+        followup_markers = (
+            "aur kya", "explain that", "that verse", "what if he", "what if she",
+            "what if they", "give an example", "an example", "simpler", "in hindi",
+            "say more", "tell me more", "aur batao",
+        )
+        out_of_scope_markers = (
+            "recipe", "write code", "python", "javascript", "my homework",
+            "translate this", "weather", "cricket score", "stock price",
+        )
+
+        route = "guidance"
+        if any(marker in message for marker in meta_markers):
+            route = "meta"
+        elif any(marker in message for marker in out_of_scope_markers):
+            route = "out_of_scope"
+        elif has_history and any(marker in message for marker in followup_markers):
+            route = "followup"
+
+        standalone = message if route in {"guidance", "followup"} else ""
+        return json.dumps({"route": route, "standalone_query": standalone})
 
     @staticmethod
     def _answer(prompt: str) -> str:

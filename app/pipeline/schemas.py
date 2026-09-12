@@ -341,6 +341,14 @@ class GenerationResult(BaseModel):
     #: field of that name shadows - pydantic warns about it, and a warning
     #: shipped is a warning nobody reads.
     answer_register: str = ""
+    #: The conversational route this answer was written for
+    #: (:class:`app.pipeline.router.Route`) - "greeting", "guidance",
+    #: "followup" and so on. Stored per turn so the reply tiers can be measured
+    #: against what each one actually produced, rather than inferred from the
+    #: message afterwards. Prefixed like ``answer_register`` for the same
+    #: reason: the short name is easy to confuse with the six-class
+    #: ``IntentLabel``, which is a different axis and is recorded separately.
+    answer_route: str = ""
 
 
 # ----------------------------------------------------------------- top level
@@ -351,6 +359,41 @@ class UserTurn(BaseModel):
     session_id: str | None = None
     locale: str = "en-IN"
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class RouteTrace(BaseModel):
+    """What the conversational router decided for one turn, and how.
+
+    Mirrors :class:`app.pipeline.router.RouteDecision` as a serialisable model.
+    It is a mirror rather than the same object because ``router`` imports
+    ``memory``, which imports this module - defining the dataclass here would
+    close the loop. :meth:`from_decision` is the only place the two are mapped,
+    so a field added to one and forgotten in the other shows up immediately.
+
+    ``stage`` is the field worth watching in production: ``rules`` is free,
+    ``model`` costs one cheap-tier call, and ``fallback`` means the router could
+    not be used and the turn was answered as guidance anyway.
+    """
+
+    route: str = "guidance"
+    stage: str = "fallback"
+    standalone_query: str = ""
+    rationale: str = ""
+    model: str = ""
+    latency_ms: float = 0.0
+    fell_back: bool = False
+
+    @classmethod
+    def from_decision(cls, decision: Any) -> RouteTrace:
+        return cls(
+            route=decision.route.value,
+            stage=decision.stage.value,
+            standalone_query=decision.standalone_query,
+            rationale=decision.rationale,
+            model=decision.model,
+            latency_ms=decision.latency_ms,
+            fell_back=decision.fell_back,
+        )
 
 
 class GuidanceResult(BaseModel):
@@ -367,6 +410,12 @@ class GuidanceResult(BaseModel):
     retrieval: RetrievalTrace | None = None
     generation: GenerationResult | None = None
     memory: MemoryTrace = Field(default_factory=MemoryTrace)
+    #: What the conversational router decided, and how
+    #: (:class:`app.pipeline.router.RouteDecision`). ``None`` on a crisis turn
+    #: only if the router was never reached - the orchestrator fills in a
+    #: gate-stage decision there, so a turn without one means the router stage
+    #: did not run at all.
+    route: RouteTrace = Field(default_factory=lambda: RouteTrace())
     #: Wall-clock milliseconds per pipeline stage, keyed by the ``STAGE_*``
     #: names in :mod:`app.pipeline.orchestrator`. The copy stored on the message
     #: row omits ``persist`` - a stage cannot time the write that stores it -

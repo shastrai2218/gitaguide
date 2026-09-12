@@ -68,6 +68,44 @@ def build_nvidia_chain(settings: Settings) -> list[LLMProvider]:
     return chain
 
 
+def build_router_llm(settings: Settings | None = None) -> LLMProvider | None:
+    """The provider for the conversational router, or ``None`` to skip stage 2.
+
+    Deliberately a **single** provider and not a fallback chain. The router has
+    a 4-second budget and a fail-open default, so walking a chain after a
+    timeout would spend a second model's latency to avoid a fallback that costs
+    nothing but a slightly worse route. One call, one deadline, then guidance.
+
+    It is pinned to the cheap tier, which also puts routing in a different NIM
+    rate-limit bucket from generation: a burst of traffic that exhausts the
+    120B model's quota does not also stop the system telling a greeting from a
+    crisis-adjacent question.
+
+    ``None`` is returned when routing's model stage is switched off, or when no
+    real provider is configured - in mock mode the fake provider is returned
+    instead, because it routes deterministically and offline tests need it.
+    """
+    settings = settings or get_settings()
+    if not settings.router_model_enabled:
+        logger.info("router model stage disabled; stage-1 lexicon only")
+        return None
+    if settings.resolved_llm_provider is LLMProviderName.FAKE:
+        return FakeLLMProvider()
+    if settings.resolved_llm_provider is not LLMProviderName.NVIDIA:
+        # Routing on a paid provider is not something to switch on implicitly.
+        logger.info("no NIM configured; router runs on the stage-1 lexicon only")
+        return None
+    try:
+        provider = build_single_provider(
+            LLMProviderName.NVIDIA, settings, model=settings.router_model
+        )
+    except LLMError as exc:
+        logger.warning("router model unavailable (%s); stage-1 lexicon only", exc)
+        return None
+    logger.info("router model: %s (timeout %.1fs)", settings.router_model, settings.router_timeout_seconds)
+    return provider
+
+
 def build_llm_provider(settings: Settings | None = None) -> LLMProvider:
     """Primary provider wrapped in a fallback chain.
 

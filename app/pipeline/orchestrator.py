@@ -9,6 +9,7 @@ This is the canonical description of the GitaGuide pipeline, in code::
       -> intent classification        (app.pipeline.intent)
       -> SAFETY GATE (input)          (app.pipeline.safety)   <-- short-circuits
       -> memory load                  (app.pipeline.memory)
+      -> conversational routing       (app.pipeline.router)   <-- may skip retrieval
       -> hybrid retrieval             (app.pipeline.retrieval)
       -> grounded generation          (app.pipeline.generation)
       -> SAFETY GATE (output)         (app.pipeline.safety)
@@ -18,6 +19,25 @@ Rule 4 is enforced structurally: :meth:`GuidanceOrchestrator.handle_turn`
 returns before ``retrieve``/``generate`` are ever called when the input gate
 blocks, and the output check happens after generation but before the answer is
 returned or stored.
+
+The routing stage (added 13 Sep 2026, Phase 1b)
+-----------------------------------------------
+One stage was inserted, and its position is the whole of its safety argument.
+
+It sits **after the safety gate**, so a crisis turn has already returned before
+the router exists in the call path: routing cannot make the crisis panel less
+likely to fire, because on a crisis turn it does not run. And it sits **after
+memory**, because a follow-up ("aur kya", "simpler please") is only
+recognisable against the turns before it, and the standalone query it rewrites
+to is what makes such a turn retrievable at all.
+
+What it changes downstream is that ``retrieve`` and the grounded path are no
+longer unconditional: a greeting, an acknowledgement, a question about
+GitaGuide itself or an out-of-scope ask are answered by
+:meth:`GroundedGenerator.generate_conversational`, with no retrieval, no
+citations and a much shorter budget. Before this, every one of those got a
+verse it never asked for. The output safety gate still runs on all of them -
+it is outside the branch, not inside it.
 
 Everything it depends on is injected, so the same class runs fully offline
 (fakes) or fully online (Neo4j + PostgreSQL + Anthropic) with no code change.
@@ -40,12 +60,13 @@ from app.db.repository import (
 )
 from app.embeddings import Embedder, build_embedder
 from app.llm.base import LLMProvider
-from app.llm.factory import build_llm_provider
+from app.llm.factory import build_llm_provider, build_router_llm
 from app.pipeline.emotion import EmotionDetector
 from app.pipeline.generation import GroundedGenerator
 from app.pipeline.intent import IntentClassifier
 from app.pipeline.memory import ConversationMemory
 from app.pipeline.retrieval import HybridRetriever, build_retriever
+from app.pipeline.router import ConversationRouter, Route, RouteDecision, RouterDecisionStage
 from app.pipeline.safety import SafetyGate, SafetyVerdict
 from app.pipeline.schemas import (
     EmotionResult,
@@ -54,8 +75,10 @@ from app.pipeline.schemas import (
     IntentResult,
     MemoryTrace,
     RetrievalTrace,
+    RouteTrace,
     UserTurn,
 )
+from app.pipeline.tiers import tier_for
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +86,7 @@ STAGE_EMOTION = "emotion"
 STAGE_INTENT = "intent"
 STAGE_SAFETY_INPUT = "safety_input"
 STAGE_MEMORY = "memory"
+STAGE_ROUTER = "router"
 STAGE_RETRIEVAL = "retrieval"
 STAGE_GENERATION = "generation"
 STAGE_SAFETY_OUTPUT = "safety_output"
@@ -121,6 +145,7 @@ class GuidanceOrchestrator:
         memory: ConversationMemory,
         repository: Repository,
         settings: Settings | None = None,
+        router: ConversationRouter | None = None,
     ) -> None:
         self.detector = detector
         self.intent_classifier = intent_classifier
@@ -130,6 +155,10 @@ class GuidanceOrchestrator:
         self.memory = memory
         self.repository = repository
         self.settings = settings or get_settings()
+        #: Optional so that an orchestrator assembled by hand in a test keeps
+        #: working unchanged; with no router every turn routes to guidance,
+        #: which is exactly the pre-Phase-1b behaviour.
+        self.router = router or ConversationRouter(llm=None, settings=self.settings)
 
     # ------------------------------------------------------------------ main
     async def handle_turn(self, turn: UserTurn) -> GuidanceResult:
@@ -187,16 +216,34 @@ class GuidanceOrchestrator:
             memory_trace = memory_context.trace()
         stages.append(STAGE_MEMORY)
 
-        # ---- stage 5: hybrid retrieval -----------------------------------
-        with timer(STAGE_RETRIEVAL):
-            retrieval: RetrievalTrace = await self.retriever.retrieve(message, emotion, intent)
-        stages.append(STAGE_RETRIEVAL)
+        # ---- stage 4b: conversational routing ----------------------------
+        # After the gate (so crisis is already handled) and after memory (so a
+        # follow-up has something to follow).
+        with timer(STAGE_ROUTER):
+            decision: RouteDecision = await self.router.route(message, memory_context)
+        stages.append(STAGE_ROUTER)
+        tier = tier_for(decision.route)
 
-        # ---- stage 6: grounded generation --------------------------------
+        # ---- stage 5: hybrid retrieval -----------------------------------
+        # Conditional now. A greeting does not get a verse it never asked for.
+        retrieval: RetrievalTrace | None = None
+        if tier.retrieves:
+            with timer(STAGE_RETRIEVAL):
+                retrieval = await self.retriever.retrieve(
+                    decision.retrieval_query(message), emotion, intent
+                )
+            stages.append(STAGE_RETRIEVAL)
+
+        # ---- stage 6: generation -----------------------------------------
         with timer(STAGE_GENERATION):
-            generation: GenerationResult = await self.generator.generate(
-                message, retrieval, emotion, intent, memory_context
-            )
+            if retrieval is None:
+                generation: GenerationResult = await self.generator.generate_conversational(
+                    message, tier, memory_context
+                )
+            else:
+                generation = await self.generator.generate(
+                    message, retrieval, emotion, intent, memory_context, tier
+                )
         stages.append(STAGE_GENERATION)
 
         # ---- stage 7: SAFETY GATE (output) -------------------------------
@@ -225,7 +272,7 @@ class GuidanceOrchestrator:
                     emotion=emotion.model_dump(mode="json"),
                     intent=intent.model_dump(mode="json"),
                     safety=output_verdict.model_dump(mode="json"),
-                    retrieval=retrieval.model_dump(mode="json"),
+                    retrieval=retrieval.model_dump(mode="json") if retrieval else {},
                     generation=generation.model_dump(mode="json"),
                     memory=memory_trace.model_dump(mode="json"),
                     timings=dict(timer.timings),
@@ -253,6 +300,7 @@ class GuidanceOrchestrator:
             retrieval=retrieval,
             generation=generation,
             memory=memory_trace,
+            route=RouteTrace.from_decision(decision),
             timings=dict(timer.timings),
             memory_summary=summary or memory_context.summary,
             stages_run=stages,
@@ -277,6 +325,12 @@ class GuidanceOrchestrator:
         here. The trace says so: ``loaded=False`` with nothing injected. The
         session's ``turn_count`` is still reported because it is a fact about
         the session, not a claim about what reached the prompt.
+
+        The router sits after memory, so it does not run here either. The route
+        is recorded as ``crisis`` at stage ``gate``, which is the literal truth:
+        the gate decided it, no model was asked, and no lexicon was consulted.
+        That distinction matters if routing is ever blamed for a crisis turn -
+        the trace can prove the router was never in the path.
         """
         answer = self.safety_gate.crisis_response(verdict)
         memory_trace = MemoryTrace(turn_count=turn_count, loaded=False)
@@ -311,6 +365,11 @@ class GuidanceOrchestrator:
             retrieval=None,
             generation=None,
             memory=memory_trace,
+            route=RouteTrace(
+                route=Route.CRISIS.value,
+                stage=RouterDecisionStage.GATE.value,
+                rationale="the safety gate blocked this turn; the router never ran",
+            ),
             timings=dict(timer.timings),
             stages_run=stages,
             total_latency_ms=round((time.perf_counter() - started) * 1000, 2),
@@ -433,4 +492,5 @@ def build_orchestrator(
         memory=ConversationMemory(repository=repository, llm=llm, settings=settings),
         repository=repository,
         settings=settings,
+        router=ConversationRouter(llm=build_router_llm(settings), settings=settings),
     )
