@@ -11,6 +11,15 @@ from __future__ import annotations
 
 import re
 
+#: The explanation heading, in whatever form a model writes it.
+#:
+#: Defined here rather than in :mod:`app.pipeline.generation` because two stages
+#: need it and they cannot import each other: generation strips the section out
+#: of a reply, and memory strips it out of the *history* it replays into the next
+#: prompt. One definition, so a heading form that one stage learns to recognise
+#: cannot go on leaking through the other.
+WHY_HEADING_RE = re.compile(r"^#{1,6}\s*why this verse\b", re.IGNORECASE | re.MULTILINE)
+
 #: Negation tokens that neutralise a following cue ("I am *not* suicidal").
 NEGATION_RE = re.compile(
     r"\b(?:not|never|no|n't|nt|dont|don't|doesnt|doesn't|didnt|didn't|wont|won't|"

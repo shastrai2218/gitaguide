@@ -23,9 +23,32 @@ from app.config import Settings, get_settings
 from app.db.repository import MessageRecord, Repository
 from app.llm.base import TASK_SUMMARY, LLMProvider
 from app.pipeline.schemas import MemoryTrace
-from app.pipeline.textutils import truncate
+from app.pipeline.textutils import WHY_HEADING_RE, truncate
 
 logger = logging.getLogger(__name__)
+
+
+def strip_verse_payload(text: str) -> str:
+    """Remove a "Why this verse" section from a turn being replayed as history.
+
+    History is the one place where an old reply's shape outlives the prompt that
+    produced it. Replies written before the Phase 1 response contract carry a
+    40-170 word explanation section and, in the oldest ones, pasted verse text -
+    and a session that started then keeps feeding both back into every new
+    prompt. That is not a cosmetic problem: it re-teaches the model the format
+    testers asked us to drop, and it spends a few hundred tokens per turn
+    restating graph paths the model cannot use.
+
+    Verse **ids** are deliberately kept. They are the thread of the
+    conversation: "explain that verse more" is only answerable because BG-2.47
+    is still visible in the history.
+
+    >>> strip_verse_payload("Do the work (BG-2.47).\\n### Why this verse\\n- BG-2.47: x")
+    'Do the work (BG-2.47).'
+    """
+    match = WHY_HEADING_RE.search(text)
+    body = text[: match.start()] if match else text
+    return body.strip() or text.strip()
 
 
 @dataclass(slots=True)
@@ -36,6 +59,10 @@ class MemoryContext:
     summary: str = ""
     recent_turns: list[tuple[str, str]] = field(default_factory=list)
     turn_count: int = 0
+    #: Verse ids already cited in this session, oldest first, de-duplicated.
+    #: A follow-up prefers these: "that verse" means the one they were just
+    #: shown, not whichever one scores highest on a query of two words.
+    cited_refs: list[str] = field(default_factory=list)
 
     def render(self, max_chars: int = 2000) -> str:
         """Prompt-ready block; empty string when there is no history."""
@@ -43,10 +70,16 @@ class MemoryContext:
         if self.summary:
             blocks.append(f"CONVERSATION SUMMARY SO FAR:\n{self.summary}")
         if self.recent_turns:
-            lines = [f"{role}: {content}" for role, content in self.recent_turns]
+            lines = [
+                f"{role}: {strip_verse_payload(content)}" for role, content in self.recent_turns
+            ]
             blocks.append("RECENT TURNS:\n" + "\n".join(lines))
         rendered = "\n\n".join(blocks)
         return truncate(rendered, max_chars) if rendered else ""
+
+    def cited_verse_ids(self, limit: int = 4) -> list[str]:
+        """The most recently cited verse ids, newest first."""
+        return list(reversed(self.cited_refs))[:limit]
 
     @property
     def is_empty(self) -> bool:
@@ -91,15 +124,25 @@ class ConversationMemory:
             session_id, limit=self.settings.memory_last_n_turns
         )
         recent = [
-            (record.role, truncate(record.content, 400))
+            (record.role, truncate(strip_verse_payload(record.content), 400))
             for record in messages
             if record.role in {"user", "assistant"}
         ]
+
+        # Oldest first, de-duplicated, so a verse cited three turns running
+        # appears once and the order still says which came last.
+        cited: list[str] = []
+        for record in messages:
+            for verse_id in record.citations or ():
+                if verse_id not in cited:
+                    cited.append(verse_id)
+
         return MemoryContext(
             session_id=session_id,
             summary=summary,
             recent_turns=recent,
             turn_count=turn_count,
+            cited_refs=cited,
         )
 
     # ----------------------------------------------------------------- write
