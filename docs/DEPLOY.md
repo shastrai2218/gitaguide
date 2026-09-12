@@ -195,6 +195,10 @@ the API's first boot. Reasoning and the verification queries:
    | `GITAGUIDE_GENERATION_BUDGET_SECONDS` | `45` | must be ≥ 15 or the app refuses to boot |
    | `GITAGUIDE_TELEMETRY_ENABLED` | `true` | |
    | `GITAGUIDE_CONSENT_VERSION` | `beta-1` | the version printed on the Privacy Notice and Disclaimer, and the one the frontend sends; a mismatch means nobody can pass the gate |
+   | `GITAGUIDE_ROUTER_MODEL_ENABLED` | `true` | `false` leaves only the zero-cost lexicon, so every message that is not a plain greeting is treated as guidance — **this is the way back to pre-Phase-1b behaviour, in one env var and no deploy** |
+   | `GITAGUIDE_ROUTER_MODEL` | `nvidia/nemotron-3.5-lightning-30b-a3b` | the cheap tier. A *different* model from the generation primary on purpose: routing then sits in its own NIM rate-limit bucket, so a burst that exhausts the 120B quota does not also stop the system telling a greeting from a real question |
+   | `GITAGUIDE_ROUTER_TIMEOUT_SECONDS` | `4` | hard ceiling on the router call. Past it the turn is routed to guidance and answered normally: a slow router costs latency, never an answer |
+   | `GITAGUIDE_ROUTER_MAX_TOKENS` | `160` | the reply is one small JSON object; longer is malformed |
 
    Full annotated list: [`.env.production.example`](../.env.production.example).
 

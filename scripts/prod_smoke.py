@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import threading
 import time
 import urllib.error
@@ -64,6 +65,18 @@ CONTROL_MESSAGE = (
     "My manager overrules every decision I make and now my team asks him "
     "instead of me. I feel like I have no control over my own work."
 )
+
+#: A greeting, which must be answered as one. Before Phase 1b this came back
+#: with a verse about detachment from the fruits of action, because every
+#: message ran retrieval. The check is deliberately on the citation count and
+#: the length rather than on the wording: what is being verified is that the
+#: router is actually wired up in the deployed build, and a greeting that cites
+#: nothing and stays short is the observable consequence of that.
+GREETING_MESSAGE = "hi"
+#: The greeting tier asks for 15-40 words. The ceiling here is loose on purpose
+#: - this is a smoke test, not the measurement. A reply over it is a reply that
+#: was written by the guidance prompt.
+GREETING_MAX_WORDS = 60
 
 
 class Smoke:
@@ -267,8 +280,64 @@ class Smoke:
         print(f"{INFO} {elapsed:.1f}s wall clock, stages={meta.get('stage_latency_ms')}")
         return body.get("message_id")
 
+    def greeting_turn(self) -> None:
+        """A greeting must be answered as a greeting, not as a query.
+
+        This is the one production check that the router shipped and is
+        running. It is separate from the crisis check below and asserts much
+        less: no citations, no verse reference in the prose, a short reply, and
+        no retrieval stage in the trace. The last of those is the real one -
+        citations could be empty because retrieval found nothing, but an absent
+        retrieval stage means it never ran.
+        """
+        self.section("5. a greeting is answered as a greeting")
+        status, body, _ = self.request(
+            "/api/chat", {"session_id": self.session, "message": GREETING_MESSAGE}
+        )
+        if not self.check(status == 200, "a greeting returns 200", f"got {status}"):
+            print(f"{INFO} {body}")
+            return
+
+        assert isinstance(body, dict)
+        reply = body.get("reply", "")
+        citations = body.get("citations") or []
+        words = len(re.findall(r"[^\W\d_]+", reply))
+
+        self.check(body.get("blocked") is False, "a greeting is not blocked")
+        self.check(bool(reply.strip()), "the greeting reply is not empty")
+        self.check(
+            len(citations) == 0,
+            "a greeting cites nothing",
+            f"got {len(citations)} citation(s): {citations}",
+        )
+        self.check(
+            not re.search(r"\b(?:BG|AS)-\d", reply),
+            "no verse reference in the greeting prose",
+            "a reference with no citation surface behind it is a dead link",
+        )
+        self.check(
+            words < GREETING_MAX_WORDS,
+            f"the greeting is short (< {GREETING_MAX_WORDS} words)",
+            f"{words} words",
+        )
+
+        stages = (body.get("meta") or {}).get("stage_latency_ms") or {}
+        if stages:
+            self.check(
+                "retrieval" not in stages,
+                "retrieval did not run for a greeting",
+                f"stages={sorted(stages)}",
+            )
+            self.check(
+                "router" in stages,
+                "the router stage ran",
+                f"stages={sorted(stages)} - is this build older than Phase 1b?",
+            )
+        else:
+            print(f"{INFO} no stage timings in the response; skipped the stage checks")
+
     def blocked_turn(self) -> None:
-        self.section("5. a crisis turn short-circuits")
+        self.section("6. a crisis turn short-circuits")
         status, body, _ = self.request(
             "/api/chat", {"session_id": self.session, "message": BLOCKED_MESSAGE}
         )
@@ -292,7 +361,7 @@ class Smoke:
         )
 
     def feedback(self, message_id: str | None) -> None:
-        self.section("6. feedback is recorded")
+        self.section("7. feedback is recorded")
         if message_id is None:
             self.check(False, "feedback", "no message id from the control turn")
             return
@@ -318,7 +387,7 @@ class Smoke:
         sequential version: rejected requests are refused before the pipeline
         runs, so only the ones inside the burst capacity spend NIM budget.
         """
-        self.section("7. the rate limiter is really on")
+        self.section("8. the rate limiter is really on")
         burst = 7
         print(f"{INFO} sending {burst} concurrent requests; only the allowed ones cost NIM")
 
@@ -376,10 +445,11 @@ class Smoke:
         self.self_test_evidence()
         self.consent()
         message_id = self.control_turn()
+        self.greeting_turn()
         self.blocked_turn()
         self.feedback(message_id)
         if skip_rate_limit:
-            print("\n7. the rate limiter is really on\n" + f"{INFO} skipped (--skip-rate-limit)")
+            print("\n8. the rate limiter is really on\n" + f"{INFO} skipped (--skip-rate-limit)")
         else:
             self.rate_limit()
 

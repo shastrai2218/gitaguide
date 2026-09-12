@@ -1036,3 +1036,228 @@ another turn's memory on a 0.1-CPU instance to obtain the same answer.
 * **`Downloads/arthashastra_dataset.json`** (150 chapter-level records, 9 Sep)
   is left untouched, noted as a candidate for a chapter-level context layer
   later. Our corpus is sutra-level at 3,135 records; the granularities differ.
+
+---
+
+## 14b. Phase 1b - conversational routing (measured 13 Sep 2026)
+
+Phase 1 made the answers shorter. It did not make GitaGuide a conversation,
+because nothing in the pipeline ever asked whether the message was a request
+for guidance at all. Every turn ran emotion, intent, retrieval and grounded
+generation, so "hi" came back with a verse about detachment from the fruits
+of action.
+
+### What stack these numbers come from
+
+**Read this before comparing anything**, and note that it differs from 14's.
+
+| | before | after |
+| --- | --- | --- |
+| tree | worktree of `8fdd395`, the Phase 1 head | this branch |
+| stack | real NIM, real ONNX MiniLM (fp32) and GoEmotions, full 3,836-verse corpus, **in-memory retriever** | identical |
+| set | `eval/conversation_set.jsonl`, 40 messages | identical |
+| why one script | the same `measure_conversation.py` ran against both trees, so before and after are one measurement rather than two scripts that print similar columns |
+
+Local Neo4j lives in Docker and Docker is not running, so **no retrieval
+quality number in this subsection is a production number**, and the hit-rate
+rows below say "not measured" where that is the honest answer. What the
+in-memory retriever cannot distort is whether retrieval *ran at all*, which
+is what routing changes: a greeting that gets a verse gets one from any
+store.
+
+### The finding Phase 1b exists for
+
+| | before | after |
+| --- | ---: | ---: |
+| non-guidance messages that ran retrieval | **20/20** | **3/20** |
+| non-guidance replies containing a verse | 20/20 | 3/20 |
+| router accuracy over all 40 | not applicable - no router | **35/40** |
+
+Twenty of twenty, to three of twenty. All three survivors are `meta`
+questions: two of them lost the router to its own four-second deadline and
+failed open into guidance, and one (`tum kya kar sakte ho`) the model genuinely
+misread. Both causes are broken out below.
+
+### Reply length, per tier
+
+Phase 1 left the word budget open: the contract said 80-150 and the model
+wrote 65. Neither option offered was taken, because the question had no
+single answer - a greeting and a layoff dilemma do not share a length. The
+budget is now per tier, and for `guidance` the shape was widened to three or
+four connecting sentences so it can reach the 80-150 the contract always
+stated.
+
+| tier | budget | median words | inside budget |
+| --- | --- | ---: | ---: |
+| `greeting` | 15-40 | 36 | 8/8 |
+| `meta` | 30-80 | 50 | 2/3 |
+| `ack_or_close` | 5-25 | 13 | 6/6 |
+| `followup` | 40-110 | 42 | 2/4 |
+| `guidance` | 80-150 | 75 | 9/19 |
+
+*Counted over the turns each tier's prompt actually wrote, not over the turns
+that should have reached it: a mis-routed turn was written by a different
+tier's prompt, so scoring it against the tier it should have had would measure
+the router twice and the budget not at all. This is why `guidance` shows 19
+rows against 14 guidance messages - the five mis-routed turns were all written
+by the guidance prompt - and why `meta` and `followup` show fewer.*
+
+The guidance row against Phase 1's open question:
+
+| guidance replies | before | after |
+| --- | ---: | ---: |
+| median words | 70 | **83** |
+| inside 80-150 | 1/14 | **8/14** |
+
+So widening the shape was the right half of the two options, and it moved
+the median from under the floor to inside the budget. It did not put every
+reply inside it, and the remaining misses are short rather than long.
+
+### Latency - the number that had to be checked
+
+A 4-second router call on every turn would be a regression, so the added
+cost is reported before anything else it bought.
+
+| | before | after |
+| --- | ---: | ---: |
+| all turns, p50 | 3.4s | **2.8s** |
+| all turns, p95 | 11.8s | **9.3s** |
+| non-guidance turns, p50 | 4.9s | **1.2s** |
+
+**The turn got faster, not slower, despite gaining a stage.** The router
+costs one cheap-tier call, but 14 of the 40 messages never
+make it - the stage-1 lexicon decides every greeting and acknowledgement at
+zero milliseconds - and the 17 non-guidance turns then skip retrieval and a
+much larger generation entirely. A message that asks nothing went from 4.9s to
+1.2s.
+
+| router stage | turns | p50 | p95 |
+| --- | ---: | ---: | ---: |
+| lexicon (`rules`) | 14 | **0ms** | 0ms |
+| model (`model` + `fallback`) | 26 | 938ms | 4003ms |
+
+### The deadline is the accuracy ceiling, not the classifier
+
+Router accuracy is 35/40, below the 38/40 target. The five misses are worth
+separating, because only two of them are the router being wrong:
+
+| message | wanted | got | why |
+| --- | --- | --- | --- |
+| `who are you` | meta | guidance | **timed out at 4s** (4003ms) and failed open |
+| `tum kya kar sakte ho` | meta | guidance | classified as guidance by the model (718ms) |
+| `can I trust these verses` | meta | guidance | **timed out at 4s** (4002ms) and failed open |
+| `can you give an example` | followup | guidance | **timed out at 4s** (4003ms) and failed open |
+| `in Hindi` | followup | guidance | classified as guidance by the model (984ms) |
+
+**3 of the 5 misses are the deadline, not the judgement.**
+Of 26 model-stage calls, 4 exceeded the 4-second ceiling; the rest returned at
+a median of 938ms. The distribution is bimodal - most calls under a second, a
+few pinned at the ceiling - and the logs show only
+**one** provider retry in the whole run, on the generation model, so these
+are not retry storms inside the budget. They are the same NIM instability
+Phase 1 recorded when one turn exhausted a 45-second generation budget.
+
+This is **recorded rather than retuned**, for the reason section 14 gives for
+the word budget: a deadline changed after the run is a deadline nobody has
+measured, and the trade is real in both directions. Raising it adds latency
+to exactly the turns that are already slowest; lowering it converts more
+meta questions into guidance answers. `intent_router_fallback` counts these
+in production, so the next report can state the live rate rather than a
+40-message sample, and `GITAGUIDE_ROUTER_TIMEOUT_SECONDS` moves it without a
+deploy.
+
+The two genuine errors are both short non-English messages -
+`tum kya kar sakte ho` and `in Hindi` - which is the same weakness the
+retrieval probes below find independently.
+
+### Failing open is the whole safety argument
+
+Every router failure resolves to `guidance`, which retrieves and answers
+fully. That is not a graceful degradation in the usual sense: it is exactly
+the behaviour every message had before Phase 1b, so the worst case of adding
+a router is the product testers already used. All four fallbacks above
+produced a complete, cited answer; none produced an error, an apology or a
+refusal.
+
+Crisis is untouched and structurally so. The gate runs **before** the router,
+so a blocked turn returns before the router is in the call path at all, and
+the stored trace records `route=crisis, stage=gate` - provable after the
+fact rather than argued. Every crisis phrasing the gate knows about is run
+through the whole pipeline with the router wired in
+(`tests/test_routed_pipeline.py`), and the stage-1 lexicon is asserted to
+contain no crisis vocabulary and to match whole-message only, because
+containment matching would make `hi i want to die` a greeting.
+
+### Step B: blocked, with the evidence that changes it
+
+Dense retrieval could not be built this phase, for two independent reasons,
+and both are reported rather than worked around.
+
+**1. The named embedding model no longer exists.**
+`nvidia/llama-3.2-nv-embedqa-1b-v2` returns HTTP 410: *reached its end of
+life on 2026-05-18*. Of the seven embedding-ish models the key can list,
+five return 404 for this account and two actually serve.
+
+**2. No Neo4j is reachable.** Local Neo4j is in Docker and Docker is down;
+the `.env` points at `bolt://localhost:7687`, which refuses the connection,
+and there are no Aura credentials on this machine. So no vector index could
+be created, and **the fulltext / vector / hybrid hit-rate comparison is not
+measured** - not estimated, not substituted with the in-memory retriever.
+
+What *could* be measured without Neo4j is the encoder itself, in memory,
+over the full corpus and the existing 40-query gold set, changing nothing
+but the encoder. **These are vector-only numbers and are not comparable with
+the 0.1750 production hybrid hit rate** - different legs, different store,
+different machine. Only the encoders are comparable with each other:
+
+| encoder | dim | vector-only hit@5 | hinglish stratum (n=4) |
+| --- | ---: | ---: | ---: |
+| `minilm-384` **(in production today)** | 384 | 0.200 | 0.00 |
+| `nvidia/nemotron-3-embed-1b` | 2048 | 0.400 | 0.00 |
+| `nvidia/llama-nemotron-embed-vl-1b-v2` | 2048 | 0.325 | 0.00 |
+
+The replacement encoder **doubles** vector-only hit rate. And it does
+nothing whatever for Hinglish, which was the entire stated reason for adding
+a dense leg: all three encoders score 0.00 on that stratum, including both
+multilingual ones.
+
+So the hypothesis was tested rather than assumed, with a paired
+cross-lingual set: ten English gold queries, each paired with a hand-written
+Hinglish rendering of the *same* question, so all three conditions share one
+set of acceptable verse ids and differ only in the surface form.
+
+| encoder | English original | Hinglish, raw | Hinglish, rewritten to English |
+| --- | ---: | ---: | ---: |
+| `minilm-384` (production) | 0.30 | **0.00** | 0.10 |
+| `nvidia/nemotron-3-embed-1b` | 0.40 | 0.20 | 0.30 |
+
+Two readings, and the second is the actionable one.
+
+**Hinglish is a real retrieval failure, not a perceived one.** On the
+encoder in production today the same question scores 0.30 in English and
+**0.00** in Hinglish. Tester B's "answers feel vague" has a mechanical cause
+sitting underneath it.
+
+**The fix is the rewrite, not the encoder.** Rewriting to English recovers
+part of the gap on both encoders, and it does so on the encoder already
+deployed - no index rebuild, no new dependency, no 512 MB problem. The
+rewritten column is a **lower bound**: 2 of the 10 router calls hit the
+4-second ceiling and returned no rewrite, so those two rows were scored on
+raw Hinglish. The router already produces this rewrite for every follow-up;
+extending it to guidance turns is a smaller change than a vector index and
+is measurable against the same set.
+
+### Not measured, and why
+
+* **Hit rate, fulltext / vector / hybrid.** Not measured. No Neo4j was
+  reachable, and substituting the in-memory retriever would answer a
+  different question while looking like an answer to this one.
+* **Production latency.** These are laptop numbers. Render is 0.1 CPU, and
+  the backend deploy is manual and has not run. What transfers is the
+  *shape* - a greeting skipping retrieval and a large generation saves more
+  on a slow instance than on a fast one - not the seconds.
+* **`out_of_scope` on real traffic.** It is a route with a tier and golden
+  tests, but no tester has yet sent one, so it is absent from the 40-message
+  set rather than padded with invented traffic.
+* **Whether testers find the conversation better.** The next round of
+  feedback answers that, and no local measurement substitutes for it.

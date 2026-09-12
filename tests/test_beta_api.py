@@ -275,3 +275,54 @@ def test_a_blocked_turn_still_carries_no_citations_at_all(client: TestClient) ->
     ).json()
     assert body["blocked"] is True
     assert body["citations"] == []
+
+
+# --------------------------------------------------------------------------- #
+# Phase 1b - routing, as the wire sees it
+# --------------------------------------------------------------------------- #
+def test_a_greeting_reaches_the_wire_with_no_citations_and_no_retrieval(
+    client: TestClient,
+) -> None:
+    """The projection of a no-retrieval turn.
+
+    ``_citations_for`` already returned nothing when ``retrieval is None`` - it
+    was written that way for the crisis path, and the greeting path inherits
+    it. That is worth an assertion rather than an assumption, because the
+    inheritance is incidental: nothing in that function mentions greetings.
+    """
+    body = client.post(
+        "/api/chat", json={"session_id": "beta-greeting", "message": "hi"}
+    ).json()
+    assert body["blocked"] is False
+    assert body["reply"].strip()
+    assert body["citations"] == []
+    assert "retrieval" not in body["meta"]["stage_latency_ms"]
+    assert "router" in body["meta"]["stage_latency_ms"]
+
+
+def test_a_greeting_reply_carries_no_verse_reference_in_its_prose(
+    client: TestClient,
+) -> None:
+    """A reference with no citation surface behind it is a dead link."""
+    import re
+
+    body = client.post(
+        "/api/chat", json={"session_id": "beta-greeting-prose", "message": "namaste"}
+    ).json()
+    assert not re.search(r"\b(?:BG|AS)-\d", body["reply"]), body["reply"]
+
+
+def test_a_real_question_still_retrieves_and_cites_over_the_wire(
+    client: TestClient,
+) -> None:
+    """Routing must not have turned the product off."""
+    body = client.post(
+        "/api/chat",
+        json={
+            "session_id": "beta-guidance",
+            "message": "My manager takes credit for my work and I am getting bitter about it.",
+        },
+    ).json()
+    assert body["blocked"] is False
+    assert body["citations"]
+    assert "retrieval" in body["meta"]["stage_latency_ms"]
