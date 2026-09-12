@@ -1,0 +1,41 @@
+{"_comment": "GitaGuide conversational routing set (Phase 1b, 13 Sep 2026). 40 messages a tester would actually send, tagged with the route the router must choose. Four buckets never want retrieval (greeting, meta, ack_or_close) and two do (followup, guidance); the split is the whole point of the set, because before this phase every one of the 40 ran retrieval and got a verse. 'history' carries the turns a follow-up depends on - 'aur kya' is only a follow-up because of what came before it, and a router judged without that context is being judged on a different task. 'register' is what app.pipeline.register must detect, so a register miss is distinguishable from a routing miss. out_of_scope is deliberately NOT here: it is a router class but not a message a beta tester has sent, so its golden cases live in tests/test_router.py rather than inflating this set's non-guidance count."}
+{"id": "greet-01", "message": "hi", "expected_route": "greeting", "register": "english", "history": []}
+{"id": "greet-02", "message": "hello", "expected_route": "greeting", "register": "english", "history": []}
+{"id": "greet-03", "message": "namaste", "expected_route": "greeting", "register": "hinglish", "history": []}
+{"id": "greet-04", "message": "kem cho", "expected_route": "greeting", "register": "hinglish", "history": []}
+{"id": "greet-05", "message": "kya haal hai", "expected_route": "greeting", "register": "hinglish", "history": []}
+{"id": "greet-06", "message": "good morning", "expected_route": "greeting", "register": "english", "history": []}
+{"id": "greet-07", "message": "hey there", "expected_route": "greeting", "register": "english", "history": []}
+{"id": "greet-08", "message": "hii", "expected_route": "greeting", "register": "english", "history": []}
+{"id": "meta-01", "message": "who are you", "expected_route": "meta", "register": "english", "history": []}
+{"id": "meta-02", "message": "tum kya kar sakte ho", "expected_route": "meta", "register": "hinglish", "history": []}
+{"id": "meta-03", "message": "is this AI", "expected_route": "meta", "register": "english", "history": []}
+{"id": "meta-04", "message": "which Gita edition do you use", "expected_route": "meta", "register": "english", "history": []}
+{"id": "meta-05", "message": "can I trust these verses", "expected_route": "meta", "register": "english", "history": []}
+{"id": "meta-06", "message": "what is arthashastra", "expected_route": "meta", "register": "english", "history": []}
+{"id": "ack-01", "message": "ok", "expected_route": "ack_or_close", "register": "english", "history": [["user", "My manager takes credit for my work."], ["assistant", "Hold the standard of your own work rather than the recognition for it (BG-2.47). Keep a written record of what you deliver."]]}
+{"id": "ack-02", "message": "thanks", "expected_route": "ack_or_close", "register": "english", "history": [["user", "Should I report a colleague cutting corners on safety?"], ["assistant", "Safety is not a favour you owe a friend (AS-2.9.1). Report the risk, not the person."]]}
+{"id": "ack-03", "message": "thik hai", "expected_route": "ack_or_close", "register": "hinglish", "history": [["user", "mera manager mujhe bahut pressure deta hai"], ["assistant", "Pressure aur apna kaam alag cheezein hain (BG-2.47). Pehle apni limit likh kar rakho."]]}
+{"id": "ack-04", "message": "samajh gaya", "expected_route": "ack_or_close", "register": "hinglish", "history": [["user", "office mein sab log politics karte hain"], ["assistant", "Apna kaam saaf rakho, uska hisaab rakho (AS-1.9.1)."]]}
+{"id": "ack-05", "message": "bye", "expected_route": "ack_or_close", "register": "english", "history": [["user", "I keep putting off a career decision."], ["assistant", "A decision deferred is still a decision (BG-18.47). Name the date you will decide by."]]}
+{"id": "ack-06", "message": "hmm", "expected_route": "ack_or_close", "register": "english", "history": [["user", "I am afraid of failing in a new role."], ["assistant", "Fear of the result is not a verdict on your fitness for the work (BG-2.47)."]]}
+{"id": "follow-01", "message": "aur kya", "expected_route": "followup", "register": "hinglish", "history": [["user", "boss ne sabke saamne daanta, gussa control nahi ho raha"], ["assistant", "Gussa wahi jagah se aata hai jahan chot lagi hai (BG-2.62). Jawab dene se pehle ek din ruko."]]}
+{"id": "follow-02", "message": "explain that verse more", "expected_route": "followup", "register": "english", "history": [["user", "I am anxious about a decision at work."], ["assistant", "Act for the work itself rather than the outcome you are hoping for (BG-2.47)."]]}
+{"id": "follow-03", "message": "but what if he doesn't listen", "expected_route": "followup", "register": "english", "history": [["user", "A vendor has been overbilling us. How should I handle it?"], ["assistant", "Verify before you accuse, then say it plainly and once (AS-2.9.1)."]]}
+{"id": "follow-04", "message": "can you give an example", "expected_route": "followup", "register": "english", "history": [["user", "How do I decide whom to trust with responsibility?"], ["assistant", "Trust is assigned in proportion to what you can verify (AS-1.9.1)."]]}
+{"id": "follow-05", "message": "simpler please", "expected_route": "followup", "register": "english", "history": [["user", "What does it mean to act without attachment to results?"], ["assistant", "The claim is on the action, not on what the action yields (BG-2.47)."]]}
+{"id": "follow-06", "message": "in Hindi", "expected_route": "followup", "register": "english", "history": [["user", "I have to lay off three people next week and I can't sleep."], ["assistant", "The duty you did not choose is still yours to carry out honestly (BG-18.47)."]]}
+{"id": "guide-01", "message": "I've been offered a promotion but I'm terrified of failing in front of everyone", "expected_route": "guidance", "register": "english", "history": []}
+{"id": "guide-02", "message": "I have to lay off three people next week and I can't sleep", "expected_route": "guidance", "register": "english", "history": []}
+{"id": "guide-03", "message": "Should I report my friend at work who's cutting corners on safety?", "expected_route": "guidance", "register": "english", "history": []}
+{"id": "guide-04", "message": "A competitor is poaching my best engineers with higher offers I can't match", "expected_route": "guidance", "register": "english", "history": []}
+{"id": "guide-05", "message": "Mera boss mujhse bahut kaam karwata hai aur credit khud le leta hai. Main kya karoon?", "expected_route": "guidance", "register": "hinglish", "history": []}
+{"id": "guide-06", "message": "muje din bhar aacha nahi laag raha, mein apne dimaag ko control nahi kar paa raha hu", "expected_route": "guidance", "register": "hinglish", "history": []}
+{"id": "guide-07", "message": "mera manager mujhe bahut pressure deta hai, kya main resign kar du?", "expected_route": "guidance", "register": "hinglish", "history": []}
+{"id": "guide-08", "message": "मुझे अपना काम करना चाहिए या नतीजे की चिंता करनी चाहिए?", "expected_route": "guidance", "register": "hindi", "history": []}
+{"id": "guide-09", "message": "मेरे भाई से मेरा झगड़ा हो गया है और मैं बहुत परेशान हूँ। मैं क्या करूँ?", "expected_route": "guidance", "register": "hindi", "history": []}
+{"id": "guide-10", "message": "My team keeps missing deadlines I am accountable for. Explain in more detail what the texts say.", "expected_route": "guidance", "register": "english", "history": []}
+{"id": "guide-11", "message": "boss ne sabke saamne daanta, gussa control nahi ho raha", "expected_route": "guidance", "register": "hinglish", "history": []}
+{"id": "guide-12", "message": "ghar wale shaadi ke liye pressure daal rahe hain, main abhi ready nahi hu", "expected_route": "guidance", "register": "hinglish", "history": []}
+{"id": "guide-13", "message": "apne business partner par bharosa nahi raha, paise ka hisaab saaf nahi hai", "expected_route": "guidance", "register": "hinglish", "history": []}
+{"id": "guide-14", "message": "mehnat to bahut kar raha hu par kuch haasil nahi ho raha, mann toot raha hai", "expected_route": "guidance", "register": "hinglish", "history": []}
