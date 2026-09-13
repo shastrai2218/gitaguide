@@ -213,3 +213,76 @@ def test_expand_query_includes_emotion_and_intent() -> None:
     )
     assert "fear" in expanded
     assert "professional dilemma" in expanded
+
+
+# --------------------------------------------------------------------------- #
+# Phase 1b - the two legs take two queries
+# --------------------------------------------------------------------------- #
+async def test_the_vector_leg_and_the_fulltext_leg_get_different_queries(
+    corpus: Corpus, settings: Settings
+) -> None:
+    """The mechanism, asserted at the retriever rather than through a result.
+
+    Checking which verses came back would test the corpus as much as the split.
+    What has to hold is narrower and exact: the vector leg is handed the
+    rewrite and the fulltext leg is handed the person's own words. Fulltext is
+    a lexical match, so substituting a paraphrase throws away the very tokens
+    it exists to find; the vector leg wants English because the corpus is
+    English.
+    """
+    retriever = InMemoryHybridRetriever(corpus=corpus, settings=settings)
+    seen: dict[str, str] = {}
+    original_vector = retriever._vector_scores
+    original_fulltext = retriever._fulltext_scores
+
+    def spy_vector(query: str):
+        seen["vector"] = query
+        return original_vector(query)
+
+    def spy_fulltext(query: str):
+        seen["fulltext"] = query
+        return original_fulltext(query)
+
+    retriever._vector_scores = spy_vector  # type: ignore[method-assign]
+    retriever._fulltext_scores = spy_fulltext  # type: ignore[method-assign]
+
+    await retriever.retrieve(
+        "mera boss mera kaam apne naam kar leta hai",
+        vector_query="My manager takes credit for my work",
+    )
+
+    assert "mera boss" in seen["fulltext"]
+    assert "My manager takes credit" in seen["vector"]
+    assert "mera boss" not in seen["vector"]
+
+
+async def test_without_a_rewrite_both_legs_take_the_original_path(
+    corpus: Corpus, settings: Settings
+) -> None:
+    """No rewrite must be byte-identical to the behaviour before rewriting."""
+    retriever = InMemoryHybridRetriever(corpus=corpus, settings=settings)
+    seen: dict[str, str] = {}
+    original_vector = retriever._vector_scores
+
+    def spy_vector(query: str):
+        seen["vector"] = query
+        return original_vector(query)
+
+    retriever._vector_scores = spy_vector  # type: ignore[method-assign]
+
+    trace = await retriever.retrieve("my manager takes credit for my work")
+    assert seen["vector"] == trace.expanded_query
+    assert trace.vector_query == ""
+    assert trace.expanded_vector_query == ""
+
+
+async def test_the_trace_records_both_queries(corpus: Corpus, settings: Settings) -> None:
+    """A retrieval that cannot say what it searched for cannot be debugged."""
+    retriever = InMemoryHybridRetriever(corpus=corpus, settings=settings)
+    trace = await retriever.retrieve(
+        "mujhe bahut gussa aata hai", vector_query="I get very angry"
+    )
+    assert trace.query == "mujhe bahut gussa aata hai"
+    assert trace.vector_query == "I get very angry"
+    assert "I get very angry" in trace.expanded_vector_query
+    assert "mujhe bahut gussa" in trace.expanded_query

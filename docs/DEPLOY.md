@@ -44,6 +44,24 @@ Set aside about 90 minutes. The Aura node import is the long part.
 > gold set with deterministic intent (kg_measurements.md section 12) - but it
 > must be done, and it must be re-done whenever the precision changes.
 
+> ### The next encoder, and the one that is already gone
+> **Approved, not yet adopted: `nvidia/nemotron-3-embed-1b`** (2048-dim, served
+> over the NIM endpoint on the existing key). It doubled vector-only hit rate
+> on the gold set against MiniLM, 0.200 -> 0.400 (kg_measurements.md section
+> 14b). It is **blocked on Neo4j access**, because adopting it means building a
+> vector index, and no Neo4j has been reachable since Docker went down. Do not
+> switch `GITAGUIDE_EMBEDDER_PRECISION` or any encoder setting for it: it is a
+> different model, not a different precision, and the whole graph has to be
+> re-embedded and re-imported first.
+>
+> **Do not use `nvidia/llama-3.2-nv-embedqa-1b-v2`.** It reached **end of life
+> on 2026-05-18** and the endpoint returns HTTP 410 Gone. It is recorded here
+> because it is the model the phase plan originally named, and a future reader
+> finding that name in the history should not spend an afternoon on it.
+>
+> Neither encoder helps Hinglish - all candidates scored 0.00 on that stratum.
+> That gap is closed by `GITAGUIDE_QUERY_REWRITE`, below, not by the encoder.
+
 On your machine, with the local stack running:
 
 ```bash
@@ -197,8 +215,9 @@ the API's first boot. Reasoning and the verification queries:
    | `GITAGUIDE_CONSENT_VERSION` | `beta-1` | the version printed on the Privacy Notice and Disclaimer, and the one the frontend sends; a mismatch means nobody can pass the gate |
    | `GITAGUIDE_ROUTER_MODEL_ENABLED` | `true` | `false` leaves only the zero-cost lexicon, so every message that is not a plain greeting is treated as guidance — **this is the way back to pre-Phase-1b behaviour, in one env var and no deploy** |
    | `GITAGUIDE_ROUTER_MODEL` | `nvidia/nemotron-3.5-lightning-30b-a3b` | the cheap tier. A *different* model from the generation primary on purpose: routing then sits in its own NIM rate-limit bucket, so a burst that exhausts the 120B quota does not also stop the system telling a greeting from a real question |
-   | `GITAGUIDE_ROUTER_TIMEOUT_SECONDS` | `4` | hard ceiling on the router call. Past it the turn is routed to guidance and answered normally: a slow router costs latency, never an answer |
+   | `GITAGUIDE_ROUTER_TIMEOUT_SECONDS` | `6` | hard ceiling on the router call. Past it the turn is routed to guidance and answered normally: a slow router costs latency, never an answer. Raised from 4 on 13 Sep — at 4s, 3 of 5 routing errors were timeouts rather than misjudgements (§14b) |
    | `GITAGUIDE_ROUTER_MAX_TOKENS` | `160` | the reply is one small JSON object; longer is malformed |
+   | `GITAGUIDE_QUERY_REWRITE` | `on` | embed the router's English rewrite on the **vector** leg; the fulltext leg always keeps the person's own words. `off` restores the single-query path. Accepts `on`/`off` as well as `true`/`false` |
 
    Full annotated list: [`.env.production.example`](../.env.production.example).
 

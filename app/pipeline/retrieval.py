@@ -149,7 +149,21 @@ def expand_query(query: str, emotion: EmotionResult | None, intent: IntentResult
 # Interface
 # --------------------------------------------------------------------------- #
 class HybridRetriever(ABC):
-    """Retrieval interface used by the orchestrator."""
+    """Retrieval interface used by the orchestrator.
+
+    ``retrieve`` takes two queries, not one. ``query`` is what the person
+    actually wrote and drives the **fulltext** leg; ``vector_query``, when
+    given, is an English rewrite of it and drives the **vector** leg instead.
+
+    They are split because the two legs fail in opposite ways on a Hinglish
+    message. Fulltext wants the person's own words - it is a lexical match, and
+    substituting a paraphrase throws away the exact tokens it exists to find.
+    The vector leg wants English, because the corpus is English: measured on the
+    encoder in production, the same question scores 0.30 in English and 0.00 in
+    Hinglish, and neither NIM multilingual encoder improves on that
+    (kg_measurements section 14b). ``None`` means "no rewrite", and the
+    retrievers then take exactly the path they took before this existed.
+    """
 
     backend: str = "abstract"
 
@@ -160,6 +174,7 @@ class HybridRetriever(ABC):
         emotion: EmotionResult | None = None,
         intent: IntentResult | None = None,
         top_k: int | None = None,
+        vector_query: str | None = None,
     ) -> RetrievalTrace: ...
 
     async def aclose(self) -> None:
@@ -339,12 +354,19 @@ class InMemoryHybridRetriever(HybridRetriever):
         emotion: EmotionResult | None = None,
         intent: IntentResult | None = None,
         top_k: int | None = None,
+        vector_query: str | None = None,
     ) -> RetrievalTrace:
         started = time.perf_counter()
         settings = self.settings
         expanded = expand_query(query, emotion, intent)
+        # Expanded separately rather than reusing `expanded`: the emotion and
+        # intent terms are added per query, and the rewrite is a different
+        # query.
+        expanded_vector = (
+            expand_query(vector_query, emotion, intent) if vector_query else expanded
+        )
 
-        vector_scores = self._vector_scores(expanded)
+        vector_scores = self._vector_scores(expanded_vector)
         fulltext_scores = self._fulltext_scores(expanded)
 
         seeds = sorted(vector_scores, key=lambda vid: -vector_scores[vid])[:3]
@@ -385,6 +407,8 @@ class InMemoryHybridRetriever(HybridRetriever):
         return RetrievalTrace(
             query=query,
             expanded_query=expanded,
+            vector_query=vector_query or "",
+            expanded_vector_query=expanded_vector if vector_query else "",
             emotions_used=emotion.top_emotions(3) if emotion else [],
             themes_used=sorted({theme for item in results for theme in item.verse.themes})[:8],
             candidates_considered=len(candidates),
@@ -626,10 +650,14 @@ class Neo4jHybridRetriever(HybridRetriever):
         emotion: EmotionResult | None = None,
         intent: IntentResult | None = None,
         top_k: int | None = None,
+        vector_query: str | None = None,
     ) -> RetrievalTrace:
         started = time.perf_counter()
         settings = self.settings
         expanded = expand_query(query, emotion, intent)
+        expanded_vector = (
+            expand_query(vector_query, emotion, intent) if vector_query else expanded
+        )
         emotions = emotion.top_emotions(settings.emotion_top_k) if emotion else []
 
         # Always a complete parameter set: the retrieval query requires
@@ -637,7 +665,12 @@ class Neo4jHybridRetriever(HybridRetriever):
         query_params = {**DEFAULT_QUERY_PARAMS, "emotions": emotions}
         candidate_k = settings.retrieval_candidate_k
 
-        items = self._search(expanded, candidate_k, query_params)
+        items = self._search(
+            expanded,
+            candidate_k,
+            query_params,
+            vector_text=expanded_vector if vector_query else None,
+        )
 
         candidates: list[RetrievedVerse] = []
         parse_failures = 0
@@ -689,6 +722,8 @@ class Neo4jHybridRetriever(HybridRetriever):
         return RetrievalTrace(
             query=query,
             expanded_query=expanded,
+            vector_query=vector_query or "",
+            expanded_vector_query=expanded_vector if vector_query else "",
             emotions_used=emotions,
             themes_used=sorted({theme for item in results for theme in item.verse.themes})[:8],
             candidates_considered=len(candidates),
@@ -704,6 +739,7 @@ class Neo4jHybridRetriever(HybridRetriever):
         query_text: str,
         top_k: int,
         query_params: dict[str, Any],
+        vector_text: str | None = None,
     ) -> list[Any]:
         """Run the hybrid search, loudly.
 
@@ -712,6 +748,12 @@ class Neo4jHybridRetriever(HybridRetriever):
         driver-level execution of the same Cypher (see
         :data:`kg.cypher_queries.MANUAL_HYBRID_QUERY`) rather than dropping the
         ``$emotions`` parameter and letting the query fail.
+
+        ``vector_text``, when given, is embedded and passed as ``query_vector``
+        so the vector leg searches for the rewrite while the fulltext leg keeps
+        ``query_text``. It is passed **only** when it differs: with no rewrite
+        the library embeds ``query_text`` itself, exactly as before, and this
+        method's behaviour is unchanged down to the argument list.
         """
         retriever = self._get_retriever()
 
@@ -720,13 +762,18 @@ class Neo4jHybridRetriever(HybridRetriever):
                 "installed neo4j-graphrag cannot parameterise the retrieval query; "
                 "using the driver-level hybrid query instead"
             )
-            return self._manual_search(query_text, top_k, query_params)
+            return self._manual_search(query_text, top_k, query_params, vector_text)
+
+        extra: dict[str, Any] = {}
+        if vector_text:
+            extra["query_vector"] = self.embedder.embed_one(vector_text)
 
         try:
             raw = retriever.search(
                 query_text=query_text,
                 top_k=top_k,
                 query_params=query_params,
+                **extra,
             )
         except Exception as exc:
             logger.error(
@@ -750,6 +797,7 @@ class Neo4jHybridRetriever(HybridRetriever):
         query_text: str,
         top_k: int,
         query_params: dict[str, Any],
+        vector_text: str | None = None,
     ) -> list[Any]:
         """Driver-level hybrid search + retrieval tail, fully parameterised."""
         from kg.cypher_queries import (  # lazy: keeps import cheap
@@ -763,7 +811,7 @@ class Neo4jHybridRetriever(HybridRetriever):
             "vector_index_name": self.settings.neo4j_vector_index,
             "fulltext_index_name": self.settings.neo4j_fulltext_index,
             "query_text": query_text,
-            "query_vector": self.embedder.embed_one(query_text),
+            "query_vector": self.embedder.embed_one(vector_text or query_text),
             "top_k": top_k,
         }
         try:

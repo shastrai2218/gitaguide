@@ -260,6 +260,13 @@ class RetrievalTrace(BaseModel):
 
     query: str
     expanded_query: str = ""
+    #: The English rewrite that drove the **vector** leg, when one was used.
+    #: Empty means the vector leg searched for ``query`` like the fulltext leg,
+    #: which is the case whenever the router produced no rewrite or
+    #: ``GITAGUIDE_QUERY_REWRITE`` is off. Both are recorded because a retrieval
+    #: that cannot say what it actually searched for cannot be debugged.
+    vector_query: str = ""
+    expanded_vector_query: str = ""
     emotions_used: list[str] = Field(default_factory=list)
     themes_used: list[str] = Field(default_factory=list)
     candidates_considered: int = 0

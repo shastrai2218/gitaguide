@@ -177,10 +177,27 @@ async def test_a_no_retrieval_turn_persists_without_a_retrieval_trace(
 
 
 # ------------------------------------------------------------------- follow-ups
-async def test_a_followup_retrieves_using_the_rewritten_query(
+async def seed_anger_session(repository: InMemoryRepository, session_id: str) -> None:
+    await repository.ensure_session(session_id, "en-IN")
+    for role, content in (
+        ("user", "boss ne sabke saamne daanta"),
+        ("assistant", "Anger comes from where the injury landed (BG-2.62)."),
+    ):
+        await repository.add_message(
+            MessageRecord(
+                id=f"{session_id}-{role}",
+                session_id=session_id,
+                role=role,
+                content=content,
+                citations=["BG-2.62"] if role == "assistant" else [],
+            )
+        )
+
+
+async def test_a_model_routed_followup_retrieves_using_the_rewrite(
     routed: GuidanceOrchestrator, repository: InMemoryRepository
 ) -> None:
-    """"aur kya" retrieves on the situation, not on two untranslatable words."""
+    """A follow-up retrieves on the situation, not on its own contentless words."""
     import json
 
     class Rewrites(FakeLLMProvider):
@@ -198,26 +215,110 @@ async def test_a_followup_retrieves_using_the_rewritten_query(
                 )
             return await super().complete(prompt, **kwargs)
 
-    session_id = "followup-session"
-    await repository.ensure_session(session_id, "en-IN")
-    for role, content in (
-        ("user", "boss ne sabke saamne daanta"),
-        ("assistant", "Anger comes from where the injury landed (BG-2.62)."),
-    ):
-        await repository.add_message(
-            MessageRecord(
-                id=f"{role}-1",
-                session_id=session_id,
-                role=role,
-                content=content,
-                citations=["BG-2.62"] if role == "assistant" else [],
-            )
-        )
-
+    await seed_anger_session(repository, "followup-model")
     routed.router = ConversationRouter(llm=Rewrites())
-    result = await routed.handle_turn(UserTurn(message="aur kya", session_id=session_id))
+    # A phrase the lexicon does not hold, so the model path runs.
+    result = await routed.handle_turn(
+        UserTurn(
+            message="but what if he does not listen to any of that",
+            session_id="followup-model",
+        )
+    )
 
     assert result.route.route == Route.FOLLOWUP.value
     assert result.retrieval is not None
-    # The retriever was handed the rewrite, not the raw two words.
     assert result.retrieval.query == "guidance on controlling anger at work"
+
+
+async def test_a_lexicon_routed_followup_retrieves_on_the_previous_message(
+    routed: GuidanceOrchestrator, repository: InMemoryRepository
+) -> None:
+    """"aur kya" is decided at zero cost, so there is no rewrite to search for.
+
+    The previous message stands in. The subtlety worth a test is that the
+    orchestrator writes the incoming turn to the repository *before* the memory
+    stage, so the newest user turn in history is this turn - "the previous
+    message" has to skip it explicitly or it resolves to "aur kya" itself.
+    """
+    await seed_anger_session(repository, "followup-lexicon")
+    result = await routed.handle_turn(
+        UserTurn(message="aur kya", session_id="followup-lexicon")
+    )
+
+    assert result.route.route == Route.FOLLOWUP.value
+    assert result.route.stage == RouterDecisionStage.RULES.value
+    assert result.route.latency_ms < 50, "the lexicon path must not call a model"
+    assert result.retrieval is not None
+    assert result.retrieval.query == "boss ne sabke saamne daanta"
+
+
+async def test_the_vector_leg_searches_the_rewrite_and_fulltext_keeps_the_words(
+    routed: GuidanceOrchestrator, repository: InMemoryRepository
+) -> None:
+    """The two legs get different queries, and the trace records both.
+
+    This is the whole of the query-rewrite change: a Hinglish question scores
+    0.00 against an English corpus on the vector leg, while the fulltext leg
+    needs the person's exact tokens. Neither is sacrificed for the other.
+    """
+    import json
+
+    class Rewrites(FakeLLMProvider):
+        async def complete(self, prompt, **kwargs):  # type: ignore[override]
+            if "TASK: conversation_route" in prompt:
+                return LLMResponse(
+                    text=json.dumps(
+                        {
+                            "route": "guidance",
+                            "standalone_query": (
+                                "My manager takes credit for my work and I want to "
+                                "know how to respond."
+                            ),
+                        }
+                    ),
+                    provider="fake",
+                    model="test",
+                )
+            return await super().complete(prompt, **kwargs)
+
+    routed.router = ConversationRouter(llm=Rewrites())
+    raw = "mera boss mera kaam apne naam kar leta hai"
+    result = await routed.handle_turn(UserTurn(message=raw, session_id="rewrite-on"))
+
+    assert result.retrieval is not None
+    assert result.retrieval.query == raw, "the fulltext leg keeps their own words"
+    assert result.retrieval.vector_query.startswith("My manager takes credit")
+    assert result.retrieval.expanded_vector_query
+
+
+async def test_the_flag_off_restores_the_single_query_path(
+    routed: GuidanceOrchestrator,
+) -> None:
+    """``GITAGUIDE_QUERY_REWRITE=off`` must be byte-identical to before.
+
+    Asserted on the trace rather than on the results: an empty ``vector_query``
+    is what makes the retriever take its original single-query path.
+    """
+    import json
+
+    class Rewrites(FakeLLMProvider):
+        async def complete(self, prompt, **kwargs):  # type: ignore[override]
+            if "TASK: conversation_route" in prompt:
+                return LLMResponse(
+                    text=json.dumps(
+                        {"route": "guidance", "standalone_query": "an english rewrite"}
+                    ),
+                    provider="fake",
+                    model="test",
+                )
+            return await super().complete(prompt, **kwargs)
+
+    routed.router = ConversationRouter(llm=Rewrites())
+    routed.settings = routed.settings.model_copy(update={"query_rewrite": False})
+
+    result = await routed.handle_turn(
+        UserTurn(message="mera boss mujhe pressure deta hai", session_id="rewrite-off")
+    )
+    assert result.retrieval is not None
+    assert result.retrieval.vector_query == ""
+    assert result.retrieval.expanded_vector_query == ""

@@ -198,6 +198,21 @@ class Settings(BaseSettings):
     #: The reply is one small JSON object; anything longer is malformed.
     router_max_tokens: int = 160
 
+    #: Embed the router's English rewrite instead of the raw message on the
+    #: **vector** leg of retrieval. The fulltext leg always keeps the raw
+    #: message, so the person's own vocabulary is never lost.
+    #:
+    #: Why this exists: on the encoder in production, the same question scores
+    #: 0.30 in English and 0.00 in Hinglish (section 14b). Neither NIM
+    #: multilingual encoder fixes that - both also score 0.00 - so the gap is
+    #: not an encoder choice, it is that the corpus is English and the query is
+    #: not. Rewriting the query is the one intervention that works on the
+    #: encoder already deployed, with no index rebuild.
+    #:
+    #: Accepts on/off as well as true/false. Off restores the pre-Phase-1b
+    #: behaviour of embedding the raw message, in one env var and no deploy.
+    query_rewrite: bool = True
+
 
     # ---------------------------------------------------------- knowledge graph
     #: Labels (Theme/Concept) attached to more than this fraction of the corpus

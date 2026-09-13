@@ -230,7 +230,16 @@ class GuidanceOrchestrator:
         if tier.retrieves:
             with timer(STAGE_RETRIEVAL):
                 retrieval = await self.retriever.retrieve(
-                    decision.retrieval_query(message), emotion, intent
+                    decision.retrieval_query(message, memory_context),
+                    emotion,
+                    intent,
+                    # The fulltext leg keeps the person's own words; the vector
+                    # leg searches the English rewrite, because the corpus is
+                    # English. No rewrite - a timeout, the lexicon, the flag off
+                    # - passes None and the retriever takes its original path.
+                    vector_query=decision.vector_query(
+                        message, self.settings.query_rewrite
+                    ),
                 )
             stages.append(STAGE_RETRIEVAL)
 
