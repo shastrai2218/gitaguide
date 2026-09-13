@@ -10,9 +10,26 @@
 # was one.
 #
 # Stage 1 of the router answers that question for the cases where no model is
-# needed. A message of at most four words, made up ENTIRELY of terms below plus
-# fillers, is decided here at zero latency and zero cost. Everything else falls
-# through to stage 2 (a model call), which fails open to `guidance`.
+# needed. A short message made up ENTIRELY of terms below plus fillers is
+# decided here at zero latency and zero cost. Everything else falls through to
+# stage 2 (a model call), which fails open to `guidance`.
+#
+# The length bound is four words, or the longest phrase in this file if that is
+# longer - so adding "can i trust these verses" permits a five-word message to
+# be decided without widening the bound for a one-word greeting. The
+# whole-message rule below is what actually keeps that safe.
+#
+# WHAT MAY AND MAY NOT BE DECIDED HERE
+# ------------------------------------
+# Four routes: greeting, ack_or_close, meta and followup. All four are things a
+# word list can genuinely recognise, because all four are messages with no
+# subject of their own.
+#
+# `guidance` may NEVER appear in this file. Deciding that a message IS a real
+# request for help is a much stronger claim than deciding it is a greeting, and
+# it is not one a word list can support - so guidance is only ever reached by
+# the model, or by failing open. `crisis` may never appear either; see below.
+# tests/test_router.py asserts both.
 #
 # WHY "ENTIRELY"
 # --------------
@@ -257,3 +274,109 @@ routes:
       - આભાર
       - આવજો
       - હા
+
+  # ---------------------------------------------------------------- meta
+  # Questions about GitaGuide itself. Added 13 Sep 2026: at a 4-second router
+  # ceiling these were the single largest source of routing error, and three of
+  # them were timeouts rather than misjudgements - the model knew the answer and
+  # was cancelled before it could say so. They are fixed phrases, so a word list
+  # answers them at zero cost and the deadline stops mattering for them.
+  #
+  # Unlike greeting and ack_or_close, a wrong decision here is not free: it
+  # means answering "who are you" without scripture when the person wanted
+  # guidance. So only phrases that are unambiguously ABOUT the system are
+  # listed - "what can you do" is here, "what should I do" is not and must
+  # never be.
+  meta:
+    english:
+      - who are you
+      - who r u
+      - what are you
+      - who made you
+      - who built you
+      - what is this
+      - is this ai
+      - is this an ai
+      - are you ai
+      - are you an ai
+      - are you a bot
+      - are you human
+      - are you real
+      - what can you do
+      - how do you work
+      - can i trust these verses
+      - can i trust this
+      - which edition
+      - which gita edition
+      - what edition
+      - which translation
+      - what is arthashastra
+      - what is the gita
+    hindi_roman:
+      - tum kaun ho
+      - aap kaun ho
+      - tu kaun hai
+      - kya kar sakte ho
+      - tum kya kar sakte ho
+      - aap kya kar sakte ho
+      - ye kya hai
+      - yeh kya hai
+    hindi_devanagari:
+      - तुम कौन हो
+      - आप कौन हैं
+      - क्या कर सकते हो
+      - तुम क्या कर सकते हो
+      - यह क्या है
+      - ये क्या है
+    gujarati_roman:
+      - tame kon cho
+      - su kari shako cho
+    gujarati_script:
+      - તમે કોણ છો
+
+  # ------------------------------------------------------------- followup
+  # Continuations that carry no subject of their own. These are only follow-ups
+  # when there is something to follow: with no history the router downgrades
+  # them to guidance, because "simpler" as a first message is not a request to
+  # simplify anything.
+  #
+  # They also retrieve, which is why they get the previous user turn as their
+  # retrieval query - their own two words would search for nothing.
+  followup:
+    english:
+      - in hindi
+      - in english
+      - in hinglish
+      - simpler
+      - simpler please
+      - more simply
+      - say more
+      - tell me more
+      - go on
+      - example
+      - an example
+      - give an example
+      - for example
+      - another one
+      - what else
+    hindi_roman:
+      - hindi me
+      - hindi mein
+      - english me
+      - english mein
+      - aur kya
+      - aur batao
+      - aur bolo
+      - example do
+      - udaharan do
+      - aur
+      - thoda simple
+      - aasan bhasha me
+    hindi_devanagari:
+      - हिंदी में
+      - और क्या
+      - और बताओ
+      - उदाहरण दो
+    gujarati_roman:
+      - biju su
+      - dakhlo aapo

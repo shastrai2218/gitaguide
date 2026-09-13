@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 
 import pytest
 
@@ -32,6 +33,8 @@ from app.llm.fake import FakeLLMProvider
 from app.pipeline.memory import MemoryContext
 from app.pipeline.router import (
     DEFAULT_ROUTE,
+    LEXICON_PRECEDENCE,
+    LEXICON_ROUTES,
     MODEL_ROUTES,
     RETRIEVING_ROUTES,
     SHORT_MESSAGE_WORDS,
@@ -39,6 +42,7 @@ from app.pipeline.router import (
     Lexicon,
     Route,
     RouterDecisionStage,
+    _normalise,
     build_route_prompt,
     rule_route,
 )
@@ -113,11 +117,21 @@ def test_stage_one_decides_the_whole_zero_cost_bucket(item: dict) -> None:
 
 @pytest.mark.parametrize(
     "item",
-    [item for item in GOLDEN if item["expected_route"] not in {"greeting", "ack_or_close"}],
+    [item for item in GOLDEN if item["expected_route"] == "guidance"],
     ids=lambda item: item["id"],
 )
-def test_stage_one_refuses_everything_else(item: dict) -> None:
-    """The cheap path never decides a message that might be a real question."""
+def test_stage_one_never_decides_a_real_question(item: dict) -> None:
+    """The invariant that survives the lexicon growing.
+
+    Stage 1 was extended on 13 Sep to decide `meta` and `followup` as well,
+    because those were the largest source of routing error at a 4-second
+    ceiling and three of the five misses were timeouts rather than
+    misjudgements. What may **never** change is this: a message that is
+    actually someone asking for help must not be decided by a word list.
+    Greeting, acknowledgement, meta and follow-up are all messages with no
+    subject of their own, which is what a word list can recognise; guidance is
+    not, and is only ever reached through the model or by failing open.
+    """
     assert rule_route(item["message"]) is None
 
 
@@ -147,8 +161,44 @@ def test_a_greeting_word_never_swallows_the_message_after_it(message: str) -> No
 
 def test_stage_one_is_bounded_by_length_as_well_as_content() -> None:
     """Even an all-lexicon message stops being a greeting once it is long."""
-    long_but_all_lexicon = " ".join(["ok"] * (SHORT_MESSAGE_WORDS + 1))
-    assert rule_route(long_but_all_lexicon) is None
+    bound = Lexicon.load().max_message_words
+    assert rule_route(" ".join(["ok"] * (bound + 1))) is None
+
+
+def test_the_length_bound_tracks_the_longest_phrase_and_no_further() -> None:
+    """Adding "can i trust these verses" must not widen the gate for "ok".
+
+    The bound is the longest phrase in the file, so a five-word phrase permits
+    a five-word message and nothing more. It is checked here because the
+    alternative - a hand-maintained constant - drifts the moment someone adds a
+    longer phrase, and the failure mode is silent over-permission.
+    """
+    lexicon = Lexicon.load()
+    longest = max(len(phrase.split()) for phrase in lexicon.phrases)
+    assert lexicon.max_message_words == max(SHORT_MESSAGE_WORDS, longest)
+    assert lexicon.max_message_words <= 6, "the cheap path is getting too permissive"
+
+
+@pytest.mark.parametrize(
+    "message",
+    ["नमस्ते", "ठीक है", "क्या हाल है", "समझ गया", "धन्यवाद", "अलविदा"],
+)
+def test_devanagari_is_matched_as_words_not_as_stripped_consonants(
+    message: str,
+) -> None:
+    """A regression test for a bug this file's own word count exposed.
+
+    ``\\w`` matches what ``str.isalnum()`` accepts, and a Devanagari matra is
+    category Mn, which is not alphanumeric - so the original normaliser turned
+    "नमस्ते" into "न म स त". Matching still worked, because the lexicon was
+    mangled identically, but the word count did not: a five-word Hindi phrase
+    counted as seven and silently widened the stage-1 length gate for every
+    message in every language. Five phrases also collided with each other once
+    their vowel signs were removed.
+    """
+    decision = rule_route(message)
+    assert decision is not None, message
+    assert len(_normalise(message).split()) <= 3, _normalise(message)
 
 
 def test_stage_one_tolerates_punctuation_emoji_and_stretched_letters() -> None:
@@ -171,11 +221,71 @@ def test_the_lexicon_file_holds_no_crisis_vocabulary() -> None:
     for phrase in lexicon.phrases:
         for word in phrase.split():
             assert word not in forbidden, f"{word!r} is stage-1 decidable"
-    # And the file may only ever decide the two zero-cost routes. A lexicon
-    # that could return `guidance` would be deciding, at zero cost and with no
+    # And the file may only ever decide the subjectless routes. A lexicon that
+    # could return `guidance` would be deciding, at zero cost and with no
     # model, that a message IS a real question - a much stronger claim than
     # deciding it is a greeting, and not one a word list can support.
-    assert set(lexicon.phrases.values()) <= {Route.GREETING, Route.ACK_OR_CLOSE}
+    assert set(lexicon.phrases.values()) <= LEXICON_ROUTES
+    assert Route.GUIDANCE not in LEXICON_ROUTES
+    assert Route.CRISIS not in LEXICON_ROUTES
+
+
+def test_a_lexicon_naming_a_forbidden_route_is_refused_not_ignored(
+    tmp_path: Path,
+) -> None:
+    """Silently dropping the section would leave the author believing it worked."""
+    bad = tmp_path / "lexicon.yaml"
+    bad.write_text(
+        "fillers: []\nroutes:\n  guidance:\n    english:\n      - what should i do\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="may not be decided"):
+        Lexicon.load(bad)
+
+
+def test_every_lexicon_route_can_be_resolved_by_the_precedence_order() -> None:
+    """A route missing from the precedence tuple falls off the end of the search."""
+    assert set(LEXICON_PRECEDENCE) == LEXICON_ROUTES
+
+
+def test_a_request_beats_social_framing_when_both_match() -> None:
+    """"hi who are you" is a question with a greeting attached."""
+    assert rule_route("hi who are you").route is Route.META
+    # And between the two purely social routes the opening move still wins.
+    assert rule_route("hi thanks").route is Route.GREETING
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("who are you", Route.META),
+        ("tum kaun ho", Route.META),
+        ("kya kar sakte ho", Route.META),
+        ("can I trust these verses", Route.META),
+        ("तुम कौन हो", Route.META),
+        ("is this AI", Route.META),
+        ("in Hindi", Route.FOLLOWUP),
+        ("hindi me", Route.FOLLOWUP),
+        ("example do", Route.FOLLOWUP),
+        ("simpler", Route.FOLLOWUP),
+        ("aur kya", Route.FOLLOWUP),
+        ("और क्या", Route.FOLLOWUP),
+    ],
+)
+def test_the_phrases_that_kept_losing_to_the_deadline_now_cost_nothing(
+    message: str, expected: Route
+) -> None:
+    """The 13 Sep extension, named case by case.
+
+    At a four-second ceiling these were where routing actually failed, and
+    three of the five misses were the call being cancelled rather than the
+    model being wrong - it knew the answer and ran out of time. They are fixed
+    phrases, so a word list answers them at zero cost and the deadline stops
+    applying to them at all.
+    """
+    decision = rule_route(message)
+    assert decision is not None, f"{message!r} still costs a model call"
+    assert decision.route is expected
 
 
 # ---------------------------------------------------------- the enum contract
@@ -239,8 +349,13 @@ async def test_a_followup_without_history_is_treated_as_guidance() -> None:
     assert decision.route is Route.GUIDANCE
 
 
-async def test_a_followup_retrieves_on_its_rewritten_query_not_its_own_words() -> None:
-    """"aur kya" has no retrievable signal; the rewrite is the whole point."""
+async def test_a_model_routed_followup_retrieves_on_its_rewrite() -> None:
+    """A follow-up's own words have no retrievable signal; the rewrite does.
+
+    Uses a phrase the lexicon does **not** hold, so this exercises the model
+    path. The lexicon path is the test below, and the two now behave
+    differently - see it for why that matters.
+    """
 
     class Rewrites(FakeLLMProvider):
         async def complete(self, prompt, **kwargs):  # type: ignore[override]
@@ -258,10 +373,41 @@ async def test_a_followup_retrieves_on_its_rewritten_query_not_its_own_words() -
                 model="test",
             )
 
+    message = "but what if he does not listen to any of that"
+    assert rule_route(message) is None, "this test needs the model path"
     memory = memory_with([["user", "boss ne daanta"], ["assistant", "BG-2.62"]])
-    decision = await ConversationRouter(llm=Rewrites()).route("aur kya", memory)
+    decision = await ConversationRouter(llm=Rewrites()).route(message, memory)
     assert decision.route is Route.FOLLOWUP
-    assert decision.retrieval_query("aur kya").startswith("further guidance")
+    assert decision.retrieval_query(message, memory).startswith("further guidance")
+
+
+async def test_a_lexicon_routed_followup_retrieves_on_the_previous_message() -> None:
+    """The zero-cost path buys latency and gives up the rewrite.
+
+    "aur kya" is now decided by the lexicon, so no model runs and there is no
+    standalone query to search for. Sending "aur kya" to the retriever would
+    match nothing, so the person's previous message stands in - it is the thing
+    being followed up on.
+
+    **This is a real trade and it is recorded rather than hidden.** For an
+    English session it costs nothing. For a Hinglish one it means the vector leg
+    searches raw Hinglish, which is measured at 0.00 against an English corpus
+    (kg_measurements section 14b), where a model rewrite would have been
+    English. Deciding follow-ups at zero cost and rewriting them for retrieval
+    are in tension, and this test exists so the tension is visible to whoever
+    changes it next.
+    """
+    memory = memory_with(
+        [["user", "boss ne sabke saamne daanta"], ["assistant", "Anger (BG-2.62)."]]
+    )
+    decision = await ConversationRouter(llm=FakeLLMProvider()).route("aur kya", memory)
+    assert decision.route is Route.FOLLOWUP
+    assert decision.stage is RouterDecisionStage.RULES
+    assert decision.standalone_query == ""
+    assert decision.retrieval_query("aur kya", memory) == "boss ne sabke saamne daanta"
+    # And with no history at all it is not a follow-up in the first place.
+    first_turn = await ConversationRouter(llm=FakeLLMProvider()).route("aur kya", None)
+    assert first_turn.route is Route.GUIDANCE
 
 
 async def test_a_guidance_turn_retrieves_on_the_persons_own_words() -> None:

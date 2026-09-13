@@ -187,9 +187,17 @@ class Settings(BaseSettings):
     #: Hard wall-clock ceiling for the router call. Past this the turn is routed
     #: to guidance and answered normally: a slow router must cost latency, never
     #: an answer.
-    router_timeout_seconds: float = 4.0
+    #:
+    #: Raised 4.0 -> 6.0 on 13 Sep 2026. At 4s the measured router was accurate
+    #: but kept missing its own deadline: 4 of 26 model-stage calls were
+    #: cancelled at the ceiling, and 3 of the 5 routing errors in the 40-message
+    #: set were timeouts rather than misjudgements (section 14b). The returning
+    #: calls sat at a median of 938ms, so the distribution is bimodal and the
+    #: extra 2s is spent only on the tail.
+    router_timeout_seconds: float = 6.0
     #: The reply is one small JSON object; anything longer is malformed.
     router_max_tokens: int = 160
+
 
     # ---------------------------------------------------------- knowledge graph
     #: Labels (Theme/Concept) attached to more than this fraction of the corpus

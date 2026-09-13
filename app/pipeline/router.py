@@ -121,16 +121,96 @@ MODEL_ROUTES: tuple[Route, ...] = (
 #: Routes whose reply is built from retrieved verses.
 RETRIEVING_ROUTES: frozenset[Route] = frozenset({Route.FOLLOWUP, Route.GUIDANCE})
 
-#: Stage 1 only decides messages at or below this length. A greeting is short;
-#: anything longer is doing more than greeting even if it opens with "hi".
+#: Routes the zero-cost lexicon is permitted to decide. All four are messages
+#: with no subject of their own, which is exactly what a word list can
+#: recognise. ``guidance`` is excluded because deciding that something IS a
+#: real request for help is a far stronger claim than deciding it is a
+#: greeting; ``crisis`` because that is the gate's verdict and the gate has
+#: already run. :meth:`Lexicon.load` raises on anything else.
+LEXICON_ROUTES: frozenset[Route] = frozenset(
+    {Route.GREETING, Route.ACK_OR_CLOSE, Route.META, Route.FOLLOWUP}
+)
+
+#: How a message that matches more than one route is resolved, most specific
+#: first. The principle is that an actual request beats social framing: "hi who
+#: are you" is a question with a greeting attached, and answering the greeting
+#: would drop the question. Between the two purely social routes the opening
+#: move wins, because "hi thanks" is still someone arriving.
+#:
+#: Every route in :data:`LEXICON_ROUTES` must appear here, or a message
+#: matching only that route would fall off the end of the search.
+LEXICON_PRECEDENCE: tuple[Route, ...] = (
+    Route.META,
+    Route.FOLLOWUP,
+    Route.GREETING,
+    Route.ACK_OR_CLOSE,
+)
+
+#: Stage 1 only decides messages at or below this length, or the length of the
+#: longest phrase in the lexicon if that is longer (see
+#: :attr:`Lexicon.longest_phrase_words`). A greeting is short; anything longer
+#: is doing more than greeting even if it opens with "hi".
+#:
+#: The bound is secondary protection. The rule that actually keeps stage 1 safe
+#: is whole-message consumption in :func:`rule_route`: every token must be a
+#: lexicon phrase or a filler, so length alone never admits a message that says
+#: something.
 SHORT_MESSAGE_WORDS = 4
+
+
+def _without_history_is_not_a_followup(
+    route: Route, memory: MemoryContext | None
+) -> Route:
+    """Downgrade a follow-up with nothing to follow to guidance.
+
+    Applied to **both** stages, which is the point of it being a function. The
+    model produces this on first turns, and now the lexicon can too - "simpler"
+    or "aur kya" as an opening message is not a request to simplify anything,
+    and routing it to followup would send two words to the retriever and print
+    a continuation of a conversation that has not happened.
+    """
+    if route is Route.FOLLOWUP and (memory is None or not memory.recent_turns):
+        logger.info("router said followup with no history; treating as guidance")
+        return Route.GUIDANCE
+    return route
+
+
+def _last_user_turn(memory: MemoryContext | None, current: str = "") -> str:
+    """The person's most recent message **before** this one, or ``""``.
+
+    ``current`` has to be excluded explicitly. The orchestrator writes the
+    incoming message to the repository before the memory stage runs, so by the
+    time memory is loaded the newest user turn in it *is* this turn - and
+    without this, "the previous message" resolves to "aur kya" itself, which is
+    the exact string that has no retrievable signal.
+    """
+    if memory is None:
+        return ""
+    current = current.strip()
+    for role, content in reversed(memory.recent_turns):
+        text = content.strip()
+        if role == "user" and text and text != current:
+            return text
+    return ""
 
 LEXICON_PATH = PROJECT_ROOT / "data" / "intent_lexicon.yaml"
 
-#: Letters in any script, plus the spaces between them. Punctuation, digits and
-#: emoji carry no routing signal and are dropped before matching.
-_NON_WORD_RE = re.compile(r"[^\w\s]|[\d_]", re.UNICODE)
 _SPACE_RE = re.compile(r"\s+")
+
+#: Unicode general-category initials that carry routing signal: letters (L*)
+#: and combining marks (M*). Everything else - punctuation, digits, symbols,
+#: emoji - is dropped before matching.
+#:
+#: Marks are the reason this is not simply ``[^\w\s]``. Python's ``\w`` matches
+#: what ``str.isalnum()`` accepts, and a Devanagari matra is category Mn, which
+#: is not alphanumeric - so a ``\w``-based strip turned "नमस्ते" into "न म स त",
+#: four "words" of one consonant each. Matching still worked, because both the
+#: lexicon and the message were mangled identically, but the **word count** did
+#: not: a five-word Hindi phrase counted as seven, which silently widened the
+#: stage-1 length gate for every message in every language. It also made the
+#: Devanagari entries fragile, since stripping the vowel signs collapses words
+#: that differ only by them.
+_KEPT_CATEGORIES = ("L", "M")
 
 
 class RouterDecisionStage(str, Enum):
@@ -164,28 +244,74 @@ class RouteDecision:
     def retrieves(self) -> bool:
         return self.route in RETRIEVING_ROUTES
 
-    def retrieval_query(self, message: str) -> str:
+    def retrieval_query(self, message: str, memory: MemoryContext | None = None) -> str:
         """What retrieval should actually search for.
 
         A follow-up's own text ("aur kya", "simpler please") contains almost no
-        retrievable signal, so the rewritten standalone query is used instead
-        when one exists. A first-turn guidance message is already standalone,
-        so its own words are kept - they are the person's own vocabulary, and
-        rewriting them can only lose information.
+        retrievable signal, so something else has to stand in for it:
+
+        1. the model's rewritten standalone query, when there is one;
+        2. otherwise the person's **previous** message, which is the thing being
+           followed up on. This is the case when the lexicon decided the
+           follow-up at zero cost, so no model ran and no rewrite exists -
+           without it, "simpler" would be sent to the retriever as a search
+           term and would match nothing.
+
+        A guidance message is already standalone, so its own words are kept
+        here: they are the person's own vocabulary, and for the **fulltext**
+        leg rewriting them can only lose information. The rewrite is applied to
+        the vector leg instead - see :meth:`vector_query`.
         """
-        if self.route is Route.FOLLOWUP and self.standalone_query:
-            return self.standalone_query
+        if self.route is Route.FOLLOWUP:
+            if self.standalone_query:
+                return self.standalone_query
+            previous = _last_user_turn(memory, current=message)
+            if previous:
+                return previous
         return message
+
+    def vector_query(self, message: str, enabled: bool = True) -> str | None:
+        """The text to embed for the vector leg, or ``None`` for "same as the query".
+
+        Returning ``None`` rather than the message itself is deliberate: it lets
+        the retriever leave its existing single-query path exactly as it was
+        when there is no rewrite, so the flag being off is byte-identical to
+        the behaviour before rewriting existed.
+
+        The rewrite is English. The corpus is English. The measured gap it
+        closes is that a Hinglish question scores 0.00 against an English
+        corpus on the encoder in production while the same question in English
+        scores 0.30 (section 14b).
+        """
+        if not enabled or not self.standalone_query:
+            return None
+        if self.standalone_query.strip() == message.strip():
+            return None
+        return self.standalone_query
 
 
 # --------------------------------------------------------------------------- #
 # Stage 1 - rules
 # --------------------------------------------------------------------------- #
 def _normalise(text: str) -> str:
-    """Lowercase, strip punctuation/emoji/digits, collapse whitespace."""
+    """Lowercase, strip punctuation/emoji/digits, collapse whitespace.
+
+    Letters and combining marks survive in every script; see
+    :data:`_KEPT_CATEGORIES` for why marks have to be named explicitly.
+
+    >>> _normalise("Namaste!!! 🙏")
+    'namaste'
+    >>> _normalise("नमस्ते").split()
+    ['नमस्ते']
+    """
     folded = unicodedata.normalize("NFKC", text).casefold()
-    folded = _NON_WORD_RE.sub(" ", folded)
-    return _SPACE_RE.sub(" ", folded).strip()
+    kept = "".join(
+        character
+        if character.isspace() or unicodedata.category(character)[0] in _KEPT_CATEGORIES
+        else " "
+        for character in folded
+    )
+    return _SPACE_RE.sub(" ", kept).strip()
 
 
 def _collapse(text: str) -> str:
@@ -214,6 +340,14 @@ class Lexicon:
     fillers: frozenset[str]
     #: Longest phrase first, so "good morning" is tried before "morning".
     ordered: tuple[str, ...]
+    #: Words in the longest phrase. The length gate uses this so that adding a
+    #: five-word phrase permits a five-word message, without widening the gate
+    #: for one-word greetings.
+    longest_phrase_words: int = SHORT_MESSAGE_WORDS
+
+    @property
+    def max_message_words(self) -> int:
+        return max(SHORT_MESSAGE_WORDS, self.longest_phrase_words)
 
     @classmethod
     def load(cls, path: Path | None = None) -> Lexicon:
@@ -223,6 +357,15 @@ class Lexicon:
         phrases: dict[str, Route] = {}
         for route_name, languages in (raw.get("routes") or {}).items():
             route = Route(route_name)
+            if route not in LEXICON_ROUTES:
+                # Refused rather than ignored. A file that could decide
+                # `guidance` at zero cost, or `crisis` at all, is a safety
+                # problem, and silently dropping the section would leave the
+                # author believing it took effect.
+                raise ValueError(
+                    f"{route.value!r} may not be decided by the stage-1 lexicon; "
+                    f"allowed: {sorted(item.value for item in LEXICON_ROUTES)}"
+                )
             for terms in languages.values():
                 for term in terms or ():
                     key = _collapse(_normalise(str(term)))
@@ -235,6 +378,7 @@ class Lexicon:
             phrases=phrases,
             fillers=fillers,
             ordered=tuple(sorted(phrases, key=len, reverse=True)),
+            longest_phrase_words=max((len(key.split()) for key in phrases), default=0),
         )
 
     @classmethod
@@ -268,14 +412,16 @@ def get_lexicon() -> Lexicon:
 
 
 def rule_route(message: str, lexicon: Lexicon | None = None) -> RouteDecision | None:
-    """Decide greeting/acknowledgement without a model, or return ``None``.
+    """Decide a subjectless message without a model, or return ``None``.
 
     The message must be **entirely** consumed by lexicon phrases and fillers,
-    and must be at most :data:`SHORT_MESSAGE_WORDS` words. Containment is not
-    enough and must never be: "hi i want to die" contains "hi".
+    and must be at most :attr:`Lexicon.max_message_words` words. Containment is
+    not enough and must never be: "hi i want to die" contains "hi".
 
     >>> rule_route("Namaste!").route            # doctest: +ELLIPSIS
     <Route.GREETING: 'greeting'>
+    >>> rule_route("who are you").route
+    <Route.META: 'meta'>
     >>> rule_route("hi i need help with my brother") is None
     True
     """
@@ -284,7 +430,7 @@ def rule_route(message: str, lexicon: Lexicon | None = None) -> RouteDecision | 
         return None
 
     normalised = _normalise(message)
-    if not normalised or len(normalised.split()) > SHORT_MESSAGE_WORDS:
+    if not normalised or len(normalised.split()) > lexicon.max_message_words:
         return None
 
     remaining = _collapse(normalised)
@@ -312,9 +458,7 @@ def rule_route(message: str, lexicon: Lexicon | None = None) -> RouteDecision | 
     if remaining or not routes:
         return None
 
-    # "hi thanks" is both; the opening move wins, because a greeting that also
-    # thanks is still someone arriving.
-    route = Route.GREETING if Route.GREETING in routes else Route.ACK_OR_CLOSE
+    route = next(item for item in LEXICON_PRECEDENCE if item in routes)
     return RouteDecision(
         route=route,
         stage=RouterDecisionStage.RULES,
@@ -415,8 +559,9 @@ class ConversationRouter:
 
         decided = rule_route(message, self.lexicon if self.lexicon is not None else None)
         if decided is not None:
+            route = _without_history_is_not_a_followup(decided.route, memory)
             return RouteDecision(
-                route=decided.route,
+                route=route,
                 stage=decided.stage,
                 rationale=decided.rationale,
                 matched_terms=decided.matched_terms,
@@ -484,9 +629,7 @@ class ConversationRouter:
 
         # A follow-up with no history to follow is a contradiction; the model
         # occasionally produces one on a first turn. Guidance is the honest read.
-        if route is Route.FOLLOWUP and (memory is None or not memory.recent_turns):
-            logger.info("router said followup with no history; treating as guidance")
-            route = Route.GUIDANCE
+        route = _without_history_is_not_a_followup(route, memory)
 
         standalone = str(payload.get("standalone_query", "") or "").strip()
         return RouteDecision(
