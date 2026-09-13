@@ -1261,3 +1261,155 @@ is measurable against the same set.
   set rather than padded with invented traffic.
 * **Whether testers find the conversation better.** The next round of
   feedback answers that, and no local measurement substitutes for it.
+
+---
+
+## 14c. Phase 1b follow-up - the deadline, the lexicon and the rewrite (measured 13-14 Sep 2026)
+
+Three decisions came back on section 14b: raise the router's ceiling to 6s,
+put the phrases that kept timing out into the zero-cost lexicon, and build
+the query rewrite that the encoder probes pointed at. Same stack as 14b -
+real NIM, real ONNX MiniLM fp32, full corpus, **in-memory retriever**, no
+Neo4j anywhere.
+
+### Routing: the target is met
+
+| | 14b (4s, greeting+ack lexicon) | now (6s, +meta+followup) |
+| --- | ---: | ---: |
+| router accuracy | 35/40 | **38/40** |
+| non-guidance messages that ran retrieval | 3/20 | **0/20** |
+| decided by the lexicon, at 0ms | 14/40 | **22/40** |
+| reached the model | 26/40 | 18/40 |
+| guidance replies inside 80-150 words | 8/14 | 9/14 |
+| guidance median words | 83 | 82 |
+
+**38/40, and the classifier made no errors at all.** Both remaining misses
+are follow-ups that hit the 6-second ceiling and failed open into guidance;
+the two genuine misjudgements from 14b (`tum kya kar sakte ho`, `in Hindi`)
+are now lexicon entries and cost nothing. Retrieval on messages that never
+asked for a verse is **0/20**, from 20/20 before the phase.
+
+That result was obtained while NIM was *slower* than in 14b - the
+model-stage median was 2634ms against 938ms - so it is a floor
+rather than a best case.
+
+### A bug the length gate exposed
+
+Making the gate track the longest phrase in the lexicon printed a bound of
+**seven** words for a file whose longest phrase is five. Python's `\w`
+matches what `str.isalnum()` accepts, and a Devanagari matra is category Mn,
+which is not alphanumeric - so the normaliser had been turning `नमस्ते` into
+`न म स त`, four "words" of one consonant each, and deleting every vowel sign
+in the file.
+
+Matching still worked, which is why nothing caught it: the lexicon was
+mangled identically to the message, so both sides met in the same wrong
+place. What did not survive was the word count - a five-word Hindi phrase
+counted as seven, silently widening the cheap path for every message in
+every language - and distinctness: five phrases collided once their vowel
+signs were removed, so the file held 219 entries where it meant 224.
+Normalisation now keeps Unicode categories L* and M*, which fixes Gujarati
+by the same change.
+
+### The query rewrite: built, shipped behind a flag, and NOT yet demonstrated
+
+The mechanism works and is tested: the fulltext leg keeps the person's own
+words, the vector leg embeds the router's English rewrite, and with no
+rewrite the retrievers take byte-identically the path they took before.
+
+The **measurement is inconclusive**, and that is the honest word for it.
+
+| full 40-query gold set | rewrite off | rewrite on |
+| --- | ---: | ---: |
+| emotional (n=12) | 0.250 | 0.167 |
+| hinglish (n=4) | 0.000 | 0.000 |
+| professional (n=12) | 0.000 | 0.083 |
+| relationship (n=4) | 0.000 | 0.000 |
+| statecraft (n=8) | 0.000 | 0.000 |
+| **overall** | **0.075** | **0.075** |
+
+| 10 paired cross-lingual queries | hit rate |
+| --- | ---: |
+| English original | 0.10 |
+| Hinglish, raw | 0.00 |
+| Hinglish, rewritten to English | 0.10 |
+
+The run itself is clean - **0 of 40 router fallbacks and 38 of 50 rewrites
+produced**, against 26/40 fallbacks on the attempt before it. What makes it
+inconclusive is the base rate: **three hits in forty**. A measurement
+resting on three hits cannot resolve a difference, and the one-gained /
+one-lost result on the gold set is what no signal looks like, not what no
+effect looks like.
+
+On the paired set the direction is right - Hinglish goes from 0.00 to 0.10,
+which is exactly the English figure, so the rewrite closes the whole
+measured gap - but that gap is one query wide.
+
+Against the stated decision rule (*default on if Hinglish improves and
+English does not drop*): Hinglish improved on the paired set, English did
+not drop on the gold set, so the flag ships **on**. The evidence for that is
+weak and is labelled weak. `GITAGUIDE_QUERY_REWRITE=off` reverts it without
+a deploy, and the real test is the Neo4j run in Step B.
+
+### Why the offline floor is so low - and one thing worth checking in Step B
+
+The in-memory hybrid scores 0.075 on the gold set where a *vector-only*
+probe over the same corpus and queries scored 0.200. Part of that is
+`expand_query`, which appends the detected emotions and the intent label to
+the query before **both** legs run:
+
+> `I feel like a failure after my exam results | Felt emotions:
+> disappointment, sadness, annoyance | Intent: seek guidance`
+
+Isolated - same retriever, same corpus, same queries, the only difference
+being whether emotion and intent are passed in:
+
+| | hit rate |
+| --- | ---: |
+| query expanded with emotion + intent (current behaviour) | 0.075 |
+| raw query | **0.125** |
+
+It flips six queries, gaining two and losing four. This is an **offline**
+number on a different retriever from production and it is **not** a reason
+to change `expand_query` now - but it is the first thing worth testing when
+Neo4j is back, because it costs nothing to test and the current retrieval
+floor is the headline problem behind every vague answer a tester reports.
+
+### Drift: the cheap tier degraded during the session, and a lever for it
+
+The first attempt at the rewrite measurement had to be discarded: 26 of 40
+router calls hit the ceiling and only 6 rewrites were produced, so the
+"rewritten" condition was mostly not rewritten. Two causes, separated:
+
+**The harness was partly measuring itself.** Forty turns back to back is not
+what forty testers look like. Same model, same prompts, same minute: median
+3588ms back to back against 1098ms spaced, 3/6 at the ceiling against 1/6.
+Both measurement harnesses are now paced.
+
+**And the cheap tier genuinely slowed down.** Pacing alone did not fix it:
+the spaced control measured 1098ms in the morning and 4313ms in the evening,
+same code, same prompts. That is NIM, not GitaGuide.
+
+Which makes the model choice a lever. Through the app's own provider path,
+with `/no_think` applied exactly as in production, same prompts and same
+pacing:
+
+| router model | median | at the 6s ceiling | rewrites produced |
+| --- | ---: | ---: | ---: |
+| `nemotron-3.5-lightning-30b` (the configured cheap tier) | 2720ms | 2/6 | 3/6 |
+| `nemotron-3-super-120b` (the generation primary) | **885ms** | **0/6** | **5/6** |
+
+The 120B model is three times faster than the 30B one for this task right
+now. That is counter-intuitive and it is measured. It is **not** applied:
+the reason routing sits on a different model is that a different model is a
+different NIM rate-limit bucket, so a burst that exhausts the primary's
+quota does not also stop the system telling a greeting from a real question,
+and giving that up on one evening's latency is a trade for the owner to make
+rather than a tuning fix. `GITAGUIDE_ROUTER_MODEL` moves it without a
+deploy.
+
+The valid rewrite measurement above was taken with the router pinned to the
+120B model, because the cheap tier could not complete inside its budget in
+that window. Which model writes the rewrite does not affect what the rewrite
+does to retrieval, which is what that table measures - but it is stated
+rather than left for someone to discover in the artefact.
