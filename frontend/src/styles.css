@@ -1,24 +1,46 @@
 /*
- * GitaGuide beta — design system.
+ * GitaGuide beta — design system v2.
  *
- * One column, one accent, one motion moment. The palette is dusk indigo with a
- * single marigold accent; there is deliberately no red anywhere, including on
- * errors and the crisis panel, because a person in distress should not be met
- * with an alarm colour.
+ * Elevated from the original dusk-indigo + marigold palette into a richer,
+ * more atmospheric experience. The palette philosophy is unchanged: no red
+ * anywhere, including on errors and the crisis panel, because a person in
+ * distress should not be met with an alarm colour.
+ *
+ * New: glassmorphism surfaces, ambient radial background, floating particles,
+ * entrance animations, gradient accents, and micro-interactions.
  */
 
+/* ================================================================ tokens === */
+
 :root {
-  --page: #141b33;
-  --panel: #1c2547;
-  --field: #273159;
-  --hair: #34406e;
+  --page: #0e1525;
+  --page-mid: #141b33;
+  --panel: rgba(28, 37, 71, 0.65);
+  --panel-solid: #1c2547;
+  --field: rgba(39, 49, 89, 0.55);
+  --field-solid: #273159;
+  --hair: rgba(52, 64, 110, 0.6);
+  --hair-solid: #34406e;
   --ink: #f3eee2;
   --ink-soft: #b7b3a4;
   --accent: #e9a23b;
-  --crisis: #33294a;
+  --accent-warm: #f0b85a;
+  --accent-deep: #d4882a;
+  --crisis: rgba(51, 41, 74, 0.75);
+
+  /* Glow tokens */
+  --glow-accent: rgba(233, 162, 59, 0.15);
+  --glow-accent-strong: rgba(233, 162, 59, 0.3);
+  --glow-accent-subtle: rgba(233, 162, 59, 0.08);
+
+  /* Glass tokens */
+  --glass-bg: rgba(20, 27, 51, 0.6);
+  --glass-border: rgba(52, 64, 110, 0.4);
+  --glass-blur: 16px;
 
   --column: 44rem;
-  --radius: 10px;
+  --radius: 12px;
+  --radius-lg: 16px;
 
   --font-display: 'Martel', Georgia, 'Times New Roman', serif;
   --font-ui: 'Mukta', system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -26,8 +48,14 @@
   color-scheme: dark;
 }
 
+/* ============================================================= base === */
+
 * {
   box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 html,
@@ -38,12 +66,36 @@ body {
 
 body {
   background: var(--page);
+  /* Ambient radial gradient: warm glow at center, fading to deep indigo */
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(233, 162, 59, 0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 80% at 50% 100%, rgba(233, 162, 59, 0.04) 0%, transparent 50%),
+    radial-gradient(ellipse 120% 100% at 50% 50%, rgba(20, 27, 51, 1) 0%, var(--page) 100%);
+  background-attachment: fixed;
   color: var(--ink);
   font-family: var(--font-ui);
   font-size: 17px;
   font-weight: 300;
   line-height: 1.65;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Styled scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--hair-solid);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-deep);
 }
 
 button,
@@ -73,12 +125,56 @@ textarea {
   border: 0;
 }
 
-/* ---------------------------------------------------------------- shell --- */
+/* ============================================================ animations === */
+
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes softGlow {
+  0%, 100% {
+    box-shadow: 0 0 20px var(--glow-accent-subtle);
+  }
+  50% {
+    box-shadow: 0 0 30px var(--glow-accent);
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes floatParticle {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translateY(-20px) scale(1.2);
+    opacity: 0.6;
+  }
+}
+
+/* ============================================================== shell === */
 
 .app {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  position: relative;
 }
 
 .column {
@@ -88,14 +184,35 @@ textarea {
   padding: 0 1.25rem;
 }
 
-/* --------------------------------------------------------------- header --- */
+/* ============================================================= header === */
 
 .header {
   position: sticky;
   top: 0;
   z-index: 5;
-  background: var(--page);
-  border-bottom: 1px solid var(--hair);
+  background: rgba(14, 21, 37, 0.75);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-bottom: 1px solid var(--glass-border);
+}
+
+/* Warm gradient underline */
+.header::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--accent-deep) 20%,
+    var(--accent) 50%,
+    var(--accent-deep) 80%,
+    transparent 100%
+  );
+  opacity: 0.5;
 }
 
 .header-inner {
@@ -113,11 +230,25 @@ textarea {
   letter-spacing: 0.01em;
   margin: 0;
   line-height: 1.2;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .wordmark em {
   color: var(--accent);
   font-style: normal;
+}
+
+/* Decorative diya icon next to wordmark */
+.wordmark-diya {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--glow-accent-strong), 0 0 16px var(--glow-accent);
+  animation: diya-pulse 2.4s ease-in-out infinite;
 }
 
 .tag {
@@ -126,15 +257,16 @@ textarea {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-soft);
-  border: 1px solid var(--hair);
+  border: 1px solid var(--glass-border);
   border-radius: 999px;
   padding: 0.1rem 0.55rem;
   white-space: nowrap;
+  backdrop-filter: blur(8px);
 }
 
 .tag-mock {
   color: var(--page);
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), var(--accent-warm));
   border-color: var(--accent);
   font-weight: 600;
 }
@@ -145,22 +277,23 @@ textarea {
 
 .link-button {
   background: none;
-  border: 1px solid var(--hair);
+  border: 1px solid var(--glass-border);
   border-radius: 999px;
   color: var(--ink-soft);
   cursor: pointer;
   font-size: 0.85rem;
   font-weight: 500;
   padding: 0.25rem 0.8rem;
-  transition: color 120ms ease, border-color 120ms ease;
+  transition: color 200ms ease, border-color 200ms ease, background 200ms ease;
 }
 
 .link-button:hover {
   color: var(--ink);
   border-color: var(--accent);
+  background: var(--glow-accent-subtle);
 }
 
-/* ----------------------------------------------------------- transcript --- */
+/* ========================================================= transcript === */
 
 .transcript {
   flex: 1;
@@ -168,27 +301,86 @@ textarea {
   padding-bottom: 1rem;
 }
 
+/* ------------------------------------------------------- empty state --- */
+
+.empty-state-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 4rem 1rem 2rem;
+  animation: fadeSlideUp 0.6s ease-out;
+}
+
+.empty-diya {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 1.5rem;
+  opacity: 0.85;
+}
+
+/* SVG flame glow */
+.empty-diya-glow {
+  filter: drop-shadow(0 0 12px rgba(233, 162, 59, 0.5)) drop-shadow(0 0 24px rgba(233, 162, 59, 0.2));
+}
+
 .empty-state {
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: 1.5rem;
+  font-size: 1.6rem;
   line-height: 1.4;
   color: var(--ink);
-  margin: 3.5rem 0 0;
+  margin: 0;
 }
 
 .empty-hint {
   color: var(--ink-soft);
   margin-top: 0.6rem;
   font-size: 0.95rem;
+  max-width: 28rem;
 }
+
+/* Suggestion chips */
+.suggestion-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1.8rem;
+  max-width: 36rem;
+}
+
+.suggestion-chip {
+  background: var(--field);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 400;
+  padding: 0.45rem 1rem;
+  transition: all 200ms ease;
+  backdrop-filter: blur(8px);
+}
+
+.suggestion-chip:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+  background: var(--glow-accent-subtle);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* ------------------------------------------------------------ turns --- */
 
 .turn {
   margin-bottom: 2.25rem;
+  animation: fadeSlideUp 0.35s ease-out;
 }
 
-/* User: a quiet right-aligned bubble. It should read as an aside, not a
- * headline — the assistant's reflection is the content of the page. */
+/* User: a right-aligned glassmorphic bubble. */
 .turn-user {
   display: flex;
   justify-content: flex-end;
@@ -196,17 +388,21 @@ textarea {
 
 .bubble {
   background: var(--field);
-  border: 1px solid var(--hair);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius);
-  padding: 0.65rem 0.95rem;
+  padding: 0.7rem 1rem;
   max-width: 85%;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: box-shadow 200ms ease;
 }
 
-/* Assistant: no bubble. Commentary against a marigold rule. */
+/* Assistant: no bubble. Commentary against a gradient marigold rule. */
 .commentary {
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid transparent;
+  border-image: linear-gradient(180deg, var(--accent), var(--accent-deep)) 1;
   padding-left: 1.15rem;
 }
 
@@ -260,7 +456,7 @@ textarea {
   color: var(--ink);
 }
 
-/* ---------------------------------------------------------------- verse --- */
+/* ============================================================== verse === */
 
 .leaf {
   background: var(--panel);
@@ -268,6 +464,20 @@ textarea {
   border-radius: 0 0 var(--radius) var(--radius);
   padding: 1rem 1.15rem 1.1rem;
   margin: 1.25rem 0;
+  backdrop-filter: blur(8px);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.2),
+    0 0 0 1px var(--glass-border),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transition: box-shadow 300ms ease, transform 200ms ease;
+}
+
+.leaf:hover {
+  box-shadow:
+    0 4px 20px rgba(0, 0, 0, 0.25),
+    0 0 0 1px rgba(233, 162, 59, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transform: translateY(-1px);
 }
 
 .leaf-ref {
@@ -284,15 +494,14 @@ textarea {
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
   text-underline-offset: 3px;
-  transition: text-decoration-color 120ms ease;
+  transition: text-decoration-color 200ms ease;
 }
 
 .leaf-ref a:hover {
   text-decoration-color: var(--accent);
 }
 
-/* The path that surfaced this verse. It sat in the reply as a "Why this verse"
- * section until 9 Sep 2026; it belongs next to the citation it explains. */
+/* The path that surfaced this verse. */
 .leaf-why {
   margin: 0.35rem 0 0;
   font-size: 0.8rem;
@@ -301,8 +510,6 @@ textarea {
   overflow-wrap: anywhere;
 }
 
-/* The verse itself: present in full, collapsed by default. Testers asked for
- * references rather than pasted slokas, not for the text to be unavailable. */
 .leaf-details {
   margin-top: 0.7rem;
 }
@@ -313,6 +520,7 @@ textarea {
   letter-spacing: 0.04em;
   color: var(--ink-soft);
   list-style: none;
+  transition: color 200ms ease;
 }
 
 .leaf-details summary::-webkit-details-marker {
@@ -322,6 +530,7 @@ textarea {
 .leaf-details summary::before {
   content: '+ ';
   color: var(--accent);
+  transition: transform 200ms ease;
 }
 
 .leaf-details[open] summary::before {
@@ -349,13 +558,16 @@ textarea {
   letter-spacing: 0.04em;
 }
 
-/* --------------------------------------------------------------- crisis --- */
+/* ============================================================= crisis === */
 
 .crisis {
   background: var(--crisis);
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid transparent;
+  border-image: linear-gradient(180deg, var(--accent), var(--accent-deep)) 1;
   border-radius: 0 var(--radius) var(--radius) 0;
   padding: 1.15rem 1.25rem;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
 }
 
 .crisis p {
@@ -379,12 +591,13 @@ textarea {
   font-weight: 600;
 }
 
-/* ---------------------------------------------------------------- error --- */
+/* ============================================================== error === */
 
 .error-turn {
-  border-left: 2px solid var(--hair);
+  border-left: 2px solid var(--hair-solid);
   padding-left: 1.15rem;
   color: var(--ink-soft);
+  animation: fadeSlideUp 0.35s ease-out;
 }
 
 .error-turn p {
@@ -405,14 +618,16 @@ textarea {
   font-size: 0.88rem;
   font-weight: 500;
   padding: 0.25rem 0.9rem;
+  transition: all 200ms ease;
 }
 
 .retry-button:hover {
   background: var(--accent);
   color: var(--page);
+  box-shadow: 0 0 12px var(--glow-accent);
 }
 
-/* ----------------------------------------------------------------- meta --- */
+/* =============================================================== meta === */
 
 .meta {
   margin-top: 0.9rem;
@@ -421,15 +636,16 @@ textarea {
   line-height: 1.7;
   color: var(--ink-soft);
   letter-spacing: 0.02em;
+  opacity: 0.8;
 }
 
 .meta span + span::before {
   content: '·';
   margin: 0 0.45rem;
-  color: var(--hair);
+  color: var(--hair-solid);
 }
 
-/* ------------------------------------------------------------- feedback --- */
+/* =========================================================== feedback === */
 
 .feedback {
   margin-top: 0.7rem;
@@ -445,18 +661,23 @@ textarea {
 
 .feedback-button {
   background: none;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--glass-border);
   border-radius: 999px;
-  color: var(--accent);
+  color: var(--ink-soft);
   cursor: pointer;
   font-size: 0.8rem;
   font-weight: 500;
-  padding: 0.15rem 0.75rem;
+  padding: 0.2rem 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: all 200ms ease;
 }
 
 .feedback-button:hover:not(:disabled) {
-  background: var(--accent);
-  color: var(--page);
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--glow-accent-subtle);
 }
 
 .feedback-button:disabled {
@@ -466,7 +687,9 @@ textarea {
 
 .feedback-button.is-chosen {
   background: var(--accent);
+  border-color: var(--accent);
   color: var(--page);
+  box-shadow: 0 0 8px var(--glow-accent);
 }
 
 .feedback-thanks {
@@ -495,19 +718,25 @@ textarea {
   flex: 1;
   min-width: 0;
   background: var(--field);
-  border: 1px solid var(--hair);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   color: var(--ink);
   font-family: inherit;
   font-size: 0.85rem;
   padding: 0.35rem 0.65rem;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.feedback-comment input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--glow-accent-subtle);
 }
 
 .feedback-comment input::placeholder {
   color: var(--ink-soft);
 }
 
-/* -------------------------------------------------------------- waiting --- */
+/* =========================================================== waiting === */
 
 .waiting {
   display: flex;
@@ -515,10 +744,11 @@ textarea {
   gap: 0.75rem;
   color: var(--ink-soft);
   padding-left: 1.15rem;
-  border-left: 2px solid var(--hair);
+  border-left: 2px solid var(--hair-solid);
+  animation: fadeIn 0.3s ease-out;
 }
 
-/* The single motion moment in the whole app: a slow diya. */
+/* The slow diya — a warm pulsing dot. */
 .diya {
   width: 9px;
   height: 9px;
@@ -526,6 +756,31 @@ textarea {
   background: var(--accent);
   flex: none;
   animation: diya-pulse 2.4s ease-in-out infinite;
+  box-shadow: 0 0 8px var(--glow-accent-strong);
+}
+
+/* Three-dot diya breathing */
+.diya-group {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.diya-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: diya-pulse 2.4s ease-in-out infinite;
+  box-shadow: 0 0 6px var(--glow-accent);
+}
+
+.diya-dot:nth-child(2) {
+  animation-delay: 0.4s;
+}
+
+.diya-dot:nth-child(3) {
+  animation-delay: 0.8s;
 }
 
 @keyframes diya-pulse {
@@ -541,21 +796,59 @@ textarea {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .diya {
+  .diya,
+  .diya-dot,
+  .wordmark-diya {
     animation: none;
     opacity: 0.9;
   }
+
+  .turn,
+  .empty-state-wrap,
+  .gate-card,
+  .error-turn {
+    animation: none;
+  }
+
+  .suggestion-chip:hover {
+    transform: none;
+  }
+
+  .leaf:hover {
+    transform: none;
+  }
 }
 
-/* ------------------------------------------------------------- composer --- */
+/* =========================================================== composer === */
 
 .composer-wrap {
   position: sticky;
   bottom: 0;
-  background: var(--page);
-  border-top: 1px solid var(--hair);
+  background: rgba(14, 21, 37, 0.8);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-top: 1px solid var(--glass-border);
   padding-top: 0.9rem;
   padding-bottom: 0.75rem;
+}
+
+/* Warm glow on top edge */
+.composer-wrap::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--accent-deep) 30%,
+    var(--accent) 50%,
+    var(--accent-deep) 70%,
+    transparent 100%
+  );
+  opacity: 0.3;
 }
 
 .composer {
@@ -567,13 +860,20 @@ textarea {
 .composer textarea {
   flex: 1;
   background: var(--field);
-  border: 1px solid var(--hair);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   color: var(--ink);
   padding: 0.7rem 0.9rem;
   resize: none;
   max-height: 12rem;
   overflow-y: auto;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.composer textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--glow-accent-subtle);
+  outline: none;
 }
 
 .composer textarea::placeholder {
@@ -585,22 +885,43 @@ textarea {
 }
 
 .send-button {
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), var(--accent-warm));
   border: 1px solid var(--accent);
   border-radius: var(--radius);
   color: var(--page);
   cursor: pointer;
   font-weight: 600;
   padding: 0.65rem 1.15rem;
+  transition: all 200ms ease;
+  box-shadow: 0 2px 8px rgba(233, 162, 59, 0.2);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.send-button:hover:not(:disabled) {
+  box-shadow: 0 4px 16px rgba(233, 162, 59, 0.35);
+  transform: translateY(-1px);
 }
 
 .send-button:disabled {
-  opacity: 0.45;
+  opacity: 0.4;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
-/* Offline notice above the composer. No alarm colour: the palette has none,
- * and a dropped connection is not the tester's fault. */
+.send-icon {
+  width: 16px;
+  height: 16px;
+  fill: var(--page);
+  transition: transform 200ms ease;
+}
+
+.send-button:hover:not(:disabled) .send-icon {
+  transform: translateX(2px);
+}
+
+/* Offline notice above the composer. */
 .composer-offline {
   margin: 0 0 0.6rem;
   padding: 0.5rem 0.75rem;
@@ -609,6 +930,7 @@ textarea {
   border-radius: 0 var(--radius) var(--radius) 0;
   font-size: 0.85rem;
   color: var(--ink);
+  backdrop-filter: blur(8px);
 }
 
 .footnote {
@@ -616,18 +938,18 @@ textarea {
   font-size: 0.78rem;
   line-height: 1.6;
   color: var(--ink-soft);
+  opacity: 0.7;
 }
 
-/* Links in the quiet text (footnote, gate terms, static pages): underlined so
- * they read as links against text of the same colour, marigold on hover. */
+/* Links in the quiet text. */
 .footnote a,
 .gate-terms a,
 .static-page a {
   color: inherit;
   text-decoration: underline;
-  text-decoration-color: var(--hair);
+  text-decoration-color: var(--hair-solid);
   text-underline-offset: 2px;
-  transition: color 120ms ease, text-decoration-color 120ms ease;
+  transition: color 200ms ease, text-decoration-color 200ms ease;
 }
 
 .footnote a:hover,
@@ -641,7 +963,7 @@ textarea {
   white-space: nowrap;
 }
 
-/* ----------------------------------------------------------- static page --- */
+/* ======================================================== static page === */
 
 .static-page {
   flex: 1;
@@ -702,12 +1024,12 @@ textarea {
 .static-page-foot {
   margin-top: 2.5rem;
   padding-top: 1rem;
-  border-top: 1px solid var(--hair);
+  border-top: 1px solid var(--hair-solid);
   font-size: 0.85rem;
   color: var(--ink-soft);
 }
 
-/* --------------------------------------------------------------- gate ----- */
+/* ============================================================== gate === */
 
 .gate {
   display: flex;
@@ -715,27 +1037,69 @@ textarea {
   justify-content: center;
   min-height: 100vh;
   padding: 2rem 1.25rem;
+  /* Stronger ambient glow for the gate */
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 40%, rgba(233, 162, 59, 0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 120% 100% at 50% 50%, rgba(20, 27, 51, 1) 0%, var(--page) 100%);
 }
 
 .gate-card {
   width: 100%;
   max-width: 34rem;
   background: var(--panel);
-  border: 1px solid var(--hair);
-  border-radius: var(--radius);
-  padding: 1.75rem;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  box-shadow:
+    0 8px 40px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(255, 255, 255, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  animation: fadeSlideUp 0.5s ease-out;
+}
+
+/* Decorative lotus/Om motif at the top */
+.gate-motif {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1.25rem;
+}
+
+.gate-motif svg {
+  width: 48px;
+  height: 48px;
+  opacity: 0.7;
+  filter: drop-shadow(0 0 12px rgba(233, 162, 59, 0.3));
 }
 
 .gate-card h1 {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 1.6rem;
-  margin: 0 0 1rem;
+  font-size: 1.7rem;
+  margin: 0 0 0.5rem;
+  text-align: center;
 }
 
 .gate-card h1 em {
   color: var(--accent);
   font-style: normal;
+}
+
+.gate-intro {
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+  margin: 0 0 1.5rem;
+  line-height: 1.6;
+}
+
+/* Divider between gate sections */
+.gate-divider {
+  border: none;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--hair-solid), transparent);
+  margin: 1.2rem 0;
 }
 
 .gate-card h2 {
@@ -744,7 +1108,7 @@ textarea {
   font-size: 0.78rem;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--ink-soft);
+  color: var(--accent);
   margin: 1.4rem 0 0.4rem;
 }
 
@@ -767,6 +1131,7 @@ textarea {
   margin: 1.4rem 0 0;
   font-size: 0.85rem;
   color: var(--ink-soft);
+  text-align: center;
 }
 
 .gate-error {
@@ -781,16 +1146,24 @@ textarea {
 .gate-accept {
   width: 100%;
   margin-top: 1.75rem;
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), var(--accent-warm));
   border: 1px solid var(--accent);
   border-radius: var(--radius);
   color: var(--page);
   cursor: pointer;
   font-weight: 600;
-  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  padding: 0.85rem 1rem;
+  transition: all 250ms ease;
+  box-shadow: 0 4px 16px rgba(233, 162, 59, 0.25);
 }
 
-/* --------------------------------------------------------------- mobile --- */
+.gate-accept:hover {
+  box-shadow: 0 6px 24px rgba(233, 162, 59, 0.4);
+  transform: translateY(-1px);
+}
+
+/* ============================================================ mobile === */
 
 @media (max-width: 480px) {
   body {
@@ -819,5 +1192,22 @@ textarea {
 
   .gate-card {
     padding: 1.25rem;
+  }
+
+  .empty-state-wrap {
+    padding: 2.5rem 0.5rem 1.5rem;
+  }
+
+  .empty-state {
+    font-size: 1.35rem;
+  }
+
+  .suggestion-chips {
+    gap: 0.4rem;
+  }
+
+  .suggestion-chip {
+    font-size: 0.8rem;
+    padding: 0.35rem 0.8rem;
   }
 }

@@ -11,6 +11,7 @@ export default function Header({ onNewSession }) {
     <header className="header">
       <div className="column header-inner">
         <h1 className="wordmark">
+          <span className="wordmark-diya" aria-hidden="true" />
           Gita<em>Guide</em>
         </h1>
         <span className="tag">closed beta</span>

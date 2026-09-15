@@ -56,6 +56,7 @@ export default function FeedbackControl({ messageId }) {
           aria-pressed={rating === 'up'}
           onClick={() => vote('up')}
         >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8.5 1.5a1 1 0 00-1.8-.1L4.6 6H2a1 1 0 00-1 1v6a1 1 0 001 1h3.2a2 2 0 001.4-.6l3.3-3.3a1 1 0 00.3-.7V4.5a1 1 0 00-.3-.7L8.5 1.5zM13 6h1.5a.5.5 0 01.5.5v7a.5.5 0 01-.5.5H13V6z"/></svg>
           Helpful
         </button>
         <button
@@ -64,6 +65,7 @@ export default function FeedbackControl({ messageId }) {
           aria-pressed={rating === 'down'}
           onClick={() => vote('down')}
         >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style={{transform: 'rotate(180deg)'}}><path d="M8.5 1.5a1 1 0 00-1.8-.1L4.6 6H2a1 1 0 00-1 1v6a1 1 0 001 1h3.2a2 2 0 001.4-.6l3.3-3.3a1 1 0 00.3-.7V4.5a1 1 0 00-.3-.7L8.5 1.5zM13 6h1.5a.5.5 0 01.5.5v7a.5.5 0 01-.5.5H13V6z"/></svg>
           Not helpful
         </button>
         {rating && !error && <span className="feedback-thanks">Thanks — recorded.</span>}

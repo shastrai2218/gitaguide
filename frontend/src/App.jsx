@@ -206,13 +206,34 @@ export default function App() {
 
       <main className="column transcript">
         {entries.length === 0 && !busy && (
-          <>
+          <div className="empty-state-wrap">
+            <svg className="empty-diya empty-diya-glow" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <ellipse cx="32" cy="52" rx="14" ry="4" fill="#e9a23b" opacity="0.25"/>
+              <path d="M26 52c0-4 2-8 6-20 4 12 6 16 6 20a6 6 0 01-12 0z" fill="#e9a23b" opacity="0.8"/>
+              <path d="M30 52c0-2 1-5 2-10 1 5 2 8 2 10a2 2 0 01-4 0z" fill="#f0b85a"/>
+              <circle cx="32" cy="30" r="2" fill="#f0b85a" opacity="0.7"/>
+              <path d="M32 8v18" stroke="#e9a23b" strokeWidth="1" strokeLinecap="round" opacity="0.4"/>
+            </svg>
             <p className="empty-state">What is weighing on you today?</p>
             <p className="empty-hint">
               Write it plainly. GitaGuide will answer with a reflection and the
               verses it drew on.
             </p>
-          </>
+            <div className="suggestion-chips">
+              <button type="button" className="suggestion-chip" onClick={() => setDraft('I feel anxious about the future')}>
+                I feel anxious about the future
+              </button>
+              <button type="button" className="suggestion-chip" onClick={() => setDraft('I am struggling with a difficult decision')}>
+                I'm struggling with a decision
+              </button>
+              <button type="button" className="suggestion-chip" onClick={() => setDraft('I feel lost and don\'t know my purpose')}>
+                I feel lost and purposeless
+              </button>
+              <button type="button" className="suggestion-chip" onClick={() => setDraft('I am dealing with anger I cannot control')}>
+                I can't control my anger
+              </button>
+            </div>
+          </div>
         )}
 
         {entries.map((entry, index) => {
