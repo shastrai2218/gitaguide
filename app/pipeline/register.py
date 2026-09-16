@@ -1,5 +1,7 @@
 """Which language register the user wrote in, so the answer can mirror it.
 
+Called by: app.pipeline.generation, per prompt.
+
 Tester feedback, 9 Sep 2026: *"Reply answer in hinglish."* Testers write to
 GitaGuide the way they speak - Devanagari Hindi, Roman-script Hinglish, or
 English - and an English-only reply to a Hinglish message reads like a form

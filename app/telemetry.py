@@ -1,5 +1,7 @@
 """Per-turn telemetry: one JSON line per turn, plus daily counters.
 
+Called by: app.api.beta, app.pipeline.generation, app.pipeline.router.
+
 Why this exists
 ---------------
 Two of the numbers this project cares most about were measured **once**, by

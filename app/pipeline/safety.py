@@ -1,5 +1,7 @@
 """Stage 3 - the safety gate (runs BEFORE retrieval and generation).
 
+Called by: app.pipeline.orchestrator, stages 3 and 7.
+
 Research-pipeline role
 ---------------------
 GitaGuide answers emotionally loaded questions, so the gate is the component
@@ -57,9 +59,7 @@ logger = logging.getLogger(__name__)
 # not a blocking threshold and must be calibrated from tester traffic.
 SEMANTIC_NEAR_MISS_FLOOR = 0.20
 
-# --------------------------------------------------------------------------- #
 # Crisis response
-# --------------------------------------------------------------------------- #
 INDIAN_HELPLINES: tuple[tuple[str, str, str], ...] = (
     ("Tele-MANAS", "14416 (or 1-800-891-4416)", "Government of India, 24x7, many languages"),
     ("iCall (TISS)", "9152987821", "Mon-Sat, 10am-8pm, counsellor-staffed"),
@@ -124,9 +124,7 @@ def build_crisis_response(
     return "\n".join(lines).strip()
 
 
-# --------------------------------------------------------------------------- #
 # Rule layer
-# --------------------------------------------------------------------------- #
 @dataclass(frozen=True)
 class SafetyRule:
     """One regex rule in the deterministic layer.
@@ -302,9 +300,7 @@ HARD_CATEGORIES = frozenset(
 )
 
 
-# --------------------------------------------------------------------------- #
 # Output layer
-# --------------------------------------------------------------------------- #
 #: Crisis-adjacent vocabulary for the conservative fallback.
 #:
 #: This is **not** a detection layer. It is consulted only when the semantic
@@ -387,9 +383,7 @@ OUTPUT_FALLBACK_RESPONSE = (
 )
 
 
-# --------------------------------------------------------------------------- #
 # Logging sink
-# --------------------------------------------------------------------------- #
 @dataclass
 class SafetyEvent:
     """One auditable gate decision (persisted to ``safety_logs``)."""
@@ -462,9 +456,7 @@ class CompositeSafetyEventSink(SafetyEventSink):
                 logger.exception("safety sink %s failed", type(sink).__name__)
 
 
-# --------------------------------------------------------------------------- #
 # The gate
-# --------------------------------------------------------------------------- #
 class SafetyGate:
     """Rule layer + semantic risk policy on input, content check on output.
 

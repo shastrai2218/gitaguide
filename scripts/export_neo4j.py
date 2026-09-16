@@ -126,9 +126,7 @@ def fetch(driver: Any, database: str, cypher: str, **params: Any) -> list[dict[s
     return [record.data() for record in records]
 
 
-# --------------------------------------------------------------------------- #
 # Which encoder wrote the vectors
-# --------------------------------------------------------------------------- #
 def cosine(left: Sequence[float], right: Sequence[float]) -> float:
     dot = sum(a * b for a, b in zip(left, right, strict=True))
     norms = math.sqrt(sum(a * a for a in left)) * math.sqrt(sum(b * b for b in right))

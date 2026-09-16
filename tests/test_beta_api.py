@@ -40,9 +40,7 @@ def client() -> Iterator[TestClient]:
         yield test_client
 
 
-# --------------------------------------------------------------------------- #
 # Happy path
-# --------------------------------------------------------------------------- #
 def test_beta_chat_returns_the_ui_envelope(client: TestClient) -> None:
     response = client.post(
         "/api/chat",
@@ -139,9 +137,7 @@ def test_beta_chat_memory_matches_the_research_surface(client: TestClient) -> No
     )
 
 
-# --------------------------------------------------------------------------- #
 # Blocked turn
-# --------------------------------------------------------------------------- #
 def test_beta_chat_blocked_turn_shows_crisis_text_and_no_citations(
     client: TestClient,
 ) -> None:
@@ -173,9 +169,7 @@ def test_beta_chat_blocked_turn_runs_no_retrieval_or_generation(
     assert body["stages_run"] == ["emotion", "intent", "safety_input"]
 
 
-# --------------------------------------------------------------------------- #
 # History
-# --------------------------------------------------------------------------- #
 def test_beta_session_messages_returns_persisted_turns(client: TestClient) -> None:
     session = "beta-history"
     client.post("/api/chat", json={"session_id": session, "message": "I am overworked"})
@@ -198,13 +192,11 @@ def test_beta_session_messages_unknown_session_is_empty(client: TestClient) -> N
     assert response.json()["messages"] == []
 
 
-# --------------------------------------------------------------------------- #
 # The citation surface (added 9 Sep 2026)
 #
 # The reply stopped carrying the verse text and the graph-path explanation, so
 # the citation payload has to carry both - otherwise "shorter answers" would
 # just mean "less evidence", which is the opposite of the point.
-# --------------------------------------------------------------------------- #
 def test_each_citation_carries_its_id_label_and_full_text(client: TestClient) -> None:
     body = client.post(
         "/api/chat",
@@ -277,9 +269,7 @@ def test_a_blocked_turn_still_carries_no_citations_at_all(client: TestClient) ->
     assert body["citations"] == []
 
 
-# --------------------------------------------------------------------------- #
 # Phase 1b - routing, as the wire sees it
-# --------------------------------------------------------------------------- #
 def test_a_greeting_reaches_the_wire_with_no_citations_and_no_retrieval(
     client: TestClient,
 ) -> None:

@@ -47,9 +47,7 @@ def render_yaml() -> str:
     return RENDER_YAML.read_text(encoding="utf-8")
 
 
-# --------------------------------------------------------------------------- #
 # One worker
-# --------------------------------------------------------------------------- #
 def test_the_production_start_command_runs_exactly_one_worker(dockerfile: str) -> None:
     """A worker bump must fail here rather than silently doubling every limit."""
     cmd = next(
@@ -155,9 +153,7 @@ def test_render_runs_a_single_instance(render_yaml: str) -> None:
     )
 
 
-# --------------------------------------------------------------------------- #
 # Proxy hops
-# --------------------------------------------------------------------------- #
 def test_production_declares_its_proxy_hop_count(render_yaml: str) -> None:
     """Behind Render there is exactly one proxy, and it has to be declared.
 
@@ -185,14 +181,12 @@ def test_the_default_is_to_trust_no_proxy_headers() -> None:
     assert Settings(mock_mode=True).rate_limit_trusted_proxy_hops == 0
 
 
-# --------------------------------------------------------------------------- #
 # Memory-critical settings
 #
 # These only work as a set. INT8 is chosen because 512 MB cannot hold the fp32
 # encoder; but INT8 alone still leaves a single turn at 84% of the cap, so
 # concurrent turns must also be prevented. Shipping one without the other looks
 # fine in every test and dies under the first burst.
-# --------------------------------------------------------------------------- #
 def _env_value(render_yaml: str, key: str) -> str | None:
     match = re.search(rf'{key}\s*\n\s*value:\s*"?([^"\n]+)"?', render_yaml)
     return match.group(1).strip() if match else None
@@ -268,14 +262,12 @@ def test_serialisation_and_int8_default_safely_in_code(
     assert settings.embedder_precision == "fp32"
 
 
-# --------------------------------------------------------------------------- #
 # CORS
 #
 # The service is Blueprint managed, so a sync applies whatever render.yaml says.
 # A `sync: false` entry with a value typed into the dashboard is exactly what a
 # sync would clear, and the failure is every /api call from the UI refused by
 # the browser while the server reports nothing wrong.
-# --------------------------------------------------------------------------- #
 FRONTEND_ORIGIN = "https://gitaguide-livid.vercel.app"
 
 

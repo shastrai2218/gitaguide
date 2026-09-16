@@ -19,9 +19,7 @@ from app.config import Settings
 from app.main import create_app
 
 
-# --------------------------------------------------------------------------- #
 # Token bucket
-# --------------------------------------------------------------------------- #
 def test_bucket_allows_a_burst_then_refuses() -> None:
     bucket = TokenBucket(capacity=3, rate_per_minute=5)
     assert [bucket.take(now=0.0) for _ in range(3)] == [0.0, 0.0, 0.0]
@@ -54,9 +52,7 @@ def test_retry_after_is_a_whole_number_of_seconds_and_never_zero() -> None:
     assert isinstance(decision.retry_after_seconds, int)
 
 
-# --------------------------------------------------------------------------- #
 # Scope precedence
-# --------------------------------------------------------------------------- #
 def test_a_session_rejection_does_not_spend_global_budget() -> None:
     """One noisy tester must not drain the shared budget they never used."""
     limiter = RateLimiter(
@@ -97,9 +93,7 @@ def test_an_ip_shared_by_many_testers_is_not_the_binding_limit() -> None:
     assert allowed == 8
 
 
-# --------------------------------------------------------------------------- #
 # The endpoint
-# --------------------------------------------------------------------------- #
 @pytest.fixture
 def limited_client() -> Iterator[TestClient]:
     """A tiny session budget so the 429 path is reachable in one test."""
@@ -149,9 +143,7 @@ def test_one_session_hitting_its_limit_does_not_block_another(
     assert limited_client.post("/api/chat", json=second).status_code == 200
 
 
-# --------------------------------------------------------------------------- #
 # Which address gets limited
-# --------------------------------------------------------------------------- #
 def test_without_a_declared_proxy_the_header_is_ignored() -> None:
     """The default must not believe a client-supplied header."""
     assert client_ip_from("1.2.3.4", "10.0.0.9", trusted_hops=0) == "10.0.0.9"
@@ -192,9 +184,7 @@ def test_two_testers_behind_one_proxy_are_told_apart() -> None:
     assert first != second
 
 
-# --------------------------------------------------------------------------- #
 # Why production looked unlimited
-# --------------------------------------------------------------------------- #
 #: Production values, so this documents the real deployment rather than a toy.
 PROD = {
     "session_per_minute": 5,

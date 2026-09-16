@@ -1,5 +1,7 @@
 """Stage 0 - the orchestrator that chains every other stage.
 
+Called by: app.api.beta (chat) and app.api.routes.
+
 Research-pipeline role
 ---------------------
 This is the canonical description of the GitaGuide pipeline, in code::
@@ -170,17 +172,20 @@ class GuidanceOrchestrator:
         session = await self.repository.ensure_session(turn.session_id, turn.locale)
         message = turn.message.strip()
 
-        # ---- stage 1: emotion (CPU-bound; off the event loop) -------------
+        # 1. emotion: CPU-bound ONNX, so off the event loop.
         with timer(STAGE_EMOTION):
             emotion: EmotionResult = await asyncio.to_thread(self.detector.detect, message)
         stages.append(STAGE_EMOTION)
 
-        # ---- stage 2: intent ---------------------------------------------
+        # 2. intent: what the message is ABOUT. Feeds the gate and the
+        # scripture prior in re-ranking. Not the router - see stage 4b.
         with timer(STAGE_INTENT):
             intent: IntentResult = await self.intent_classifier.classify(message, emotion)
         stages.append(STAGE_INTENT)
 
-        # ---- stage 3: SAFETY GATE (before retrieval/generation) ----------
+        # 3. SAFETY GATE, and it runs here so that nothing downstream can
+        # weaken it: a blocked turn returns below, before retrieval,
+        # generation or the router exist in the call path at all.
         with timer(STAGE_SAFETY_INPUT):
             input_verdict = self.safety_gate.check_input(message, emotion, intent, session.id)
         stages.append(STAGE_SAFETY_INPUT)
@@ -210,22 +215,24 @@ class GuidanceOrchestrator:
                 timer=timer,
             )
 
-        # ---- stage 4: memory ---------------------------------------------
+        # 4. memory: rolling summary + last N turns, and the verse ids already
+        # cited. The router needs this, so it loads first.
         with timer(STAGE_MEMORY):
             memory_context = await self.memory.load(session.id)
             memory_trace = memory_context.trace()
         stages.append(STAGE_MEMORY)
 
-        # ---- stage 4b: conversational routing ----------------------------
-        # After the gate (so crisis is already handled) and after memory (so a
-        # follow-up has something to follow).
+        # 4b. router: lexicon first (0ms, no model), else one cheap-tier JSON
+        # call bounded by GITAGUIDE_ROUTER_TIMEOUT_SECONDS. Any failure fails
+        # OPEN to `guidance`, which retrieves - never to a refusal.
         with timer(STAGE_ROUTER):
             decision: RouteDecision = await self.router.route(message, memory_context)
         stages.append(STAGE_ROUTER)
         tier = tier_for(decision.route)
 
-        # ---- stage 5: hybrid retrieval -----------------------------------
-        # Conditional now. A greeting does not get a verse it never asked for.
+        # 5. retrieval, now conditional: a greeting gets no verse. The tier
+        # decides (app.pipeline.tiers), and it also carries the word budget
+        # and the output-guard floor used in stage 6.
         retrieval: RetrievalTrace | None = None
         if tier.retrieves:
             with timer(STAGE_RETRIEVAL):
@@ -233,17 +240,18 @@ class GuidanceOrchestrator:
                     decision.retrieval_query(message, memory_context),
                     emotion,
                     intent,
-                    # The fulltext leg keeps the person's own words; the vector
-                    # leg searches the English rewrite, because the corpus is
-                    # English. No rewrite - a timeout, the lexicon, the flag off
-                    # - passes None and the retriever takes its original path.
+                    # Fulltext gets their words, vector gets the English
+                    # rewrite (GITAGUIDE_QUERY_REWRITE). None = no rewrite, and
+                    # the retriever takes its original single-query path.
                     vector_query=decision.vector_query(
                         message, self.settings.query_rewrite
                     ),
                 )
             stages.append(STAGE_RETRIEVAL)
 
-        # ---- stage 6: generation -----------------------------------------
+        # 6. generation: history and cited refs go into the prompt here. The
+        # no-retrieval branch cites nothing and is judged against the tier's
+        # own guard floor, so a 5-word "thanks" is not shed as a fragment.
         with timer(STAGE_GENERATION):
             if retrieval is None:
                 generation: GenerationResult = await self.generator.generate_conversational(
@@ -255,7 +263,7 @@ class GuidanceOrchestrator:
                 )
         stages.append(STAGE_GENERATION)
 
-        # ---- stage 7: SAFETY GATE (output) -------------------------------
+        # 7. output gate, outside the stage-5 branch: it runs on greetings too.
         with timer(STAGE_SAFETY_OUTPUT):
             output_verdict = self.safety_gate.check_output(
                 generation.answer, session.id, input_verdict
@@ -267,7 +275,7 @@ class GuidanceOrchestrator:
             else generation.answer
         )
 
-        # ---- stage 8: persist + memory refresh ---------------------------
+        # 8. persist + refresh the rolling summary.
         # The row stores the timings for the stages that *produced* it, the same
         # cut as its own ``latency_ms``: the persist figure cannot be inside the
         # row that the persisting writes. It is measured, logged and returned.
@@ -469,9 +477,7 @@ class GuidanceOrchestrator:
         await self.repository.aclose()
 
 
-# --------------------------------------------------------------------------- #
 # Wiring
-# --------------------------------------------------------------------------- #
 def build_orchestrator(
     settings: Settings | None = None,
     repository: Repository | None = None,

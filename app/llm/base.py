@@ -1,5 +1,7 @@
 """Provider-agnostic LLM interface.
 
+Called by: every provider in app.llm, and the fallback chain.
+
 Research-pipeline role
 ---------------------
 Three stages call an LLM: intent classification (zero-shot), grounded answer

@@ -23,9 +23,7 @@ from app.main import create_app
 from app.pipeline.generation import OVERLOADED_ANSWER, PROVIDER_OVERLOADED
 
 
-# --------------------------------------------------------------------------- #
 # The gate
-# --------------------------------------------------------------------------- #
 async def test_only_one_turn_runs_at_a_time() -> None:
     """The property the memory bound depends on."""
     gate = PipelineGate(timeout_seconds=5.0)
@@ -111,9 +109,7 @@ async def test_queue_depth_is_observable() -> None:
     assert gate.waiting == 0
 
 
-# --------------------------------------------------------------------------- #
 # The endpoint
-# --------------------------------------------------------------------------- #
 @pytest.fixture
 def client() -> Iterator[TestClient]:
     app = create_app(
@@ -210,7 +206,6 @@ def test_health_and_consent_are_not_serialised(client: TestClient) -> None:
         gate._semaphore.release()
 
 
-# --------------------------------------------------------------------------- #
 # Cancellation accounting (added 9 Sep 2026)
 #
 # Production showed 15 pipeline admissions against 2 completed turns, and the
@@ -218,7 +213,6 @@ def test_health_and_consent_are_not_serialised(client: TestClient) -> None:
 # admission counter and then skips both record_turn and the 500 handler,
 # because CancelledError is a BaseException and `except Exception` never sees
 # it. So a client that hung up was indistinguishable from a server error.
-# --------------------------------------------------------------------------- #
 def test_a_cancelled_turn_is_counted_and_the_cancellation_propagates(
     client: TestClient,
 ) -> None:

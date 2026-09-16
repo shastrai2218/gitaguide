@@ -82,9 +82,7 @@ async def live_trace(retriever: InMemoryHybridRetriever) -> RetrievalTrace:
     return await retriever.retrieve("I am anxious about my appraisal")
 
 
-# --------------------------------------------------------------------------- #
 # Item 1 + 6: the shape and the length
-# --------------------------------------------------------------------------- #
 def test_the_system_prompt_states_the_word_budget() -> None:
     assert "80-150 words" in SYSTEM_PROMPT
 
@@ -111,9 +109,7 @@ def test_the_system_prompt_caps_citations_at_two() -> None:
     assert "AT MOST TWO" in SYSTEM_PROMPT
 
 
-# --------------------------------------------------------------------------- #
 # Item 1: long form only on request
-# --------------------------------------------------------------------------- #
 @pytest.mark.parametrize(
     "query",
     [
@@ -156,9 +152,7 @@ def test_the_length_override_still_forbids_pasting_the_verse() -> None:
     assert "do not paste" in override
 
 
-# --------------------------------------------------------------------------- #
 # Item 3: cross-source synthesis, only when both are really there
-# --------------------------------------------------------------------------- #
 def test_retrieved_sources_reads_the_trace() -> None:
     assert retrieved_sources(trace_of(GITA)) == {ScriptureSource.BHAGAVAD_GITA}
     assert retrieved_sources(trace_of(ARTHA)) == {ScriptureSource.ARTHASHASTRA}
@@ -185,9 +179,7 @@ def test_the_cross_source_instruction_assigns_each_text_its_job() -> None:
     assert "arthashastra for the practical" in lowered
 
 
-# --------------------------------------------------------------------------- #
 # Item 5: the register reaches the prompt and the trace
-# --------------------------------------------------------------------------- #
 @pytest.mark.parametrize(
     ("query", "expected"),
     [
@@ -227,9 +219,7 @@ def test_the_prompt_never_shows_an_id_the_model_may_not_cite() -> None:
         assert ids <= set(trace.verse_ids), f"{query!r} leaked {ids - set(trace.verse_ids)}"
 
 
-# --------------------------------------------------------------------------- #
 # Item 4: no verse text in the reply, including from the fallbacks
-# --------------------------------------------------------------------------- #
 def test_the_system_prompt_forbids_quoting_the_verse() -> None:
     lowered = SYSTEM_PROMPT.lower()
     assert "do not quote" in lowered
@@ -269,9 +259,7 @@ async def test_the_no_context_answer_quotes_nothing(
     assert llm.calls == [], "no model call without context"
 
 
-# --------------------------------------------------------------------------- #
 # The contract must not weaken the guarantees that were already there
-# --------------------------------------------------------------------------- #
 async def test_grounding_still_holds_under_the_new_contract(
     llm: FakeLLMProvider, settings: Settings, live_trace: RetrievalTrace
 ) -> None:

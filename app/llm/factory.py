@@ -1,4 +1,7 @@
-"""Build the configured provider, with the resilient failover chain."""
+"""Build the configured provider, with the resilient failover chain.
+
+Called by: app.pipeline.orchestrator.build_orchestrator.
+"""
 
 from __future__ import annotations
 

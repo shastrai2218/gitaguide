@@ -30,9 +30,7 @@ ANSWER_PROMPT = f"TASK: {TASK_ANSWER}\n\nCONTEXT:\n[BG-2.47] ...\nUSER MESSAGE: 
 INTENT_PROMPT = f"TASK: {TASK_INTENT}\n\nUSER MESSAGE: should I resign"
 
 
-# --------------------------------------------------------------------------- #
 # Test doubles
-# --------------------------------------------------------------------------- #
 class StubError(Exception):
     """Stands in for ``openai.APIStatusError`` (duck-typed by the provider)."""
 
@@ -108,9 +106,7 @@ def make_provider(settings: Settings, script: list[Any]) -> tuple[NvidiaProvider
     return NvidiaProvider(settings, client=client), client
 
 
-# --------------------------------------------------------------------------- #
 # Think-block stripping
-# --------------------------------------------------------------------------- #
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
@@ -184,9 +180,7 @@ async def test_template_kwargs_rejection_degrades_gracefully(
     assert client.calls[1]["messages"][0]["content"].startswith("/no_think")
 
 
-# --------------------------------------------------------------------------- #
 # Token budgets
-# --------------------------------------------------------------------------- #
 async def test_generation_defaults(nvidia_settings: Settings) -> None:
     provider, client = make_provider(nvidia_settings, [StubCompletion("BG-2.47 ...")])
     await provider.complete(ANSWER_PROMPT)
@@ -215,9 +209,7 @@ def test_intent_prompt_detection() -> None:
     assert not is_intent_prompt(ANSWER_PROMPT)
 
 
-# --------------------------------------------------------------------------- #
 # Retry behaviour
-# --------------------------------------------------------------------------- #
 async def test_429_then_success(nvidia_settings: Settings, sleep_calls: list[float]) -> None:
     provider, client = make_provider(
         nvidia_settings, [StubError(429, "rate limit"), StubCompletion("BG-2.47 ...")]
@@ -321,9 +313,7 @@ def test_bad_retry_after_falls_back_to_backoff() -> None:
     assert retry_after_seconds(StubError(429, retry_after="not-a-number")) is None
 
 
-# --------------------------------------------------------------------------- #
 # Failover chain
-# --------------------------------------------------------------------------- #
 def test_chain_order_is_super_then_lightning(nvidia_settings: Settings) -> None:
     chain = build_nvidia_chain(nvidia_settings)
     assert [provider.name for provider in chain] == [
@@ -418,9 +408,7 @@ async def test_retries_happen_before_failover(nvidia_settings: Settings) -> None
     assert len(nano_client.calls) == 0
 
 
-# --------------------------------------------------------------------------- #
 # Wiring / configuration
-# --------------------------------------------------------------------------- #
 def test_nvidia_is_the_default_provider_when_a_key_is_present() -> None:
     settings = Settings(mock_mode=False, nvidia_api_key="nvapi-x", llm_provider=LLMProviderName.FAKE)
     assert settings.resolved_llm_provider is LLMProviderName.NVIDIA
@@ -478,9 +466,7 @@ async def test_aclose_closes_the_client(nvidia_settings: Settings) -> None:
     assert client.closed
 
 
-# --------------------------------------------------------------------------- #
 # Response mapping
-# --------------------------------------------------------------------------- #
 async def test_usage_and_metadata_are_recorded(nvidia_settings: Settings) -> None:
     provider, _ = make_provider(nvidia_settings, [StubCompletion("BG-2.47 ...")])
     response = await provider.complete(ANSWER_PROMPT)

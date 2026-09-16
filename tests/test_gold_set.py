@@ -53,9 +53,7 @@ def _corpus() -> Corpus:
     )
 
 
-# --------------------------------------------------------------------------- #
 # Fingerprints
-# --------------------------------------------------------------------------- #
 def test_fingerprint_is_the_opening_words_lowercased() -> None:
     assert fingerprint_of("But you have only the right to work, but none to the fruit") == (
         "but you have only the right to work,"
@@ -66,9 +64,7 @@ def test_fingerprint_is_whitespace_insensitive() -> None:
     assert fingerprint_of("a  b\n c") == fingerprint_of("a b c")
 
 
-# --------------------------------------------------------------------------- #
 # Staleness detection - the three ways a gold id rots
-# --------------------------------------------------------------------------- #
 def test_clean_gold_set_reports_nothing() -> None:
     gold = {
         "pairs": [
@@ -123,9 +119,7 @@ def test_detects_a_missing_fingerprint() -> None:
     assert "no stored fingerprint" in problems[0]
 
 
-# --------------------------------------------------------------------------- #
 # The committed gold set's structure
-# --------------------------------------------------------------------------- #
 def test_gold_set_size_and_stratification(gold: dict) -> None:
     pairs = gold["pairs"]
     assert len(pairs) == 40, "40 queries keeps the metric quantum at 2.5 points"

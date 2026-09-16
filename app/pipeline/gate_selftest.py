@@ -1,5 +1,7 @@
 """Boot-time proof that the safety pipeline is actually armed.
 
+Called by: app.main, once at startup.
+
 Why this exists
 ---------------
 The rule layer is a table of regexes. Nothing about a disabled rule is visible:

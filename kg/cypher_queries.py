@@ -25,9 +25,7 @@ Relationships
 
 from __future__ import annotations
 
-# --------------------------------------------------------------------------- #
 # Constraints and indexes
-# --------------------------------------------------------------------------- #
 CONSTRAINTS: tuple[str, ...] = (
     "CREATE CONSTRAINT verse_id IF NOT EXISTS FOR (v:Verse) REQUIRE v.id IS UNIQUE",
     "CREATE CONSTRAINT theme_name IF NOT EXISTS FOR (t:Theme) REQUIRE t.name IS UNIQUE",
@@ -52,9 +50,7 @@ FOR (v:Verse) ON EACH [v.text_english, v.commentary, v.transliteration]
 
 DROP_ALL = "MATCH (n) DETACH DELETE n"
 
-# --------------------------------------------------------------------------- #
 # Ingestion
-# --------------------------------------------------------------------------- #
 MERGE_SCRIPTURE = """
 MERGE (s:Scripture {key: $key})
 SET s.name = $name
@@ -173,9 +169,7 @@ RETURN count { MATCH (v:Verse) RETURN v }                   AS verses,
        count { MATCH (v:Verse) WHERE v.book IS NOT NULL RETURN v } AS verses_with_book
 """
 
-# --------------------------------------------------------------------------- #
 # Retrieval
-# --------------------------------------------------------------------------- #
 #: Tail query for ``neo4j_graphrag.retrievers.HybridCypherRetriever``.
 #:
 #: The package supplies the ``node``/``score`` variables from the fused vector +

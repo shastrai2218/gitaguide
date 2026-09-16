@@ -96,9 +96,7 @@ def test_the_canonical_cases_are_what_they_claim_to_be() -> None:
     assert len(CANONICAL_CONTROL.split()) >= 5
 
 
-# --------------------------------------------------------------------------- #
 # The generation-budget floor
-# --------------------------------------------------------------------------- #
 def test_the_default_budget_passes_the_floor() -> None:
     check_generation_budget(Settings(mock_mode=True))
 

@@ -1,5 +1,7 @@
 """How a cited verse is named and linked in a reply.
 
+Called by: app.api.beta, when building the citation surface.
+
 Tester item 4: *"Dont show direct slog directly just give it reference link."*
 The reply now names the verse and points at it instead of pasting it, so the
 label and the link are part of the contract rather than presentation detail,

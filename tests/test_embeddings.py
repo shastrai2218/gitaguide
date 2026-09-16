@@ -40,9 +40,7 @@ PARITY_TEXTS = [
 ]
 
 
-# --------------------------------------------------------------------------- #
 # Offline embedder
-# --------------------------------------------------------------------------- #
 def test_hashing_embedder_is_deterministic_and_normalised() -> None:
     embedder = HashingEmbedder(dim=384)
     first = embedder.embed_one("my manager took credit for my work")
@@ -61,9 +59,7 @@ def test_cosine_similarity_is_clamped() -> None:
     assert math.isclose(cosine_similarity([1.0, 0.0], [1.0, 0.0]), 1.0, rel_tol=1e-9)
 
 
-# --------------------------------------------------------------------------- #
 # Parity with the encoder that built the index
-# --------------------------------------------------------------------------- #
 @pytest.mark.slow
 @pytest.mark.skipif(
     os.environ.get("GITAGUIDE_RUN_PARITY") != "1",
@@ -97,9 +93,7 @@ def test_onnx_matches_the_torch_encoder() -> None:
         ), "vectors must be L2-normalised, as the Pooling+Normalize modules do"
 
 
-# --------------------------------------------------------------------------- #
 # Precision selection
-# --------------------------------------------------------------------------- #
 def test_fp32_is_the_default_so_local_development_is_unchanged() -> None:
     """Switching precision must be a deliberate act, not a surprise."""
     from app.embeddings import OnnxMiniLMEmbedder

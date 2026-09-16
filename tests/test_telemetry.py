@@ -53,9 +53,7 @@ def _events(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
 
 
-# --------------------------------------------------------------------------- #
 # Privacy
-# --------------------------------------------------------------------------- #
 def test_no_message_text_is_ever_written(
     telemetry_client: tuple[TestClient, Path],
 ) -> None:
@@ -88,9 +86,7 @@ def test_the_same_session_hashes_consistently_and_others_differ() -> None:
     assert hash_session(None, "salt") == "anon"
 
 
-# --------------------------------------------------------------------------- #
 # Event content
-# --------------------------------------------------------------------------- #
 def test_an_event_carries_what_an_investigation_needs(
     telemetry_client: tuple[TestClient, Path],
 ) -> None:
@@ -121,9 +117,7 @@ def test_a_blocked_turn_is_recorded_as_blocked(
     assert "14416" not in log_path.read_text(encoding="utf-8")
 
 
-# --------------------------------------------------------------------------- #
 # Daily counters
-# --------------------------------------------------------------------------- #
 def test_risk_counters_are_always_present_even_at_zero() -> None:
     """A missing counter must never be read as "that never happens"."""
     counters = DailyCounters()

@@ -1,5 +1,7 @@
 """Central configuration for GitaGuide.
 
+Called by: everything; the only place backends are chosen.
+
 Research-pipeline role
 ---------------------
 Every module in the pipeline is dual-mode: it either talks to a real backing
