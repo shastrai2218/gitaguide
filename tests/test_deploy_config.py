@@ -302,3 +302,116 @@ def test_cors_origins_are_exact_https_origins(render_yaml: str) -> None:
         assert origin.count("/") == 2, f"{origin!r} carries a path; an origin has none"
         assert "*" not in origin, "a wildcard would open the API to any site"
 
+
+
+# The image must contain what the image reads
+#
+# On 16 Sep 2026 the Render image had no data/ directory. The Dockerfile copied
+# app, corpus, kg, eval and scripts, and data/intent_lexicon.yaml had shipped
+# three days earlier in a directory nobody had added to that list. Stage 1 of
+# the router was disabled for every message on every turn; the service stayed
+# up and answered correctly, so the only symptom was that "hi" cost a model
+# call. A prod smoke test found it, not a test in here.
+#
+# The general form of that mistake is a runtime file the image does not carry,
+# so this checks the general form rather than the one file.
+SOURCE_PACKAGES = ("app", "corpus", "kg")
+
+#: ``PROJECT_ROOT / "data" / ...`` -> the first path segment, which is the
+#: top-level directory the image must carry. A false positive here (a match
+#: inside a comment or a string) can only demand an extra COPY, never permit a
+#: missing one, so the failure direction is the safe one.
+_PROJECT_ROOT_PATH_RE = re.compile(r'PROJECT_ROOT\s*/\s*"([^"/]+)"')
+#: ``COPY <src> <dst>``, ignoring multi-stage ``COPY --from=`` forms.
+_COPY_RE = re.compile(r"^COPY\s+(?!--)(\S+)\s+\S+\s*$", re.MULTILINE)
+
+
+def _runtime_roots() -> set[str]:
+    """Top-level directories the shipped code reads at ``PROJECT_ROOT``."""
+    found: set[str] = set()
+    for package in SOURCE_PACKAGES:
+        for path in sorted((ROOT / package).rglob("*.py")):
+            if "__pycache__" in path.parts:
+                continue
+            found.update(_PROJECT_ROOT_PATH_RE.findall(path.read_text(encoding="utf-8")))
+    return found
+
+
+def _copied_roots(dockerfile: str) -> set[str]:
+    return {source.split("/")[0].lstrip("./") for source in _COPY_RE.findall(dockerfile)}
+
+
+def test_the_image_copies_every_directory_the_code_reads(dockerfile: str) -> None:
+    """Every ``PROJECT_ROOT``-relative read must have a COPY behind it.
+
+    This is the test that would have caught the missing lexicon before a
+    deployment did, and it keeps working for the next file someone puts in a
+    directory the Dockerfile has never heard of.
+    """
+    required = _runtime_roots()
+    copied = _copied_roots(dockerfile)
+    assert required, "found no PROJECT_ROOT-relative reads; the regex has rotted"
+    missing = sorted(required - copied)
+    assert not missing, (
+        f"the Dockerfile does not COPY {missing}, but the code reads it at "
+        f"PROJECT_ROOT. The image would run and degrade silently. Copied: "
+        f"{sorted(copied)}"
+    )
+
+
+def test_the_lexicon_directory_in_particular_is_copied(dockerfile: str) -> None:
+    """Named explicitly, because this is the one that actually shipped broken."""
+    assert "data" in _copied_roots(dockerfile)
+    assert (ROOT / "data" / "intent_lexicon.yaml").exists()
+
+
+def test_the_build_context_excludes_the_graph_export() -> None:
+    """`COPY data ./data` must not drag 68 MB of Neo4j dump into the image.
+
+    data/graph_export is untracked, so Render's build context never had it -
+    but a local `docker build` would, and a 68 MB image change is not something
+    anyone would connect to a one-line Dockerfile edit.
+    """
+    ignore = (ROOT / ".dockerignore").read_text(encoding="utf-8")
+    assert "data/graph_export" in ignore
+
+
+# The router variables are declared, not left to defaults
+#
+# They were documented in DEPLOY.md on 13 Sep and never added to render.yaml,
+# so for three days the deployment ran on code defaults that happened to match.
+# That is luck, not configuration, and it is invisible in the dashboard.
+ROUTER_ENV = {
+    "GITAGUIDE_ROUTER_MODEL_ENABLED": "true",
+    "GITAGUIDE_ROUTER_MODEL": "nvidia/nemotron-3.5-lightning-30b-a3b",
+    "GITAGUIDE_ROUTER_TIMEOUT_SECONDS": "6",
+    "GITAGUIDE_ROUTER_MAX_TOKENS": "160",
+    "GITAGUIDE_QUERY_REWRITE": "on",
+}
+
+
+@pytest.mark.parametrize(("key", "expected"), sorted(ROUTER_ENV.items()))
+def test_render_declares_the_router_variables(
+    render_yaml: str, key: str, expected: str
+) -> None:
+    assert _env_value(render_yaml, key) == expected
+
+
+def test_the_declared_router_values_match_the_code_defaults() -> None:
+    """A blueprint value that silently disagrees with the default is a trap.
+
+    Whichever one a reader trusts, the other is wrong, and nothing says which
+    the deployment used.
+    """
+    from app.config import Settings
+
+    settings = Settings(_env_file=None)
+    assert str(settings.router_model_enabled).lower() == ROUTER_ENV[
+        "GITAGUIDE_ROUTER_MODEL_ENABLED"
+    ]
+    assert settings.router_model == ROUTER_ENV["GITAGUIDE_ROUTER_MODEL"]
+    assert settings.router_timeout_seconds == float(
+        ROUTER_ENV["GITAGUIDE_ROUTER_TIMEOUT_SECONDS"]
+    )
+    assert settings.router_max_tokens == int(ROUTER_ENV["GITAGUIDE_ROUTER_MAX_TOKENS"])
+    assert settings.query_rewrite is True

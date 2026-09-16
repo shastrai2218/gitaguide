@@ -147,6 +147,38 @@ services:
       - key: GITAGUIDE_GENERATION_BUDGET_SECONDS
         value: "45"
 
+      # ---- conversational router (Phase 1b) --------------------------------
+      # Declared here rather than left to the code defaults so the two levers
+      # below are visible and changeable in the dashboard without a deploy.
+      # The values match app/config.py exactly; docs/DEPLOY.md explains each.
+      #
+      # LEVER 1. false leaves only the zero-cost lexicon, and every message it
+      # does not decide is treated as guidance - the pre-Phase-1b behaviour.
+      # This is the way back if routing misbehaves in front of testers.
+      - key: GITAGUIDE_ROUTER_MODEL_ENABLED
+        value: "true"
+      # LEVER 2. The cheap tier, deliberately a DIFFERENT model from the
+      # generation primary so routing sits in its own NIM rate-limit bucket: a
+      # burst that exhausts the 120B quota does not also stop the system telling
+      # a greeting from a real question. The 120B measured three times faster
+      # for this task on 14 Sep (section 14c), but switching would give up that
+      # isolation, so it stays on the cheap tier until that trade is decided.
+      - key: GITAGUIDE_ROUTER_MODEL
+        value: nvidia/nemotron-3.5-lightning-30b-a3b
+      # Past this the turn is routed to guidance and answered normally: a slow
+      # router costs latency, never an answer. Raised from 4 on 13 Sep, when 3
+      # of 5 routing errors turned out to be timeouts rather than misjudgements.
+      - key: GITAGUIDE_ROUTER_TIMEOUT_SECONDS
+        value: "6"
+      - key: GITAGUIDE_ROUTER_MAX_TOKENS
+        value: "160"
+      # Embeds the router's English rewrite on the vector leg; the fulltext leg
+      # always keeps the person's own words. A Hinglish question scores 0.00
+      # against an English corpus and the same question in English 0.30, and no
+      # encoder tested fixes that. off restores the single-query path.
+      - key: GITAGUIDE_QUERY_REWRITE
+        value: "on"
+
       # ---- consent and telemetry ------------------------------------------
       - key: GITAGUIDE_CONSENT_REQUIRED
         value: "true"

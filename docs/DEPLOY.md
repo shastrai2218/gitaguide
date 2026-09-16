@@ -190,7 +190,12 @@ the API's first boot. Reasoning and the verification queries:
    | `GITAGUIDE_TELEMETRY_SESSION_SALT` | any long random string, set once |
    | `GITAGUIDE_CORS_ORIGINS` | **leave blank for now** — step 5 |
 
-   Confirm these are present and correct, from `render.yaml`:
+   Everything below is set by `render.yaml`, so it should already be present in
+   the dashboard — confirm the values rather than adding them. If one is
+   **missing**, the blueprint did not sync: the code default still applies and
+   the service runs, which is exactly how the router variables went unnoticed
+   between 13 and 16 Sep. `tests/test_deploy_config.py` now fails if any of
+   them drops out of `render.yaml`.
 
    | NAME | Value | Why it matters |
    | --- | --- | --- |

@@ -1,0 +1,28 @@
+# Keep the build context to what the image actually needs.
+#
+# This file exists because `COPY data ./data` was added: data/ is 69 MB on a
+# developer's machine and 68 MB of that is data/graph_export, the Neo4j dump
+# used by the import scripts. It is untracked, so Render's build context (a git
+# clone) never had it - but a local `docker build` would have copied all of it
+# into the image, which is a surprise nobody would connect to a one-line
+# Dockerfile change.
+
+.git
+.github
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.venv
+venv
+
+# Generated, large, and only ever read by scripts/import_neo4j.py on a laptop.
+data/graph_export
+
+# The frontend is deployed to Vercel, not served from this image.
+frontend/node_modules
+frontend/dist
+
+docs
+logs
+models

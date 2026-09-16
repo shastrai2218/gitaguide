@@ -98,6 +98,50 @@ def check_generation_budget(settings: Settings | None = None) -> None:
     raise StartupConfigError("refusing to start: " + detail)
 
 
+def check_router_lexicon() -> int:
+    """Say loudly, at boot, whether the stage-1 lexicon actually loaded.
+
+    Returns the number of phrases, so a caller can assert on it.
+
+    This **warns and continues** where the checks above refuse to start, and the
+    asymmetry is the point. An unarmed safety gate is a service that is up and
+    not protecting anyone, so it must not be deployable. A missing lexicon costs
+    latency and NIM quota - every "hi" pays a model call - but every answer is
+    still correct and safe, and taking a working beta down over it would do more
+    harm than the fault does.
+
+    What it prevents is the fault being *invisible*. On 16 Sep 2026 the Render
+    image had no ``data/`` directory at all: the Dockerfile copied ``app``,
+    ``corpus``, ``kg``, ``eval`` and ``scripts``, and nothing else. Stage 1 was
+    disabled for every message on every turn, and the only trace was one
+    exception line at first use, hours into the log. A smoke test found it, four
+    days after the lexicon shipped.
+    """
+    from app.pipeline.router import LEXICON_PATH, get_lexicon  # local: import cycle
+
+    lexicon = get_lexicon()
+    count = len(lexicon.phrases)
+    if count:
+        logger.info(
+            "router lexicon loaded: %d phrases, %d fillers, bound %d words",
+            count,
+            len(lexicon.fillers),
+            lexicon.max_message_words,
+        )
+        return count
+
+    logger.critical(
+        "ROUTER LEXICON DID NOT LOAD (expected at %s). Stage 1 is disabled, so "
+        "every greeting, thanks and meta question now costs a model call and "
+        "routing accuracy drops to the model alone. The service still answers "
+        "correctly - this is cost and latency, not safety - so it is starting "
+        "anyway. Most likely the deployment image does not contain data/: check "
+        "the COPY lines in the Dockerfile.",
+        LEXICON_PATH,
+    )
+    return 0
+
+
 def run_startup_self_test(
     settings: Settings | None = None, gate: SafetyGate | None = None
 ) -> None:
@@ -105,10 +149,12 @@ def run_startup_self_test(
 
     Ordered cheapest first, and config before behaviour: a rejected budget is a
     typo in an environment variable, and saying so before the model checks run
-    makes the error easier to act on.
+    makes the error easier to act on. The lexicon check runs last because it is
+    the only one that does not refuse to start.
     """
     check_generation_budget(settings)
     run_gate_self_test(gate)
+    check_router_lexicon()
 
 
 def run_gate_self_test(gate: SafetyGate | None = None) -> None:

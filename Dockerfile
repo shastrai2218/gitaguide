@@ -30,6 +30,11 @@ COPY kg ./kg
 COPY eval ./eval
 COPY scripts ./scripts
 COPY pytest.ini ./pytest.ini
+# Read at runtime: app/pipeline/router.py loads data/intent_lexicon.yaml. Its
+# absence is not a crash - get_lexicon() degrades - so the only symptom was
+# every greeting paying a model call. tests/test_deploy_config.py now asserts
+# this list covers every PROJECT_ROOT-relative path the image can read.
+COPY data ./data
 
 # Model cache. On Render this is ephemeral, so the first request after a deploy
 # pays the ONNX download; the lifespan handler warms both models at startup so
