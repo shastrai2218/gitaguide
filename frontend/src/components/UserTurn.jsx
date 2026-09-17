@@ -47,11 +47,8 @@ export default function UserTurn({ text, editable, onEdit }) {
     return (
       <div className="turn turn-user">
         <div className="bubble bubble-editing">
-          <label className="sr-only" htmlFor="edit-message">
-            Edit your message
-          </label>
           <textarea
-            id="edit-message"
+            aria-label="Edit your message"
             ref={textareaRef}
             className="bubble-edit-textarea"
             value={value}
