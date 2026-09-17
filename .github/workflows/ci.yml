@@ -37,7 +37,7 @@ jobs:
           # Offline core only - the heavy ML/graph extras are not needed because
           # mock mode replaces those backends with in-process fakes.
           pip install fastapi "uvicorn[standard]" pydantic pydantic-settings httpx \
-                      "SQLAlchemy>=2.0" aiosqlite pytest pytest-asyncio pytest-cov ruff
+                      "SQLAlchemy>=2.0" aiosqlite "PyJWT[crypto]" pytest pytest-asyncio pytest-cov ruff
 
       - name: Lint (ruff)
         run: ruff check app corpus kg eval tests

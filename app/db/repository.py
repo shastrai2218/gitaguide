@@ -30,6 +30,9 @@ def _utcnow() -> datetime:
 @dataclass(slots=True)
 class SessionRecord:
     id: str
+    #: Clerk user id once claimed (see Repository.claim_session). ``None`` for
+    #: an anonymous session - which is the normal, fully-supported case.
+    user_id: str | None = None
     title: str = ""
     locale: str = "en-IN"
     rolling_summary: str = ""
@@ -116,6 +119,22 @@ class Repository(ABC):
     async def record_consent(self, session_id: str, version: str) -> SessionRecord:
         """Store that this session agreed to ``version`` of the consent text."""
 
+    @abstractmethod
+    async def claim_session(self, session_id: str, user_id: str) -> SessionRecord | None:
+        """Attach ``user_id`` to a session that has none yet.
+
+        A no-op (but not an error) when the session does not exist, or is
+        already claimed - by this user or another one. Ownership, once set,
+        is never silently reassigned; that is what keeps one browser from
+        adopting a session it merely happens to know the id of.
+        """
+
+    @abstractmethod
+    async def list_sessions_for_user(
+        self, user_id: str, limit: int = 100
+    ) -> list[SessionRecord]:
+        """This user's sessions, most recently active first."""
+
     # messages ------------------------------------------------------------
     @abstractmethod
     async def add_message(self, message: MessageRecord) -> MessageRecord: ...
@@ -193,6 +212,22 @@ class InMemoryRepository(Repository):
         if session is not None:
             session.rolling_summary = summary
             session.updated_at = _utcnow()
+
+    async def claim_session(self, session_id: str, user_id: str) -> SessionRecord | None:
+        record = self.sessions.get(session_id)
+        if record is None:
+            return None
+        if record.user_id is None:
+            record.user_id = user_id
+            record.updated_at = _utcnow()
+        return record
+
+    async def list_sessions_for_user(
+        self, user_id: str, limit: int = 100
+    ) -> list[SessionRecord]:
+        items = [item for item in self.sessions.values() if item.user_id == user_id]
+        items.sort(key=lambda item: item.updated_at, reverse=True)
+        return items[:limit]
 
     async def add_message(self, message: MessageRecord) -> MessageRecord:
         if not message.id:

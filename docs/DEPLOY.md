@@ -306,6 +306,34 @@ the gate links to:
 
 ---
 
+## Step 4b — Accounts (Clerk), optional
+
+Skip this step entirely and the beta runs exactly as it always has: anonymous
+sessions, chats saved to one browser's localStorage, no sign-in UI anywhere.
+This turns on the optional half - a tester can sign in (email/password or
+Google) to sync their chats to an account across devices. Nothing here is
+required for the app to work.
+
+1. <https://clerk.com> → create a free application → enable **Email address**
+   and **Google** under **User & Authentication → Social Connections**.
+2. From **API Keys**, copy two values:
+   - **Publishable key** (`pk_live_...`) → Vercel env var
+     `VITE_CLERK_PUBLISHABLE_KEY`, scope Production.
+   - **Frontend API URL** (`https://your-app.clerk.accounts.dev`, or a custom
+     domain on a paid plan) → Render env var `GITAGUIDE_CLERK_ISSUER`.
+3. Redeploy both. There is no secret key to set on the API: verification
+   checks a token's signature against Clerk's own published JWKS
+   (`{issuer}/.well-known/jwks.json`), so the backend never calls Clerk and
+   never sees a password.
+
+**Both values must name the same Clerk application.** A mismatch does not
+error anywhere visible - a token signed by one application simply never
+verifies against another's issuer, so every tester looks signed out even
+after completing sign-in. If accounts stop syncing after a redeploy, check
+this before anything else.
+
+---
+
 ## Step 5 — Render again (CORS), then verify
 
 1. Back in Render → **Environment** → set:

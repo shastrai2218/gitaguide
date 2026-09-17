@@ -53,6 +53,15 @@ ADDITIVE_COLUMNS: tuple[tuple[str, str, str], ...] = (
     # Day 5: consent recording.
     ("sessions", "consent_version", "VARCHAR(32)"),
     ("sessions", "consent_at", "TIMESTAMP WITH TIME ZONE"),
+    # Optional Clerk-backed accounts: a session with no claim is unaffected.
+    ("sessions", "user_id", "VARCHAR(255)"),
+)
+
+#: Indexes for an additive column, as ``(name, table, column)``. ``create_all``
+#: applies the model's ``index=True`` on a fresh database; a live table only
+#: gained the column above, so the index needs the same "add if missing" pass.
+ADDITIVE_INDEXES: tuple[tuple[str, str, str], ...] = (
+    ("ix_sessions_user_id", "sessions", "user_id"),
 )
 
 
@@ -75,7 +84,15 @@ async def init_models(engine: AsyncEngine) -> None:
             await connection.execute(
                 text(f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS "{column}" {column_type}')
             )
-    logger.info("database schema ensured (%d additive column(s) checked)", len(ADDITIVE_COLUMNS))
+        for name, table, column in ADDITIVE_INDEXES:
+            await connection.execute(
+                text(f'CREATE INDEX IF NOT EXISTS "{name}" ON "{table}" ("{column}")')
+            )
+    logger.info(
+        "database schema ensured (%d additive column(s), %d additive index(es) checked)",
+        len(ADDITIVE_COLUMNS),
+        len(ADDITIVE_INDEXES),
+    )
 
 
 async def session_scope(

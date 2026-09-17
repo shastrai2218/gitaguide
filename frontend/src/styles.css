@@ -1,33 +1,49 @@
 /*
- * GitaGuide beta — design system.
+ * GitaGuide — design system v3, "warm parchment."
  *
- * One column, one accent, one motion moment. The palette is dusk indigo with a
- * single marigold accent; there is deliberately no red anywhere, including on
- * errors and the crisis panel, because a person in distress should not be met
- * with an alarm colour.
+ * A calm, paper-and-temple aesthetic: warm off-white ground, muted sage and
+ * dusty teal accents, and a restrained gold reserved for verse citations
+ * only. No red anywhere, including on errors and the crisis panel, because a
+ * person in distress should not be met with an alarm colour. No glass, no
+ * glow, no bounce — motion is a slow fade, not an app flourish.
  */
 
+/* ================================================================ tokens === */
+
 :root {
-  --page: #141b33;
-  --panel: #1c2547;
-  --field: #273159;
-  --hair: #34406e;
-  --ink: #f3eee2;
-  --ink-soft: #b7b3a4;
-  --accent: #e9a23b;
-  --crisis: #33294a;
+  --page: #faf7f0;
+  --panel: #f4f1e8;
+  --field: #efeadc;
+  --hair: #e1d9c5;
+  --ink: #2b3242;
+  --ink-soft: #6b6f68;
+  --accent: #7c9885;
+  --accent-deep: #4f6b62;
+  --accent-tint: rgba(124, 152, 133, 0.12);
+  --gold: #b08d57;
+  --gold-tint: rgba(176, 141, 87, 0.12);
+  --crisis-bg: #f1eee1;
 
-  --column: 44rem;
+  --column: 42rem;
   --radius: 10px;
+  --radius-lg: 14px;
 
-  --font-display: 'Martel', Georgia, 'Times New Roman', serif;
-  --font-ui: 'Mukta', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-serif: 'Lora', Georgia, 'Times New Roman', serif;
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
-  color-scheme: dark;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  color-scheme: light;
 }
+
+/* ============================================================= base === */
 
 * {
   box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 html,
@@ -39,11 +55,28 @@ body {
 body {
   background: var(--page);
   color: var(--ink);
-  font-family: var(--font-ui);
+  font-family: var(--font-sans);
   font-size: 17px;
-  font-weight: 300;
+  font-weight: 400;
   line-height: 1.65;
   -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--hair);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
 }
 
 button,
@@ -56,7 +89,7 @@ textarea {
 /* Focus is never removed, only restyled. Keyboard users must be able to see
  * where they are on every control in this app. */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--accent-deep);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -73,12 +106,49 @@ textarea {
   border: 0;
 }
 
-/* ---------------------------------------------------------------- shell --- */
+/* ============================================================ animations === */
+
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes breathe {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ============================================================== shell === */
+
+.shell {
+  display: flex;
+  min-height: 100vh;
+}
 
 .app {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  position: relative;
 }
 
 .column {
@@ -88,7 +158,7 @@ textarea {
   padding: 0 1.25rem;
 }
 
-/* --------------------------------------------------------------- header --- */
+/* ============================================================= header === */
 
 .header {
   position: sticky;
@@ -106,24 +176,63 @@ textarea {
   padding-bottom: 0.9rem;
 }
 
+/* Opens the sidebar drawer below the desktop breakpoint. Desktop keeps the
+ * sidebar always visible, so this stays hidden there. */
+.hamburger-button {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  padding: 0.3rem;
+  margin: -0.3rem 0.1rem -0.3rem -0.3rem;
+  border-radius: var(--radius);
+  transition: color 200ms var(--ease-out), background 200ms var(--ease-out);
+}
+
+.hamburger-button svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+.hamburger-button:hover {
+  color: var(--ink);
+  background: var(--accent-tint);
+}
+
 .wordmark {
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 1.35rem;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 1.25rem;
   letter-spacing: 0.01em;
   margin: 0;
   line-height: 1.2;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .wordmark em {
-  color: var(--accent);
+  color: var(--accent-deep);
   font-style: normal;
+}
+
+/* Decorative dot next to the wordmark. A quiet presence indicator, not a
+ * gauge or a streak counter. */
+.wordmark-diya {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: breathe 2.8s ease-in-out infinite;
 }
 
 .tag {
   font-size: 0.72rem;
   font-weight: 500;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--ink-soft);
   border: 1px solid var(--hair);
@@ -134,8 +243,8 @@ textarea {
 
 .tag-mock {
   color: var(--page);
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
   font-weight: 600;
 }
 
@@ -152,15 +261,283 @@ textarea {
   font-size: 0.85rem;
   font-weight: 500;
   padding: 0.25rem 0.8rem;
-  transition: color 120ms ease, border-color 120ms ease;
+  transition: color 200ms var(--ease-out), border-color 200ms var(--ease-out),
+    background 200ms var(--ease-out);
 }
 
 .link-button:hover {
   color: var(--ink);
   border-color: var(--accent);
+  background: var(--accent-tint);
 }
 
-/* ----------------------------------------------------------- transcript --- */
+/* ============================================================= sidebar === */
+
+.sidebar {
+  width: 272px;
+  flex: none;
+  background: var(--panel);
+  border-right: 1px solid var(--hair);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sidebar-head {
+  padding: 1rem;
+}
+
+.new-chat-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  color: var(--ink);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  font-weight: 500;
+  padding: 0.55rem 0.8rem;
+  transition: border-color 200ms var(--ease-out), background 200ms var(--ease-out);
+}
+
+.new-chat-button svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  color: var(--accent-deep);
+}
+
+.new-chat-button:hover {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+
+.sidebar-search {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  padding: 0 0.6rem;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  transition: border-color 200ms var(--ease-out);
+}
+
+.sidebar-search:focus-within {
+  border-color: var(--accent);
+}
+
+.sidebar-search > svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--ink-soft);
+}
+
+.sidebar-search input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 0.83rem;
+  padding: 0.5rem 0;
+}
+
+.sidebar-search input:focus {
+  outline: none;
+}
+
+.sidebar-search input::placeholder {
+  color: var(--ink-soft);
+}
+
+.sidebar-search-clear {
+  flex: none;
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  padding: 0.2rem;
+  display: flex;
+  border-radius: 4px;
+}
+
+.sidebar-search-clear svg {
+  width: 12px;
+  height: 12px;
+}
+
+.sidebar-search-clear:hover {
+  color: var(--ink);
+}
+
+.sidebar-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.25rem 0.6rem 1rem;
+}
+
+.sidebar-empty {
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  padding: 0.75rem 0.5rem;
+  line-height: 1.6;
+}
+
+.sidebar-group {
+  margin-top: 0.6rem;
+}
+
+.sidebar-group-label {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  opacity: 0.75;
+  margin: 0.5rem 0.5rem 0.3rem;
+}
+
+.sidebar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: var(--radius);
+  padding-right: 0.3rem;
+  transition: background 200ms var(--ease-out);
+}
+
+.sidebar-row:hover {
+  background: var(--field);
+}
+
+.sidebar-row.is-active {
+  background: var(--accent-tint);
+  box-shadow: inset 2px 0 0 var(--accent-deep);
+}
+
+.sidebar-row-title {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  text-align: left;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.86rem;
+  padding: 0.5rem 0.55rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-rename-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--page);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 0.86rem;
+  padding: 0.4rem 0.5rem;
+  margin: 0.15rem;
+}
+
+.sidebar-rename-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+
+.sidebar-row-actions {
+  display: none;
+  flex: none;
+  gap: 0.15rem;
+}
+
+.sidebar-row:hover .sidebar-row-actions,
+.sidebar-row:focus-within .sidebar-row-actions {
+  display: flex;
+}
+
+.sidebar-icon-button {
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  padding: 0.35rem;
+  border-radius: 6px;
+  display: flex;
+  transition: color 200ms var(--ease-out), background 200ms var(--ease-out);
+}
+
+.sidebar-icon-button svg {
+  width: 13px;
+  height: 13px;
+}
+
+.sidebar-icon-button:hover {
+  color: var(--ink);
+  background: var(--hair);
+}
+
+.sidebar-backdrop {
+  display: none;
+}
+
+.sidebar-account {
+  flex: none;
+  padding: 0.85rem 1rem;
+  border-top: 1px solid var(--hair);
+}
+
+.sidebar-signin-button {
+  width: 100%;
+  background: none;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  color: var(--ink);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 0.55rem 0.8rem;
+  transition: border-color 200ms var(--ease-out), background 200ms var(--ease-out);
+}
+
+.sidebar-signin-button:hover {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+
+.sidebar-account-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.sidebar-account-label {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.sidebar-avatar {
+  width: 26px;
+  height: 26px;
+}
+
+/* ========================================================= transcript === */
 
 .transcript {
   flex: 1;
@@ -168,46 +545,204 @@ textarea {
   padding-bottom: 1rem;
 }
 
+/* ------------------------------------------------------- empty state --- */
+
+.empty-state-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 4rem 1rem 2rem;
+  animation: fadeSlideUp 450ms var(--ease-out);
+}
+
+.empty-diya {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 1.5rem;
+  color: var(--accent-deep);
+}
+
 .empty-state {
-  font-family: var(--font-display);
+  font-family: var(--font-serif);
   font-weight: 600;
-  font-size: 1.5rem;
+  font-size: 1.55rem;
   line-height: 1.4;
   color: var(--ink);
-  margin: 3.5rem 0 0;
+  margin: 0;
 }
 
 .empty-hint {
   color: var(--ink-soft);
   margin-top: 0.6rem;
   font-size: 0.95rem;
+  max-width: 28rem;
 }
+
+/* Suggestion chips */
+.suggestion-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1.8rem;
+  max-width: 36rem;
+}
+
+.suggestion-chip {
+  background: var(--panel);
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 400;
+  padding: 0.45rem 1rem;
+  transition: color 200ms var(--ease-out), border-color 200ms var(--ease-out),
+    background 200ms var(--ease-out);
+}
+
+.suggestion-chip:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+
+/* ------------------------------------------------------------ turns --- */
 
 .turn {
   margin-bottom: 2.25rem;
+  animation: fadeSlideUp 400ms var(--ease-out);
 }
 
-/* User: a quiet right-aligned bubble. It should read as an aside, not a
- * headline — the assistant's reflection is the content of the page. */
+/* User: a right-aligned quiet bubble. */
 .turn-user {
   display: flex;
   justify-content: flex-end;
+}
+
+.bubble-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.3rem;
+  max-width: 85%;
 }
 
 .bubble {
   background: var(--field);
   border: 1px solid var(--hair);
   border-radius: var(--radius);
-  padding: 0.65rem 0.95rem;
-  max-width: 85%;
+  padding: 0.7rem 1rem;
+  min-width: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-/* Assistant: no bubble. Commentary against a marigold rule. */
+/* Only reachable while nothing is in flight (App.jsx gates `editable`), so it
+ * never competes with a turn that is mid-send. */
+.bubble-edit-button {
+  flex: none;
+  align-self: center;
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  padding: 0.3rem;
+  border-radius: 6px;
+  opacity: 0;
+  transition: opacity 150ms var(--ease-out), color 200ms var(--ease-out), background 200ms var(--ease-out);
+}
+
+.bubble-edit-button svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.turn-user:hover .bubble-edit-button,
+.bubble-edit-button:focus-visible {
+  opacity: 1;
+}
+
+.bubble-edit-button:hover {
+  color: var(--ink);
+  background: var(--field);
+}
+
+.bubble-editing {
+  width: 100%;
+  max-width: 90%;
+}
+
+.bubble-edit-textarea {
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  padding: 0;
+  resize: none;
+  display: block;
+}
+
+.bubble-edit-textarea:focus {
+  outline: none;
+}
+
+.bubble-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.bubble-edit-cancel,
+.bubble-edit-save {
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 0.25rem 0.75rem;
+  transition: background 200ms var(--ease-out), color 200ms var(--ease-out), border-color 200ms var(--ease-out);
+}
+
+.bubble-edit-cancel {
+  background: none;
+  border: 1px solid var(--hair);
+  color: var(--ink-soft);
+}
+
+.bubble-edit-cancel:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+.bubble-edit-save {
+  background: var(--accent-deep);
+  border: 1px solid var(--accent-deep);
+  color: var(--page);
+  font-weight: 600;
+}
+
+.bubble-edit-save:hover:not(:disabled) {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.bubble-edit-save:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Assistant: no bubble. Commentary against a sage rule. */
 .commentary {
   border-left: 2px solid var(--accent);
   padding-left: 1.15rem;
+  font-family: var(--font-serif);
 }
 
 .commentary p {
@@ -220,7 +755,7 @@ textarea {
 }
 
 .commentary-heading {
-  font-family: var(--font-ui);
+  font-family: var(--font-sans);
   font-weight: 600;
   font-size: 0.78rem;
   letter-spacing: 0.09em;
@@ -251,7 +786,7 @@ textarea {
   content: '·';
   position: absolute;
   left: -0.9rem;
-  color: var(--accent);
+  color: var(--accent-deep);
 }
 
 .commentary strong,
@@ -260,39 +795,44 @@ textarea {
   color: var(--ink);
 }
 
-/* ---------------------------------------------------------------- verse --- */
+/* ============================================================== verse === */
 
 .leaf {
   background: var(--panel);
-  border-top: 2px solid var(--accent);
+  border-top: 2px solid var(--gold);
   border-radius: 0 0 var(--radius) var(--radius);
   padding: 1rem 1.15rem 1.1rem;
   margin: 1.25rem 0;
+  box-shadow: 0 1px 3px rgba(43, 50, 66, 0.06);
+  transition: box-shadow 250ms var(--ease-out);
+}
+
+.leaf:hover {
+  box-shadow: 0 2px 8px rgba(43, 50, 66, 0.1);
 }
 
 .leaf-ref {
-  font-family: var(--font-display);
+  font-family: var(--font-serif);
   font-weight: 600;
-  font-size: 0.9rem;
-  letter-spacing: 0.03em;
-  color: var(--accent);
+  font-size: 0.92rem;
+  letter-spacing: 0.02em;
+  color: var(--gold);
   margin: 0;
 }
 
 .leaf-ref a {
   color: inherit;
   text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--gold) 45%, transparent);
   text-underline-offset: 3px;
-  transition: text-decoration-color 120ms ease;
+  transition: text-decoration-color 200ms var(--ease-out);
 }
 
 .leaf-ref a:hover {
-  text-decoration-color: var(--accent);
+  text-decoration-color: var(--gold);
 }
 
-/* The path that surfaced this verse. It sat in the reply as a "Why this verse"
- * section until 9 Sep 2026; it belongs next to the citation it explains. */
+/* The path that surfaced this verse. */
 .leaf-why {
   margin: 0.35rem 0 0;
   font-size: 0.8rem;
@@ -301,8 +841,6 @@ textarea {
   overflow-wrap: anywhere;
 }
 
-/* The verse itself: present in full, collapsed by default. Testers asked for
- * references rather than pasted slokas, not for the text to be unavailable. */
 .leaf-details {
   margin-top: 0.7rem;
 }
@@ -313,6 +851,7 @@ textarea {
   letter-spacing: 0.04em;
   color: var(--ink-soft);
   list-style: none;
+  transition: color 200ms var(--ease-out);
 }
 
 .leaf-details summary::-webkit-details-marker {
@@ -321,7 +860,7 @@ textarea {
 
 .leaf-details summary::before {
   content: '+ ';
-  color: var(--accent);
+  color: var(--gold);
 }
 
 .leaf-details[open] summary::before {
@@ -333,8 +872,9 @@ textarea {
 }
 
 .leaf-text {
-  font-family: var(--font-display);
-  font-weight: 600;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 500;
   font-size: 1.02rem;
   line-height: 1.85;
   margin: 0.7rem 0 0;
@@ -342,20 +882,21 @@ textarea {
 }
 
 .leaf-source {
-  font-family: var(--font-ui);
+  font-family: var(--font-sans);
   font-weight: 400;
   font-size: 0.8rem;
   color: var(--ink-soft);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
 }
 
-/* --------------------------------------------------------------- crisis --- */
+/* ============================================================= crisis === */
 
 .crisis {
-  background: var(--crisis);
+  background: var(--crisis-bg);
   border-left: 2px solid var(--accent);
   border-radius: 0 var(--radius) var(--radius) 0;
   padding: 1.15rem 1.25rem;
+  font-family: var(--font-serif);
 }
 
 .crisis p {
@@ -371,6 +912,7 @@ textarea {
   padding-top: 0.8rem;
   margin-top: 0.9rem;
   font-size: 0.92rem;
+  font-family: var(--font-sans);
   color: var(--ink-soft);
 }
 
@@ -379,12 +921,13 @@ textarea {
   font-weight: 600;
 }
 
-/* ---------------------------------------------------------------- error --- */
+/* ============================================================== error === */
 
 .error-turn {
   border-left: 2px solid var(--hair);
   padding-left: 1.15rem;
   color: var(--ink-soft);
+  animation: fadeSlideUp 350ms var(--ease-out);
 }
 
 .error-turn p {
@@ -392,7 +935,7 @@ textarea {
 }
 
 .error-wait {
-  color: var(--accent);
+  color: var(--accent-deep);
   font-size: 0.88rem;
 }
 
@@ -400,19 +943,21 @@ textarea {
   background: none;
   border: 1px solid var(--accent);
   border-radius: 999px;
-  color: var(--accent);
+  color: var(--accent-deep);
   cursor: pointer;
   font-size: 0.88rem;
   font-weight: 500;
   padding: 0.25rem 0.9rem;
+  transition: background 200ms var(--ease-out), color 200ms var(--ease-out);
 }
 
 .retry-button:hover {
-  background: var(--accent);
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
   color: var(--page);
 }
 
-/* ----------------------------------------------------------------- meta --- */
+/* =============================================================== meta === */
 
 .meta {
   margin-top: 0.9rem;
@@ -420,7 +965,8 @@ textarea {
   font-size: 0.78rem;
   line-height: 1.7;
   color: var(--ink-soft);
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
+  opacity: 0.85;
 }
 
 .meta span + span::before {
@@ -429,7 +975,53 @@ textarea {
   color: var(--hair);
 }
 
-/* ------------------------------------------------------------- feedback --- */
+/* ======================================================== turn footer === */
+
+/* Holds feedback and, on the most recent reply only, Regenerate. */
+.turn-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  margin-top: 0.7rem;
+}
+
+.turn-footer .feedback {
+  margin-top: 0;
+}
+
+.regenerate-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 0.2rem 0.75rem;
+  transition: border-color 200ms var(--ease-out), color 200ms var(--ease-out), background 200ms var(--ease-out);
+}
+
+.regenerate-button svg {
+  width: 12px;
+  height: 12px;
+}
+
+.regenerate-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-deep);
+  background: var(--accent-tint);
+}
+
+.regenerate-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* =========================================================== feedback === */
 
 .feedback {
   margin-top: 0.7rem;
@@ -445,18 +1037,24 @@ textarea {
 
 .feedback-button {
   background: none;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--hair);
   border-radius: 999px;
-  color: var(--accent);
+  color: var(--ink-soft);
   cursor: pointer;
   font-size: 0.8rem;
   font-weight: 500;
-  padding: 0.15rem 0.75rem;
+  padding: 0.2rem 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: border-color 200ms var(--ease-out), color 200ms var(--ease-out),
+    background 200ms var(--ease-out);
 }
 
 .feedback-button:hover:not(:disabled) {
-  background: var(--accent);
-  color: var(--page);
+  border-color: var(--accent);
+  color: var(--accent-deep);
+  background: var(--accent-tint);
 }
 
 .feedback-button:disabled {
@@ -465,7 +1063,8 @@ textarea {
 }
 
 .feedback-button.is-chosen {
-  background: var(--accent);
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
   color: var(--page);
 }
 
@@ -480,7 +1079,7 @@ textarea {
 }
 
 .feedback-error {
-  color: var(--accent);
+  color: var(--accent-deep);
   font-size: 0.8rem;
   margin: 0.4rem 0 0;
 }
@@ -501,13 +1100,20 @@ textarea {
   font-family: inherit;
   font-size: 0.85rem;
   padding: 0.35rem 0.65rem;
+  transition: border-color 200ms var(--ease-out), box-shadow 200ms var(--ease-out);
+}
+
+.feedback-comment input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+  outline: none;
 }
 
 .feedback-comment input::placeholder {
   color: var(--ink-soft);
 }
 
-/* -------------------------------------------------------------- waiting --- */
+/* =========================================================== waiting === */
 
 .waiting {
   display: flex;
@@ -516,38 +1122,65 @@ textarea {
   color: var(--ink-soft);
   padding-left: 1.15rem;
   border-left: 2px solid var(--hair);
+  animation: fadeIn 350ms var(--ease-out);
 }
 
-/* The single motion moment in the whole app: a slow diya. */
-.diya {
-  width: 9px;
-  height: 9px;
+.diya-group {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.diya-dot {
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: var(--accent);
-  flex: none;
-  animation: diya-pulse 2.4s ease-in-out infinite;
+  background: var(--accent-deep);
+  animation: breathe 2.8s ease-in-out infinite;
 }
 
-@keyframes diya-pulse {
-  0%,
-  100% {
-    opacity: 0.35;
-    transform: scale(0.85);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.1);
-  }
+.diya-dot:nth-child(2) {
+  animation-delay: 0.4s;
+}
+
+.diya-dot:nth-child(3) {
+  animation-delay: 0.8s;
+}
+
+.sso-callback-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: var(--page);
+}
+
+.sso-callback-screen .waiting {
+  border-left: none;
+  padding-left: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .diya {
+  .diya-dot,
+  .wordmark-diya {
     animation: none;
     opacity: 0.9;
   }
+
+  .turn,
+  .empty-state-wrap,
+  .gate-card,
+  .error-turn,
+  .sidebar-backdrop {
+    animation: none;
+  }
+
+  .sidebar {
+    transition: none;
+  }
 }
 
-/* ------------------------------------------------------------- composer --- */
+/* =========================================================== composer === */
 
 .composer-wrap {
   position: sticky;
@@ -574,6 +1207,13 @@ textarea {
   resize: none;
   max-height: 12rem;
   overflow-y: auto;
+  transition: border-color 200ms var(--ease-out), box-shadow 200ms var(--ease-out);
+}
+
+.composer textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+  outline: none;
 }
 
 .composer textarea::placeholder {
@@ -585,27 +1225,45 @@ textarea {
 }
 
 .send-button {
-  background: var(--accent);
-  border: 1px solid var(--accent);
+  background: var(--accent-deep);
+  border: 1px solid var(--accent-deep);
   border-radius: var(--radius);
   color: var(--page);
   cursor: pointer;
   font-weight: 600;
   padding: 0.65rem 1.15rem;
+  transition: background 200ms var(--ease-out);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.send-button:hover:not(:disabled) {
+  background: var(--ink);
+  border-color: var(--ink);
 }
 
 .send-button:disabled {
-  opacity: 0.45;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
-/* Offline notice above the composer. No alarm colour: the palette has none,
- * and a dropped connection is not the tester's fault. */
+.send-icon {
+  width: 16px;
+  height: 16px;
+  transition: transform 200ms var(--ease-out);
+}
+
+.send-button:hover:not(:disabled) .send-icon {
+  transform: translateX(2px);
+}
+
+/* Offline notice above the composer. */
 .composer-offline {
   margin: 0 0 0.6rem;
   padding: 0.5rem 0.75rem;
-  border-left: 2px solid var(--accent);
-  background: var(--field);
+  border-left: 2px solid var(--gold);
+  background: var(--gold-tint);
   border-radius: 0 var(--radius) var(--radius) 0;
   font-size: 0.85rem;
   color: var(--ink);
@@ -616,10 +1274,10 @@ textarea {
   font-size: 0.78rem;
   line-height: 1.6;
   color: var(--ink-soft);
+  opacity: 0.85;
 }
 
-/* Links in the quiet text (footnote, gate terms, static pages): underlined so
- * they read as links against text of the same colour, marigold on hover. */
+/* Links in the quiet text. */
 .footnote a,
 .gate-terms a,
 .static-page a {
@@ -627,21 +1285,21 @@ textarea {
   text-decoration: underline;
   text-decoration-color: var(--hair);
   text-underline-offset: 2px;
-  transition: color 120ms ease, text-decoration-color 120ms ease;
+  transition: color 200ms var(--ease-out), text-decoration-color 200ms var(--ease-out);
 }
 
 .footnote a:hover,
 .gate-terms a:hover,
 .static-page a:hover {
-  color: var(--accent);
-  text-decoration-color: var(--accent);
+  color: var(--accent-deep);
+  text-decoration-color: var(--accent-deep);
 }
 
 .footnote-links {
   white-space: nowrap;
 }
 
-/* ----------------------------------------------------------- static page --- */
+/* ======================================================== static page === */
 
 .static-page {
   flex: 1;
@@ -650,15 +1308,15 @@ textarea {
 }
 
 .static-page h1 {
-  font-family: var(--font-display);
-  font-weight: 800;
+  font-family: var(--font-serif);
+  font-weight: 700;
   font-size: 1.6rem;
   line-height: 1.3;
   margin: 0 0 1rem;
 }
 
 .static-page h2 {
-  font-family: var(--font-ui);
+  font-family: var(--font-sans);
   font-weight: 600;
   font-size: 0.78rem;
   letter-spacing: 0.09em;
@@ -687,7 +1345,7 @@ textarea {
   content: '·';
   position: absolute;
   left: -0.9rem;
-  color: var(--accent);
+  color: var(--accent-deep);
 }
 
 .static-page strong {
@@ -707,7 +1365,7 @@ textarea {
   color: var(--ink-soft);
 }
 
-/* --------------------------------------------------------------- gate ----- */
+/* ============================================================== gate === */
 
 .gate {
   display: flex;
@@ -715,6 +1373,7 @@ textarea {
   justify-content: center;
   min-height: 100vh;
   padding: 2rem 1.25rem;
+  background: var(--page);
 }
 
 .gate-card {
@@ -722,29 +1381,59 @@ textarea {
   max-width: 34rem;
   background: var(--panel);
   border: 1px solid var(--hair);
-  border-radius: var(--radius);
-  padding: 1.75rem;
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  box-shadow: 0 1px 4px rgba(43, 50, 66, 0.06);
+  animation: fadeSlideUp 450ms var(--ease-out);
+}
+
+.gate-motif {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1.25rem;
+}
+
+.gate-motif svg {
+  width: 44px;
+  height: 44px;
+  color: var(--accent-deep);
 }
 
 .gate-card h1 {
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 1.6rem;
-  margin: 0 0 1rem;
+  font-family: var(--font-serif);
+  font-weight: 700;
+  font-size: 1.7rem;
+  margin: 0 0 0.5rem;
+  text-align: center;
 }
 
 .gate-card h1 em {
-  color: var(--accent);
+  color: var(--accent-deep);
   font-style: normal;
 }
 
+.gate-intro {
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+  margin: 0 0 1.5rem;
+  line-height: 1.6;
+}
+
+.gate-divider {
+  border: none;
+  height: 1px;
+  background: var(--hair);
+  margin: 1.2rem 0;
+}
+
 .gate-card h2 {
-  font-family: var(--font-ui);
+  font-family: var(--font-sans);
   font-weight: 600;
   font-size: 0.78rem;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--ink-soft);
+  color: var(--accent-deep);
   margin: 1.4rem 0 0.4rem;
 }
 
@@ -767,13 +1456,14 @@ textarea {
   margin: 1.4rem 0 0;
   font-size: 0.85rem;
   color: var(--ink-soft);
+  text-align: center;
 }
 
 .gate-error {
   margin: 1.25rem 0 0;
   padding: 0.65rem 0.85rem;
-  border-left: 2px solid var(--accent);
-  background: var(--field);
+  border-left: 2px solid var(--gold);
+  background: var(--gold-tint);
   border-radius: 0 var(--radius) var(--radius) 0;
   font-size: 0.92rem;
 }
@@ -781,16 +1471,63 @@ textarea {
 .gate-accept {
   width: 100%;
   margin-top: 1.75rem;
-  background: var(--accent);
-  border: 1px solid var(--accent);
+  background: var(--accent-deep);
+  border: 1px solid var(--accent-deep);
   border-radius: var(--radius);
   color: var(--page);
   cursor: pointer;
   font-weight: 600;
-  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  padding: 0.85rem 1rem;
+  transition: background 250ms var(--ease-out);
 }
 
-/* --------------------------------------------------------------- mobile --- */
+.gate-accept:hover {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+/* ==================================================== sidebar drawer === */
+
+/* Below this width the sidebar becomes an off-canvas drawer instead of a
+ * permanent column, and the hamburger in the header is what opens it. */
+@media (max-width: 768px) {
+  .hamburger-button {
+    display: inline-flex;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    height: 100vh;
+    z-index: 30;
+    transform: translateX(-100%);
+    box-shadow: 4px 0 24px rgba(43, 50, 66, 0.15);
+    transition: transform 300ms var(--ease-out);
+  }
+
+  .sidebar.is-open {
+    transform: translateX(0);
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(43, 50, 66, 0.25);
+    z-index: 29;
+    animation: fadeIn 200ms var(--ease-out);
+  }
+
+  /* No hover on touch, so the rename/delete controls stay reachable. */
+  .sidebar-row-actions {
+    display: flex;
+  }
+}
+
+/* ============================================================ mobile === */
 
 @media (max-width: 480px) {
   body {
@@ -814,10 +1551,32 @@ textarea {
   }
 
   .wordmark {
-    font-size: 1.15rem;
+    font-size: 1.1rem;
   }
 
   .gate-card {
     padding: 1.25rem;
+  }
+
+  .empty-state-wrap {
+    padding: 2.5rem 0.5rem 1.5rem;
+  }
+
+  .empty-state {
+    font-size: 1.3rem;
+  }
+
+  .suggestion-chips {
+    gap: 0.4rem;
+  }
+
+  .suggestion-chip {
+    font-size: 0.8rem;
+    padding: 0.35rem 0.8rem;
+  }
+
+  .sidebar {
+    width: 85vw;
+    max-width: 300px;
   }
 }

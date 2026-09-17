@@ -52,6 +52,7 @@ from pydantic import BaseModel, Field
 from app.api.concurrency import PipelineBusyError, PipelineGate
 from app.api.ratelimit import RATE_LIMITED_MESSAGE, RateLimiter, client_ip_from
 from app.api.routes import OrchestratorDep
+from app.auth import CurrentUserDep, RequireUserDep
 from app.config import CURRENT_CONSENT_VERSION
 from app.db.repository import FeedbackRecord
 from app.pipeline.generation import OVERLOADED_ANSWER, PROVIDER_OVERLOADED
@@ -163,6 +164,26 @@ class BetaMessagesResponse(BaseModel):
     messages: list[BetaMessage] = Field(default_factory=list)
 
 
+class BetaSessionSummary(BaseModel):
+    """One row in the signed-in sidebar: enough to list and open a chat, not
+    its content - that is still a separate ``GET .../messages`` call."""
+
+    id: str
+    #: The first user message, truncated server-side (see Repository.add_message).
+    #: Empty for a session that was claimed before it ever got a message.
+    title: str
+    updated_at: datetime
+
+
+class BetaSessionsResponse(BaseModel):
+    sessions: list[BetaSessionSummary] = Field(default_factory=list)
+
+
+class BetaClaimSessionResponse(BaseModel):
+    session_id: str
+    claimed: bool
+
+
 class BetaConsentRequest(BaseModel):
     """``POST /api/consent`` body."""
 
@@ -232,6 +253,22 @@ def _citations_for(result: GuidanceResult) -> list[BetaCitation]:
             )
         )
     return citations
+
+
+# Ownership
+async def _ensure_session_access(
+    orchestrator: GuidanceOrchestrator, session_id: str, current_user_id: str | None
+) -> None:
+    """Refuse to read or continue a session claimed by a different account.
+
+    An unclaimed session (``user_id`` still ``None``) stays reachable by
+    anyone who knows its id, exactly as every session worked before accounts
+    existed - claiming is what changes the rule, not signing in by itself, and
+    a session that was never claimed has no account to protect it from.
+    """
+    session = await orchestrator.repository.get_session(session_id)
+    if session is not None and session.user_id is not None and session.user_id != current_user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="not your session")
 
 
 # Consent
@@ -352,7 +389,10 @@ async def _run_turn(
 # Routes
 @router.post("/chat", response_model=BetaChatResponse)
 async def beta_chat(
-    payload: BetaChatRequest, orchestrator: OrchestratorDep, request: Request
+    payload: BetaChatRequest,
+    orchestrator: OrchestratorDep,
+    request: Request,
+    current_user_id: CurrentUserDep,
 ) -> BetaChatResponse:
     """Run one turn and return it in the beta UI's envelope.
 
@@ -362,6 +402,8 @@ async def beta_chat(
     """
     _enforce_rate_limit(request, payload.session_id)
     await _require_consent(request, orchestrator, payload.session_id)
+    if payload.session_id:
+        await _ensure_session_access(orchestrator, payload.session_id, current_user_id)
 
     telemetry: Telemetry | None = getattr(request.app.state, "telemetry", None)
     gate: PipelineGate | None = getattr(request.app.state, "pipeline_gate", None)
@@ -399,6 +441,14 @@ async def beta_chat(
     if telemetry is not None:
         telemetry.record_turn(result, surface="beta")
 
+    if current_user_id is not None:
+        # Opportunistic: the session already exists (handle_turn just ensured
+        # it) under `result.session_id`, which is filled in even when the
+        # request arrived with none - so a signed-in tester's chats end up
+        # owned by their account with no separate step. A no-op if it is
+        # already claimed.
+        await orchestrator.repository.claim_session(result.session_id, current_user_id)
+
     generation = result.generation
     return BetaChatResponse(
         message_id=result.message_id,
@@ -428,7 +478,10 @@ async def beta_chat(
 
 @router.post("/consent", response_model=BetaConsentResponse)
 async def beta_consent(
-    payload: BetaConsentRequest, orchestrator: OrchestratorDep, request: Request
+    payload: BetaConsentRequest,
+    orchestrator: OrchestratorDep,
+    request: Request,
+    current_user_id: CurrentUserDep,
 ) -> BetaConsentResponse:
     """Record that a session accepted a specific version of the beta notice.
 
@@ -450,6 +503,11 @@ async def beta_consent(
         )
 
     record = await orchestrator.repository.record_consent(payload.session_id, payload.version)
+    if current_user_id is not None:
+        # Covers the tester who is already signed in when they hit "I
+        # understand - begin", so the very first message of the session is
+        # already attached to their account.
+        record = await orchestrator.repository.claim_session(record.id, current_user_id) or record
     logger.info("consent recorded: session=%s version=%s", record.id, payload.version)
     return BetaConsentResponse(
         session_id=record.id,
@@ -503,9 +561,11 @@ async def beta_feedback(
 async def beta_session_messages(
     session_id: str,
     orchestrator: OrchestratorDep,
+    current_user_id: CurrentUserDep,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> BetaMessagesResponse:
     """Persisted turns for one session, oldest first, for reload continuity."""
+    await _ensure_session_access(orchestrator, session_id, current_user_id)
     records = await orchestrator.repository.list_messages(session_id, limit=limit)
     return BetaMessagesResponse(
         session_id=session_id,
@@ -520,3 +580,44 @@ async def beta_session_messages(
             for record in records
         ],
     )
+
+
+@router.get("/sessions", response_model=BetaSessionsResponse)
+async def beta_list_sessions(
+    orchestrator: OrchestratorDep,
+    current_user_id: RequireUserDep,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+) -> BetaSessionsResponse:
+    """This account's saved chats, most recently active first.
+
+    Signed-out browsers never call this - their sidebar is the local registry
+    in ``frontend/src/session.js``, as it was before accounts existed. This is
+    what a signed-in one reconciles against, so chats follow the account
+    across devices instead of staying stuck in one browser's localStorage.
+    """
+    records = await orchestrator.repository.list_sessions_for_user(current_user_id, limit=limit)
+    return BetaSessionsResponse(
+        sessions=[
+            BetaSessionSummary(id=record.id, title=record.title, updated_at=record.updated_at)
+            for record in records
+        ]
+    )
+
+
+@router.post("/sessions/{session_id}/claim", response_model=BetaClaimSessionResponse)
+async def beta_claim_session(
+    session_id: str,
+    orchestrator: OrchestratorDep,
+    current_user_id: RequireUserDep,
+) -> BetaClaimSessionResponse:
+    """Attach a pre-login anonymous chat to the account that just signed in.
+
+    Called once per locally-known session id right after sign-in, so chats
+    that started before the tester had an account end up in it too. Claiming
+    is idempotent and never reassigns a session someone else already claimed -
+    :meth:`Repository.claim_session` is where that rule actually lives.
+    """
+    record = await orchestrator.repository.claim_session(session_id, current_user_id)
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no such session")
+    return BetaClaimSessionResponse(session_id=record.id, claimed=record.user_id == current_user_id)

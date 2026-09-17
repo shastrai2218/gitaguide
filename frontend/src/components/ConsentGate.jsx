@@ -17,16 +17,31 @@ export default function ConsentGate({ onAccept, error }) {
   return (
     <div className="gate">
       <main className="gate-card">
+        <div className="gate-motif" aria-hidden="true">
+          <svg
+            viewBox="0 0 48 48"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path d="M24 10c0 8-5 13-11 16 6 0 9 3 11 8 2-5 5-8 11-8-6-3-11-8-11-16z" />
+            <path d="M24 16c0 5 2.5 9 5 12-2.5-1.5-3.5-1.5-5 0-1.5-1.5-2.5-1.5-5 0 2.5-3 5-7 5-12z" />
+          </svg>
+        </div>
+
         <h1>
           Gita<em>Guide</em>
         </h1>
 
-        <p>
-          GitaGuide reads what you write, recognises the feeling in it, and
-          offers a reflection grounded in specific verses from the Bhagavad Gita
-          and the Arthashastra. Every answer shows the verses it drew on, so you
-          can judge the reasoning for yourself.
+        <p className="gate-intro">
+          Recognises the feeling in what you write and offers a reflection
+          grounded in the Bhagavad Gita and the Arthashastra.
         </p>
+
+        <hr className="gate-divider" />
 
         <h2>Closed beta</h2>
         <p>
@@ -52,6 +67,8 @@ export default function ConsentGate({ onAccept, error }) {
           recorded against your session. Please do not enter names, contact
           details, or anything you would not want kept.
         </p>
+
+        <hr className="gate-divider" />
 
         <h2>If you need help now</h2>
         <ul>
@@ -85,3 +102,4 @@ export default function ConsentGate({ onAccept, error }) {
     </div>
   )
 }
+

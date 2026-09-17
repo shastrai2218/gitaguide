@@ -50,7 +50,11 @@ export default function WaitingIndicator() {
   return (
     <div className="turn">
       <div className="waiting" role="status" aria-live="polite">
-        <span className="diya" aria-hidden="true" />
+        <span className="diya-group" aria-hidden="true">
+          <span className="diya-dot" />
+          <span className="diya-dot" />
+          <span className="diya-dot" />
+        </span>
         <span>{STAGES[stage].text}</span>
       </div>
     </div>

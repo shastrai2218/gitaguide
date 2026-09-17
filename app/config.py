@@ -332,6 +332,16 @@ class Settings(BaseSettings):
     rate_limit_global_per_minute: float = 16.0
     rate_limit_global_burst: float = 6.0
 
+    # -------------------------------------------------------------------- auth
+    #: Clerk's Frontend API origin for this application, e.g.
+    #: ``https://your-app.clerk.accounts.dev`` (or a custom domain on a paid
+    #: plan). This is also the JWT ``iss`` claim Clerk issues, and
+    #: ``{clerk_issuer}/.well-known/jwks.json`` is where its signing keys live.
+    #: Empty by default: auth is optional everywhere it appears, and a session
+    #: with no token attached simply stays anonymous, the way every session
+    #: worked before this existed.
+    clerk_issuer: str = ""
+
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
 
     @field_validator("cors_origins", mode="before")
@@ -360,6 +370,11 @@ class Settings(BaseSettings):
         if self.use_real_emotion_model is not None:
             return self.use_real_emotion_model
         return not self.mock_mode
+
+    @property
+    def auth_enabled(self) -> bool:
+        """True once a Clerk issuer is configured. False leaves every session anonymous."""
+        return bool(self.clerk_issuer)
 
     @property
     def nvidia_enabled(self) -> bool:
