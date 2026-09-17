@@ -215,9 +215,7 @@ def test_expand_query_includes_emotion_and_intent() -> None:
     assert "professional dilemma" in expanded
 
 
-# --------------------------------------------------------------------------- #
 # Phase 1b - the two legs take two queries
-# --------------------------------------------------------------------------- #
 async def test_the_vector_leg_and_the_fulltext_leg_get_different_queries(
     corpus: Corpus, settings: Settings
 ) -> None:

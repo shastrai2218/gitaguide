@@ -25,9 +25,7 @@ FRONTEND_CONTENT = ROOT / "frontend" / "src" / "content"
 FRONTEND_URL = "https://gitaguide-livid.vercel.app"
 
 
-# --------------------------------------------------------------------------- #
 # The documents exist and agree with their served copies
-# --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("name", ["ONBOARDING.md", "PRIVACY.md", "DISCLAIMER.md"])
 def test_the_tester_pack_is_complete(name: str) -> None:
     path = PACK / name
@@ -54,9 +52,7 @@ def test_the_served_copy_is_the_tester_pack_document(name: str) -> None:
     )
 
 
-# --------------------------------------------------------------------------- #
 # One version string, everywhere
-# --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("name", ["PRIVACY.md", "DISCLAIMER.md"])
 def test_the_notices_print_the_version_the_server_requires(name: str) -> None:
     text = (PACK / name).read_text(encoding="utf-8")
@@ -100,9 +96,7 @@ def test_the_production_smoke_asserts_the_same_version() -> None:
     assert prod_smoke.SUPERSEDED_CONSENT_VERSION != CURRENT_CONSENT_VERSION
 
 
-# --------------------------------------------------------------------------- #
 # Onboarding says where the app is and what the texts are
-# --------------------------------------------------------------------------- #
 def test_onboarding_gives_testers_the_url() -> None:
     text = (PACK / "ONBOARDING.md").read_text(encoding="utf-8")
     assert FRONTEND_URL in text, "ONBOARDING.md does not tell testers where the app is"

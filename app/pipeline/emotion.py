@@ -1,5 +1,7 @@
 """Stage 1 - emotion detection.
 
+Called by: app.pipeline.orchestrator, stage 1.
+
 Research-pipeline role
 ---------------------
 Turns the raw user message into a multi-label emotion distribution plus a single

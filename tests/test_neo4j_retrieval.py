@@ -61,9 +61,7 @@ REPR_CONTENT = (
 )
 
 
-# --------------------------------------------------------------------------- #
 # Test doubles
-# --------------------------------------------------------------------------- #
 class StubItem:
     """Mimics ``RetrieverResultItem`` with whatever content shape we want."""
 
@@ -178,9 +176,7 @@ def emotion_of(*labels: str) -> EmotionResult:
     )
 
 
-# --------------------------------------------------------------------------- #
 # The formatter: item.content must be structured
-# --------------------------------------------------------------------------- #
 def test_formatter_returns_a_dict_not_a_repr_string() -> None:
     item = verse_result_formatter(StubRecord(RECORD))
     assert isinstance(item.content, dict), "content must be structured, not str(record)"
@@ -211,9 +207,7 @@ def test_query_returns_every_key_the_parser_expects() -> None:
     assert "AS metadata" in HYBRID_RETRIEVAL_QUERY
 
 
-# --------------------------------------------------------------------------- #
 # The parser
-# --------------------------------------------------------------------------- #
 def test_parses_structured_content() -> None:
     assert _record_to_dict(StubItem(RECORD))["id"] == "BG-2.47"
 
@@ -246,9 +240,7 @@ def test_unparseable_item_yields_empty_dict() -> None:
     assert _record_to_dict(object()) == {}
 
 
-# --------------------------------------------------------------------------- #
 # Parameter passing
-# --------------------------------------------------------------------------- #
 def test_installed_library_accepts_query_params() -> None:
     """Verified against the installed package, not assumed from a version."""
     from neo4j_graphrag.retrievers import HybridCypherRetriever
@@ -298,9 +290,7 @@ async def test_candidates_are_actually_built(neo4j_settings: Settings) -> None:
     assert "ADDRESSES_EMOTION" in trace.results[0].graph_paths[0].description
 
 
-# --------------------------------------------------------------------------- #
 # Loud failures
-# --------------------------------------------------------------------------- #
 async def test_items_returned_but_none_parsed_is_an_error(
     neo4j_settings: Settings, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -365,9 +355,7 @@ async def test_genuinely_empty_result_is_not_an_error(
     assert not any(record.levelno >= logging.ERROR for record in caplog.records)
 
 
-# --------------------------------------------------------------------------- #
 # Driver-level fallback
-# --------------------------------------------------------------------------- #
 async def test_falls_back_to_the_driver_when_params_unsupported(
     neo4j_settings: Settings, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -406,9 +394,7 @@ async def test_driver_fallback_failure_is_logged_and_raised(
     assert "RETRIEVAL SEARCH FAILED (driver-level path" in caplog.text
 
 
-# --------------------------------------------------------------------------- #
 # Wiring
-# --------------------------------------------------------------------------- #
 def test_retriever_is_constructed_with_the_formatter(
     neo4j_settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:

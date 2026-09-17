@@ -1,5 +1,7 @@
 """Stage 2 - intent classification over six classes.
 
+Called by: app.pipeline.orchestrator, stage 2.
+
 Research-pipeline role
 ---------------------
 Intent decides *how* the rest of the pipeline behaves:

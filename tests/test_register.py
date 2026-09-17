@@ -19,9 +19,7 @@ from app.pipeline.register import (
     register_instruction,
 )
 
-# --------------------------------------------------------------------------- #
 # Hindi (Devanagari)
-# --------------------------------------------------------------------------- #
 HINDI = [
     "मुझे नौकरी छोड़नी चाहिए?",
     "मेरा मन नहीं लग रहा है आजकल",
@@ -30,9 +28,7 @@ HINDI = [
     "मैं बहुत परेशान हूँ और कुछ समझ नहीं आ रहा",
 ]
 
-# --------------------------------------------------------------------------- #
 # Hinglish (Roman-script Hindi, and Romanised Gujarati by documented decision)
-# --------------------------------------------------------------------------- #
 HINGLISH = [
     # From real production traffic, 7 Sep (session web-886e1133…).
     "muje din bhar aacha nahi laag raha mein apne dimaag ko control nahi kar paa raha hu",
@@ -50,9 +46,7 @@ HINGLISH = [
     "dataset mate prabhupada's bhagwad gita use krvani kidhi",
 ]
 
-# --------------------------------------------------------------------------- #
 # English - the false-positive battery
-# --------------------------------------------------------------------------- #
 ENGLISH = [
     # Day 7 acceptance turns, verbatim.
     "My manager takes credit for my work and I'm getting bitter about it.",
@@ -103,9 +97,7 @@ def test_english_is_never_mistaken_for_hinglish(text: str) -> None:
     assert result.register is Register.ENGLISH, result.summary()
 
 
-# --------------------------------------------------------------------------- #
 # The boundaries themselves
-# --------------------------------------------------------------------------- #
 def test_one_quoted_sanskrit_word_does_not_make_an_english_question_hindi() -> None:
     """An English question *about* a Hindi word is an English message."""
     result = detect_register("What does धर्म actually mean in chapter 2?")
@@ -144,9 +136,7 @@ def test_the_result_carries_its_evidence() -> None:
     assert "hinglish" in result.summary()
 
 
-# --------------------------------------------------------------------------- #
 # The marker list's own hygiene
-# --------------------------------------------------------------------------- #
 def test_no_marker_is_shorter_than_three_letters() -> None:
     """Two-letter Hindi words collide with typos and abbreviations."""
     assert not [marker for marker in MARKERS if len(marker) < 3]
@@ -161,9 +151,7 @@ def test_english_colliding_words_are_excluded(word: str) -> None:
     assert word not in MARKERS
 
 
-# --------------------------------------------------------------------------- #
 # The instructions
-# --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("register", list(Register))
 def test_every_register_has_an_instruction(register: Register) -> None:
     assert register_instruction(register).strip()

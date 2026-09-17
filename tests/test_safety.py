@@ -252,9 +252,7 @@ def test_gate_uses_detector_output_end_to_end(
     assert len(verdict.triggers) >= 2  # rule + model
 
 
-# --------------------------------------------------------------------------- #
 # Day 3 hardening: phrasings that were missed, and the blind-classifier fallback
-# --------------------------------------------------------------------------- #
 #: The phrase family from docs/kg_measurements.md section 11. "I do not want to
 #: be alive anymore" reached retrieval and generation on a live turn because the
 #: rule table only covered "live", not "be alive".

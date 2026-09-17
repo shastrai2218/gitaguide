@@ -85,9 +85,7 @@ def counters(tmp_path: Path):
     set_active_telemetry(None)
 
 
-# --------------------------------------------------------------------------- #
 # The measurement
-# --------------------------------------------------------------------------- #
 def test_the_production_salad_is_degenerate(settings: Settings) -> None:
     """Caught by the word run alone, which is what makes the pair threshold safe.
 
@@ -177,9 +175,7 @@ def test_the_stutter_thresholds_are_what_the_docstring_says() -> None:
     assert not quality.degenerate, "a single doubled word is a typo, not salad"
 
 
-# --------------------------------------------------------------------------- #
 # The false positive that the pair threshold was raised for (9 Sep 2026)
-# --------------------------------------------------------------------------- #
 #: BG 6.6, rendered the way the corpus renders it. The doubled pair across the
 #: comma is ordinary English, and at a pair threshold of 2 an answer containing
 #: it was shed - the reader got "the guide is overloaded" for a correct reply.
@@ -233,9 +229,7 @@ async def test_the_offline_provider_survives_its_own_guard(
     assert result.citations
 
 
-# --------------------------------------------------------------------------- #
 # The generator
-# --------------------------------------------------------------------------- #
 async def test_salad_is_retried_once_and_the_retry_served(
     settings: Settings, trace: RetrievalTrace, counters
 ) -> None:
@@ -313,9 +307,7 @@ async def test_an_empty_completion_keeps_its_old_path(
     assert result.quality_guard == ""
 
 
-# --------------------------------------------------------------------------- #
 # Telemetry
-# --------------------------------------------------------------------------- #
 def test_quality_counters_are_always_present() -> None:
     telemetry = Telemetry(Settings(mock_mode=True, telemetry_enabled=False))
     today = telemetry.counters.today()

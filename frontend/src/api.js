@@ -144,9 +144,7 @@ export function isOffline() {
   return typeof navigator !== 'undefined' && navigator.onLine === false
 }
 
-// --------------------------------------------------------------------------- //
 // Normalisation
-// --------------------------------------------------------------------------- //
 
 /**
  * Coerce a raw /api/chat body into the shape the UI renders.
@@ -242,9 +240,7 @@ function normaliseCitations(raw) {
     .filter((item) => item.label || item.ref || item.text)
 }
 
-// --------------------------------------------------------------------------- //
 // Live calls
-// --------------------------------------------------------------------------- //
 
 /**
  * Send one turn, with a single automatic retry of a failed connection.
@@ -508,9 +504,7 @@ export async function claimSession(sessionId) {
   }
 }
 
-// --------------------------------------------------------------------------- //
 // Mock (UI preview only)
-// --------------------------------------------------------------------------- //
 
 // Kept in step with the wire format on purpose: this is what the UI preview
 // renders, so a field the real API sends and the mock omits is a field nobody
@@ -615,8 +609,6 @@ async function postChatMock(sessionId, message, signal) {
     },
   })
 }
-
-// --------------------------------------------------------------------------- //
 
 /** Send one turn. Resolves to the normalised turn, or throws `ApiError`. */
 export function sendMessage(sessionId, message, signal) {

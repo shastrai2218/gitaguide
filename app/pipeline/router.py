@@ -290,9 +290,7 @@ class RouteDecision:
         return self.standalone_query
 
 
-# --------------------------------------------------------------------------- #
 # Stage 1 - rules
-# --------------------------------------------------------------------------- #
 def _normalise(text: str) -> str:
     """Lowercase, strip punctuation/emoji/digits, collapse whitespace.
 
@@ -467,9 +465,7 @@ def rule_route(message: str, lexicon: Lexicon | None = None) -> RouteDecision | 
     )
 
 
-# --------------------------------------------------------------------------- #
 # Stage 2 - the model
-# --------------------------------------------------------------------------- #
 ROUTE_DEFINITIONS: dict[Route, str] = {
     Route.GREETING: "only saying hello or opening the conversation, asking nothing yet",
     Route.META: (
@@ -584,6 +580,10 @@ class ConversationRouter:
         """One bounded model call, with every failure resolving to guidance."""
 
         def fallback(reason: str, model: str = "") -> RouteDecision:
+            # COUNTER intent_router_fallback: the model was asked and could not
+            # be used - timeout, transport, bad JSON, unknown label. The turn is
+            # still answered as guidance, so this is a quality signal, not an
+            # error rate; if it climbs, set GITAGUIDE_ROUTER_MODEL_ENABLED=false.
             telemetry.count("intent_router_fallback")
             logger.warning("router fell back to %s: %s", DEFAULT_ROUTE.value, reason)
             return RouteDecision(

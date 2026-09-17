@@ -1,5 +1,7 @@
 """Stage 6 - conversation memory (rolling summary + last N turns).
 
+Called by: app.pipeline.orchestrator (stage 4) and generation.
+
 Research-pipeline role
 ---------------------
 Guidance is a multi-turn activity: "should I take the offer?" three turns later

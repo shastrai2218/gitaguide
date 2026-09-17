@@ -1,3 +1,10 @@
+/**
+ * The chat screen: owns the turn list, the composer draft and online state.
+ *
+ * Mounted by main.jsx. Talks to the backend only through api.js, which is
+ * where the wire format lives; every failure path here restores the draft so
+ * a dropped connection never costs the message.
+ */
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import {

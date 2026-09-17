@@ -46,9 +46,7 @@ def vercel_config() -> dict:
     return json.loads(VERCEL_JSON.read_text(encoding="utf-8"))
 
 
-# --------------------------------------------------------------------------- #
 # The rewrite, and the directive that disabled it
-# --------------------------------------------------------------------------- #
 def test_every_path_rewrites_to_the_single_page(vercel_config: dict) -> None:
     """Without this, only `/` exists and the notices 404."""
     rewrites = vercel_config.get("rewrites")
@@ -90,9 +88,7 @@ def test_the_security_headers_are_still_declared(vercel_config: dict) -> None:
     assert {"X-Content-Type-Options", "X-Frame-Options", "Referrer-Policy"} <= keys
 
 
-# --------------------------------------------------------------------------- #
 # The routes the app implements, and the links that point at them
-# --------------------------------------------------------------------------- #
 def test_the_router_answers_exactly_the_documented_routes() -> None:
     source = (FRONTEND / "src" / "components" / "StaticPage.jsx").read_text(encoding="utf-8")
     for route in CLIENT_ROUTES:

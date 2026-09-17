@@ -57,9 +57,7 @@ class BrokenProvider(LLMProvider):
         raise LLMError("nope")
 
 
-# --------------------------------------------------------------------------- #
 # The chain
-# --------------------------------------------------------------------------- #
 async def test_a_fast_primary_answers_and_the_fallback_is_untouched() -> None:
     primary, fallback = SlowProvider("primary", 0.01), SlowProvider("fallback", 0.01)
     chain = FallbackLLMProvider([primary, fallback], budget_seconds=5.0)
@@ -111,9 +109,7 @@ async def test_no_budget_configured_means_no_deadline() -> None:
     assert (await chain.complete("hello")).provider == "p"
 
 
-# --------------------------------------------------------------------------- #
 # The overload turn
-# --------------------------------------------------------------------------- #
 async def test_an_exhausted_budget_produces_a_normal_shaped_overload_turn(
     retriever: InMemoryHybridRetriever,
 ) -> None:

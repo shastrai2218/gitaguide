@@ -1,5 +1,7 @@
 """Sentence embeddings for the vector half of hybrid retrieval.
 
+Called by: app.pipeline.retrieval and scripts/reembed_graph.py.
+
 Research-pipeline role
 ---------------------
 The KG builder embeds every verse with ``all-MiniLM-L6-v2`` and writes the

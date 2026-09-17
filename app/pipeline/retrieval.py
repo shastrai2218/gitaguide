@@ -1,5 +1,7 @@
 """Stage 4 - hybrid retrieval (vector + full-text + graph expansion).
 
+Called by: app.pipeline.orchestrator, stage 5.
+
 Research-pipeline role
 ---------------------
 This is the retrieval contribution of the project. Three channels are fused:
@@ -94,9 +96,7 @@ REL_HAS_THEME = "HAS_THEME"
 REL_RELATED_TO = "RELATED_TO"
 
 
-# --------------------------------------------------------------------------- #
 # Scoring helpers (pure functions - unit tested in tests/test_retrieval.py)
-# --------------------------------------------------------------------------- #
 def scripture_affinity(intent: IntentLabel, source: ScriptureSource) -> float:
     """Prior probability that ``source`` is the right text for ``intent``."""
     return INTENT_SCRIPTURE_AFFINITY.get(intent, {}).get(source, 0.3)
@@ -145,9 +145,7 @@ def expand_query(query: str, emotion: EmotionResult | None, intent: IntentResult
     return " | ".join(parts)
 
 
-# --------------------------------------------------------------------------- #
 # Interface
-# --------------------------------------------------------------------------- #
 class HybridRetriever(ABC):
     """Retrieval interface used by the orchestrator.
 
@@ -184,9 +182,7 @@ class HybridRetriever(ABC):
         return None
 
 
-# --------------------------------------------------------------------------- #
 # Offline implementation
-# --------------------------------------------------------------------------- #
 class InMemoryHybridRetriever(HybridRetriever):
     """Full hybrid retrieval over an in-process corpus and graph.
 
@@ -475,9 +471,7 @@ def _load_default_corpus(settings: Settings) -> Corpus:
     return Corpus()
 
 
-# --------------------------------------------------------------------------- #
 # Neo4j implementation
-# --------------------------------------------------------------------------- #
 class RetrievalError(RuntimeError):
     """Retrieval failed in a way that must not be mistaken for "no results".
 
@@ -974,9 +968,7 @@ def _record_to_retrieved_verse(record: Mapping[str, Any], emotions: Sequence[str
     )
 
 
-# --------------------------------------------------------------------------- #
 # Factory
-# --------------------------------------------------------------------------- #
 def build_retriever(
     settings: Settings | None = None,
     embedder: Embedder | None = None,

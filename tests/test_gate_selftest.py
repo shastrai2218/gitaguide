@@ -96,9 +96,7 @@ def test_the_canonical_cases_are_what_they_claim_to_be() -> None:
     assert len(CANONICAL_CONTROL.split()) >= 5
 
 
-# --------------------------------------------------------------------------- #
 # The generation-budget floor
-# --------------------------------------------------------------------------- #
 def test_the_default_budget_passes_the_floor() -> None:
     check_generation_budget(Settings(mock_mode=True))
 
@@ -146,3 +144,82 @@ def test_the_app_will_not_start_with_a_budget_below_the_floor() -> None:
     )
     with pytest.raises(StartupConfigError), TestClient(app):
         pass  # pragma: no cover - startup raises before the body runs
+
+
+# The router lexicon check: loud, but not fatal
+#
+# This one warns where every check above refuses to start, and the asymmetry is
+# deliberate. An unarmed safety gate is a service that is up and not protecting
+# anyone. A missing lexicon costs latency and NIM quota - every "hi" pays a
+# model call - while every answer stays correct and safe, so taking a working
+# beta down over it would do more harm than the fault does.
+def test_the_lexicon_check_passes_with_the_real_file(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import logging
+
+    from app.pipeline.gate_selftest import check_router_lexicon
+
+    with caplog.at_level(logging.INFO):
+        count = check_router_lexicon()
+    assert count > 0
+    assert "router lexicon loaded" in caplog.text
+
+
+def test_a_missing_lexicon_is_shouted_about_but_does_not_stop_the_boot(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The 16 Sep production failure, as a test.
+
+    The image had no data/ directory, so the lexicon never loaded and stage 1
+    was disabled on every turn. Nothing said so except one exception line at
+    first use. Now the boot says it, at CRITICAL, and names the likely cause.
+    """
+    import logging
+    import pathlib
+
+    import app.pipeline.router as router
+    from app.pipeline.gate_selftest import check_router_lexicon
+
+    monkeypatch.setattr(router, "LEXICON_PATH", pathlib.Path("/nonexistent/lexicon.yaml"))
+    monkeypatch.setattr(router, "_LEXICON", None)
+
+    with caplog.at_level(logging.CRITICAL):
+        count = check_router_lexicon()
+
+    assert count == 0
+    assert "ROUTER LEXICON DID NOT LOAD" in caplog.text
+    assert "Dockerfile" in caplog.text, "the message must name the likely cause"
+    assert any(
+        record.levelno >= logging.CRITICAL for record in caplog.records
+    ), "a warning nobody sees is what we already had"
+
+
+def test_the_whole_startup_self_test_survives_a_missing_lexicon(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Degrade, do not crash - the request-time contract, kept at boot too."""
+    import pathlib
+
+    import app.pipeline.router as router
+    from app.pipeline.gate_selftest import run_startup_self_test
+
+    monkeypatch.setattr(router, "LEXICON_PATH", pathlib.Path("/nonexistent/lexicon.yaml"))
+    monkeypatch.setattr(router, "_LEXICON", None)
+
+    run_startup_self_test(Settings(mock_mode=True, environment="test"))
+
+
+def test_a_missing_lexicon_still_answers_the_turn(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Request-time behaviour is unchanged: guidance, not an error."""
+    import asyncio
+    import pathlib
+
+    import app.pipeline.router as router
+
+    monkeypatch.setattr(router, "LEXICON_PATH", pathlib.Path("/nonexistent/lexicon.yaml"))
+    monkeypatch.setattr(router, "_LEXICON", None)
+
+    decision = asyncio.run(router.ConversationRouter(llm=None).route("hi"))
+    assert decision.route is router.Route.GUIDANCE
+    assert decision.retrieves

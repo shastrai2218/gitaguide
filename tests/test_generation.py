@@ -209,7 +209,6 @@ async def test_llm_failure_is_survived(settings: Settings, trace: RetrievalTrace
     assert set(result.citations) <= set(trace.verse_ids)
 
 
-# --------------------------------------------------------------------------- #
 # Graph-path citation leak (regression)
 #
 # 1-2 hop paths name the *seed* verse, which is often not in the top-k. The
@@ -217,7 +216,6 @@ async def test_llm_failure_is_survived(settings: Settings, trace: RetrievalTrace
 # spend a second LLM call on a rewrite - or fall back to the template with
 # grounded=False. Ids the model may not cite are masked in the prompt and in the
 # answer body; the unmasked path stays in the trace for the explanation panel.
-# --------------------------------------------------------------------------- #
 LEAKY_SEED = "BG-3.35"
 
 
@@ -353,11 +351,9 @@ async def test_template_fallback_is_also_clean(settings: Settings) -> None:
     assert set(extract_verse_ids(result.answer)) <= set(trace.verse_ids)
 
 
-# --------------------------------------------------------------------------- #
 # Arthashastra ids are three-part (AS-<book>.<chapter>.<sutra>) while Gita ids
 # are two-part (BG-<chapter>.<verse>). The citation regex and the masker were
 # written when only BG existed, so both forms are pinned here explicitly.
-# --------------------------------------------------------------------------- #
 @pytest.mark.parametrize(
     ("text", "expected"),
     [

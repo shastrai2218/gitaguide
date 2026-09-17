@@ -1,5 +1,7 @@
 """Stage 5 - grounded generation with enforced citations.
 
+Called by: app.pipeline.orchestrator, stage 6.
+
 Research-pipeline role
 ---------------------
 The model is allowed to reason, but not to source. Everything it asserts about
@@ -96,9 +98,7 @@ OVERLOADED_ANSWER = (
 WHY_HEADING = "### Why this verse"
 
 
-# --------------------------------------------------------------------------- #
 # Output sanity guard
-# --------------------------------------------------------------------------- #
 #: Letters in any script. Digits, punctuation and verse ids are not words.
 WORD_RE = re.compile(r"[^\W\d_]+")
 #: The explanation heading, in whatever form a model writes it. Used to find the
@@ -861,6 +861,9 @@ class GroundedGenerator:
         if not response.text.strip() or not quality.degenerate:
             return response
 
+        # COUNTERS degenerate_output_*: detected -> one retry -> recovered, or
+        # shed and the reader gets the overload reply instead of word salad.
+        # The floor comes from the tier, so a short reply is not a fragment.
         telemetry.count("degenerate_output_detected")
         first = response.model or response.provider
         logger.warning("degenerate answer from %s (%s); retrying once", first, quality.summary())

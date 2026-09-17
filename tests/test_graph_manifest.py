@@ -57,9 +57,7 @@ def configure_precision(monkeypatch: pytest.MonkeyPatch, precision: str) -> None
     reset_settings_cache()
 
 
-# --------------------------------------------------------------------------- #
 # The manifest
-# --------------------------------------------------------------------------- #
 def test_manifest_records_the_precision_the_check_measured() -> None:
     settings = Settings(mock_mode=True, embedder_precision="int8")
     check = {"precision": "int8", "encoder": "all-MiniLM-L6-v2-onnx-int8",
@@ -92,9 +90,7 @@ def test_manifest_records_when_it_was_exported() -> None:
     assert before <= exported_at <= datetime.now(UTC)
 
 
-# --------------------------------------------------------------------------- #
 # The measurement
-# --------------------------------------------------------------------------- #
 def test_the_same_encoder_agrees_to_one() -> None:
     stored = {"BG-2.47": [0.1, 0.2, 0.3], "AS-1.2.3": [0.3, 0.2, 0.1]}
     assert export_neo4j.min_cosine(stored, stored) == pytest.approx(1.0)
@@ -128,9 +124,7 @@ def test_the_check_refuses_to_run_on_the_hashing_embedder() -> None:
         export_neo4j.verify_stored_precision(None, "neo4j", Settings(mock_mode=True))
 
 
-# --------------------------------------------------------------------------- #
 # The import refuses what it cannot vouch for
-# --------------------------------------------------------------------------- #
 def test_import_refuses_a_manifest_that_records_no_precision(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

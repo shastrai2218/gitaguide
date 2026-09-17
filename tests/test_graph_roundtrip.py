@@ -215,9 +215,7 @@ def graph_counts(uri: str) -> dict[str, int]:
         driver.close()
 
 
-# --------------------------------------------------------------------------- #
 # The round trip
-# --------------------------------------------------------------------------- #
 def test_import_reproduces_the_exported_graph(
     neo4j_container: dict[str, str], export_dir: Path
 ) -> None:

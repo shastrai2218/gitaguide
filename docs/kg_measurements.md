@@ -1413,3 +1413,49 @@ The valid rewrite measurement above was taken with the router pinned to the
 that window. Which model writes the rewrite does not affect what the rewrite
 does to retrieval, which is what that table measures - but it is stated
 rather than left for someone to discover in the artefact.
+---
+
+## 14d. The routing measurements were never what production ran (16 Sep 2026)
+
+A correction to how sections 14b and 14c should be read, and the reason a
+number in this document could not have been reproduced against the live
+service.
+
+From 13 to 16 Sep the Render image contained **no `data/` directory**. The
+Dockerfile copied `app`, `corpus`, `kg`, `eval` and `scripts`;
+`data/intent_lexicon.yaml` shipped on 13 Sep into a directory that had never
+been on that list. `get_lexicon()` caught the `FileNotFoundError` by design -
+losing a convenience must not take the service down - logged one line, and
+returned an empty lexicon. `rule_route` then returned `None` on its first
+statement for every message.
+
+So in production, for three days, **stage 1 did not exist**. Every greeting,
+acknowledgement, meta question and follow-up went to the model. A prod smoke
+test found it, on the greeting check added in the same phase as the bug: `hi`
+reached the router's model stage, fell back, and came back citing BG 2.47.
+
+### What this does and does not invalidate
+
+**Nothing in 14b or 14c is wrong.** Both sections state on their face that they
+were measured locally, against the in-memory retriever, with no Neo4j - and the
+`38/40` and `0/20` figures came from that stack, where the lexicon loads from
+the repository. They remain what the code does.
+
+What they were not, and never claimed to be, is a description of the deployment.
+The gap between "measured" and "deployed" was an unshipped file, and no
+measurement in this document could have detected it, because every one of them
+ran somewhere the file exists.
+
+### The check that was missing
+
+Not a better measurement - a test that the *image* carries what the *code*
+reads. `tests/test_deploy_config.py` now derives the set of
+`PROJECT_ROOT`-relative directories the shipped packages read, derives the set
+the Dockerfile copies, and fails if the first is not a subset of the second. It
+fails against the pre-fix Dockerfile, which is the only evidence that it works.
+
+The boot sequence also says so now, at CRITICAL, naming the Dockerfile as the
+likely cause. It does **not** refuse to start, unlike the safety-gate self-test
+beside it: an unarmed gate is a service that is up and protecting nobody, while
+a missing lexicon costs latency and NIM quota with every answer still correct.
+Taking a working beta down over the second would do more harm than the fault.

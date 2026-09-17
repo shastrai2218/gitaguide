@@ -1,5 +1,7 @@
 """Serialise pipeline execution so peak memory is one turn, not N.
 
+Called by: app.api.beta, around the whole turn.
+
 Why
 ---
 A turn's peak allocation is dominated by two ONNX forward passes and the

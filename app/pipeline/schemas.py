@@ -1,5 +1,7 @@
 """Shared domain models that travel between pipeline stages.
 
+Called by: every pipeline stage; this is the shared vocabulary.
+
 Research-pipeline role
 ---------------------
 Each stage of GitaGuide consumes and produces one of these typed objects, so a

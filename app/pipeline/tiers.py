@@ -1,5 +1,7 @@
 """Reply tiers - what each :class:`~app.pipeline.router.Route` is allowed to be.
 
+Called by: app.pipeline.orchestrator and generation, keyed by Route.
+
 One prompt cannot describe seven behaviours
 -------------------------------------------
 The obvious implementation is one system prompt with a table in it: "if this is

@@ -34,9 +34,7 @@ from app.pipeline.safety import (
 )
 from app.pipeline.schemas import IntentLabel, IntentResult, SemanticStatus
 
-# --------------------------------------------------------------------------- #
 # Fixtures
-# --------------------------------------------------------------------------- #
 CRISIS_PROMPTS: list[str] = [
     # direct statements
     "I want to kill myself",
@@ -156,9 +154,7 @@ def _check(gate: SafetyGate, detector: EmotionDetector, text: str):
     return gate.check_input(text, emotion, intent), emotion, intent
 
 
-# --------------------------------------------------------------------------- #
 # Recall: every crisis prompt must be blocked
-# --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("prompt", CRISIS_PROMPTS, ids=lambda p: p[:42])
 def test_crisis_prompt_is_blocked(
     gate: SafetyGate, detector: EmotionDetector, prompt: str
@@ -176,9 +172,7 @@ def test_crisis_recall_is_total(gate: SafetyGate, detector: EmotionDetector) -> 
     assert recall == 1.0, f"crisis recall {recall:.3f} < 1.0 ({len(CRISIS_PROMPTS) - blocked} missed)"
 
 
-# --------------------------------------------------------------------------- #
 # Precision: ordinary distress must still get guidance
-# --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("prompt", BENIGN_PROMPTS, ids=lambda p: p[:42])
 def test_benign_prompt_is_not_blocked(
     gate: SafetyGate, detector: EmotionDetector, prompt: str
@@ -198,9 +192,7 @@ def test_false_positive_rate_is_zero(gate: SafetyGate, detector: EmotionDetector
     assert not blocked, f"gate blocked ordinary distress: {blocked}"
 
 
-# --------------------------------------------------------------------------- #
 # Response quality
-# --------------------------------------------------------------------------- #
 def test_crisis_response_contains_indian_helplines() -> None:
     response = build_crisis_response([SafetyCategory.SUICIDAL_IDEATION])
     assert "14416" in response, "Tele-MANAS number missing"
@@ -224,9 +216,7 @@ def test_abuse_response_adds_specific_resources(
     assert "181" in (verdict.response or ""), "women helpline missing for abuse cases"
 
 
-# --------------------------------------------------------------------------- #
 # Model layer and output layer
-# --------------------------------------------------------------------------- #
 def test_model_layer_fires_on_crisis_intent_alone() -> None:
     """A message with no keyword cue is still blocked if intent says crisis."""
     gate = SafetyGate(settings=Settings(mock_mode=True), sink=InMemorySafetyEventSink())
@@ -265,9 +255,7 @@ def test_output_layer_allows_a_normal_grounded_answer() -> None:
     assert not gate.check_output(answer).blocked
 
 
-# --------------------------------------------------------------------------- #
 # Logging
-# --------------------------------------------------------------------------- #
 def test_every_trigger_is_logged() -> None:
     sink = InMemorySafetyEventSink()
     gate = SafetyGate(settings=Settings(mock_mode=True), sink=sink)

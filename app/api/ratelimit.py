@@ -1,5 +1,7 @@
 """In-process rate limiting for the beta chat endpoint.
 
+Called by: app.api.beta, before admission.
+
 Why this exists, and why the numbers are what they are
 -----------------------------------------------------
 The NVIDIA NIM free tier allows roughly **40 requests per minute per model**,

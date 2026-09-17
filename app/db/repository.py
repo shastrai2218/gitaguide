@@ -1,5 +1,7 @@
 """Persistence behind one interface, with a real and a fake implementation.
 
+Called by: app.pipeline.orchestrator and app.pipeline.memory.
+
 Research-pipeline role
 ---------------------
 The orchestrator and :mod:`app.pipeline.memory` only ever see
@@ -24,9 +26,7 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-# --------------------------------------------------------------------------- #
 # Transport records (kept ORM-free so the API layer never touches SQLAlchemy)
-# --------------------------------------------------------------------------- #
 @dataclass(slots=True)
 class SessionRecord:
     id: str
@@ -95,9 +95,7 @@ class SafetyLogRecord:
     created_at: datetime = field(default_factory=_utcnow)
 
 
-# --------------------------------------------------------------------------- #
 # Interface
-# --------------------------------------------------------------------------- #
 class Repository(ABC):
     """Everything the pipeline needs to persist or read back."""
 
@@ -171,9 +169,7 @@ class Repository(ABC):
         return True
 
 
-# --------------------------------------------------------------------------- #
 # Offline implementation
-# --------------------------------------------------------------------------- #
 class InMemoryRepository(Repository):
     """Dict-backed repository used in mock mode and in every unit test."""
 

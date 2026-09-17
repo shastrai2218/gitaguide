@@ -61,9 +61,7 @@ def waiting_jsx() -> str:
     return (SRC / "components" / "WaitingIndicator.jsx").read_text(encoding="utf-8")
 
 
-# --------------------------------------------------------------------------- #
 # Failures are told apart, because the right response differs
-# --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("kind", ["OFFLINE", "NETWORK", "TIMEOUT", "SERVER"])
 def test_failure_kinds_are_named(api_js: str, kind: str) -> None:
     assert f"{kind}:" in api_js, "the UI cannot react to a cause it cannot name"
@@ -86,9 +84,7 @@ def test_an_offline_send_never_reaches_the_network(api_js: str) -> None:
     assert live.index("isOffline()") < live.index("postChatAttempt(")
 
 
-# --------------------------------------------------------------------------- #
 # Exactly one automatic retry, and only of the right thing
-# --------------------------------------------------------------------------- #
 def test_a_dropped_connection_is_retried_once(api_js: str) -> None:
     live = api_js.split("async function postChatLive")[1].split("async function postChatAttempt")[0]
     assert live.count("postChatAttempt(") == 2, (
@@ -118,9 +114,7 @@ def test_a_caller_cancellation_is_not_retried(api_js: str) -> None:
     assert "signal?.aborted" in live
 
 
-# --------------------------------------------------------------------------- #
 # The message survives the failure
-# --------------------------------------------------------------------------- #
 def test_the_composer_text_is_owned_by_app(app_jsx: str, composer_jsx: str) -> None:
     """It has to be, for a failed turn to be able to put it back."""
     assert "const [draft, setDraft] = useState('')" in app_jsx
@@ -168,9 +162,7 @@ def test_the_error_turn_still_offers_its_own_retry(app_jsx: str) -> None:
     assert "onRetry={() => send(entry.text, { replaceLast: true })}" in app_jsx
 
 
-# --------------------------------------------------------------------------- #
 # Connection state is visible before a send fails
-# --------------------------------------------------------------------------- #
 def test_the_app_listens_for_connection_changes(app_jsx: str) -> None:
     for event in ("'online'", "'offline'"):
         assert f"window.addEventListener({event}" in app_jsx
@@ -188,9 +180,7 @@ def test_the_offline_notice_has_a_style(app_jsx: str) -> None:
     assert ".composer-offline" in css
 
 
-# --------------------------------------------------------------------------- #
 # Waiting copy, pinned to measured latency
-# --------------------------------------------------------------------------- #
 def test_the_waiting_copy_escalates_and_ends_honestly(waiting_jsx: str) -> None:
     stages = [int(value) for value in re.findall(r"at:\s*(\d+)", waiting_jsx)]
     assert stages == sorted(stages), "stages must be in order"
