@@ -35,7 +35,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           # Offline core only - the heavy ML/graph extras are not needed because
-          # mock mode replaces those backends with in-process fakes.
+          # mock mode replaces those backends with in-process fakes. PyJWT is
+          # a hard import of app.auth (pulled in by app.main via the beta
+          # router) even when no Clerk issuer is configured, so it belongs
+          # here rather than with the ML extras.
           pip install fastapi "uvicorn[standard]" pydantic pydantic-settings httpx \
                       "SQLAlchemy>=2.0" aiosqlite "PyJWT[crypto]" pytest pytest-asyncio pytest-cov ruff
 
