@@ -53,16 +53,17 @@ def verify_token(token: str, settings: Settings) -> str | None:
     verification failure is exactly as anonymous as no token at all, not an
     error to surface.
     """
-    if not settings.auth_enabled:
+    issuer = settings.clerk_issuer.rstrip("/")
+    if not issuer:
         return None
     try:
-        client = _client_for(settings.clerk_issuer)
+        client = _client_for(issuer)
         signing_key = client.get_signing_key_from_jwt(token)
         claims = jwt.decode(
             token,
             key=signing_key.key,
             algorithms=["RS256"],
-            issuer=settings.clerk_issuer,
+            issuer=issuer,
             # Clerk's session tokens are scoped by issuer, not by an audience
             # claim this backend would need to register ahead of time.
             options={"verify_aud": False},
