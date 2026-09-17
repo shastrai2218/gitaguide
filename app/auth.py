@@ -78,9 +78,9 @@ def verify_token(token: str, settings: Settings) -> str | None:
 def current_user_id(request: Request) -> str | None:
     """FastAPI dependency: the signed-in user's id, or ``None`` for anonymous.
 
-    Reads ``Authorization: Bearer <token>``. Absent, malformed, or unverifiable
-    all resolve to the same ``None`` - there is no "logged in but invalid"
-    state a route needs to handle separately.
+    Reads the ``Authorization`` header (Bearer token). Absent, malformed, or
+    unverifiable tokens all resolve to ``None`` - there is no "logged in but
+    invalid" state a route needs to handle separately.
     """
     header = request.headers.get("authorization", "")
     if not header.lower().startswith("bearer "):
