@@ -46,7 +46,7 @@ aiosqlite==0.22.1          # SQLite async driver (tests / laptop mode)
 # accounts are optional identity on top of the existing anonymous sessions,
 # not a new service this process talks to. `[crypto]` pulls in `cryptography`
 # for RS256; there is no lighter way to check an RSA signature.
-PyJWT[crypto]==2.11.0
+PyJWT[crypto]==2.13.0
 
 # ---- models: both run on onnxruntime, CPU, no torch -----------------------
 # emotion   : SamLowe/roberta-base-go_emotions, ONNX INT8
