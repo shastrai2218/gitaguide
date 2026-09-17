@@ -62,6 +62,7 @@ class SqlAlchemyRepository(Repository):
     def _to_session_record(row: ConversationSession) -> SessionRecord:
         return SessionRecord(
             id=row.id,
+            user_id=row.user_id,
             title=row.title,
             locale=row.locale,
             rolling_summary=row.rolling_summary or "",
@@ -158,6 +159,33 @@ class SqlAlchemyRepository(Repository):
             row.rolling_summary = summary
             row.updated_at = _utcnow()
             await session.commit()
+
+    async def claim_session(self, session_id: str, user_id: str) -> SessionRecord | None:
+        async with self.session_factory() as session:
+            row = await session.get(ConversationSession, session_id)
+            if row is None:
+                return None
+            if row.user_id is None:
+                row.user_id = user_id
+                row.updated_at = _utcnow()
+                await session.commit()
+                await session.refresh(row)
+            return self._to_session_record(row)
+
+    async def list_sessions_for_user(
+        self, user_id: str, limit: int = 100
+    ) -> list[SessionRecord]:
+        async with self.session_factory() as session:
+            statement = (
+                select(ConversationSession)
+                .where(ConversationSession.user_id == user_id)
+                .order_by(desc(ConversationSession.updated_at))
+                .limit(limit)
+            )
+            rows: Sequence[ConversationSession] = (
+                (await session.execute(statement)).scalars().all()
+            )
+            return [self._to_session_record(row) for row in rows]
 
     # ----------------------------------------------------------- feedback
     @staticmethod

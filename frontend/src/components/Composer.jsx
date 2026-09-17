@@ -75,8 +75,17 @@ export default function Composer({ value, onChange, onSend, busy, online = true 
             disabled={busy || !value.trim()}
           >
             Send
-            <svg className="send-icon" viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M1 8l6-6v4h7v4H7v4L1 8z" />
+            <svg
+              className="send-icon"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M2 8h11M9 4l4 4-4 4" />
             </svg>
           </button>
         </form>

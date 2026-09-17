@@ -18,10 +18,17 @@ export default function ConsentGate({ onAccept, error }) {
     <div className="gate">
       <main className="gate-card">
         <div className="gate-motif" aria-hidden="true">
-          <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M32 8c0 12-8 20-16 24 8 0 14 4 16 12 2-8 8-12 16-12-8-4-16-12-16-24z" fill="#e9a23b" opacity="0.8"/>
-            <path d="M32 8c0 8 4 14 8 18-4-2-6-2-8 0-2-2-4-2-8 0 4-4 8-10 8-18z" fill="#f0b85a" opacity="0.5"/>
-            <circle cx="32" cy="44" r="3" fill="#e9a23b" opacity="0.6"/>
+          <svg
+            viewBox="0 0 48 48"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path d="M24 10c0 8-5 13-11 16 6 0 9 3 11 8 2-5 5-8 11-8-6-3-11-8-11-16z" />
+            <path d="M24 16c0 5 2.5 9 5 12-2.5-1.5-3.5-1.5-5 0-1.5-1.5-2.5-1.5-5 0 2.5-3 5-7 5-12z" />
           </svg>
         </div>
 

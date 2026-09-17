@@ -55,6 +55,11 @@ class ConversationSession(Base):
     __tablename__ = "sessions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid_str)
+    #: Clerk's user id, once this session has been claimed by a signed-in
+    #: account (see app/auth.py and Repository.claim_session). Null for every
+    #: session created before accounts existed, and for any anonymous one -
+    #: which is still a fully working session, never a degraded one.
+    user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(200), default="")
     locale: Mapped[str] = mapped_column(String(16), default="en-IN")
     rolling_summary: Mapped[str] = mapped_column(Text, default="")

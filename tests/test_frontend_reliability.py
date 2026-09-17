@@ -153,8 +153,14 @@ def test_resending_the_same_text_replaces_the_error_rather_than_stacking(
 
 
 def test_a_new_session_clears_the_draft(app_jsx: str) -> None:
-    handler = app_jsx.split("function handleNewSession()")[1].split("}")[0]
-    assert "setDraft('')" in handler
+    """`handleNewSession` shares its cleanup with every other way the active
+    chat can change - picking one from the sidebar, deleting the active one -
+    through `switchToSession`, which is where the draft is actually cleared."""
+    new_session_handler = app_jsx.split("function handleNewSession()")[1].split("}")[0]
+    assert "switchToSession(" in new_session_handler
+
+    switch_handler = app_jsx.split("function switchToSession(id)")[1].split("}")[0]
+    assert "setDraft('')" in switch_handler
 
 
 def test_the_error_turn_still_offers_its_own_retry(app_jsx: str) -> None:

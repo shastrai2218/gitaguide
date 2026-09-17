@@ -39,6 +39,35 @@ export const CONSENT_REQUIRED = 'consent_required'
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 
+/**
+ * How every call in this module gets a Clerk session token, without this
+ * module importing React or Clerk itself - `api.js` stays the one file that
+ * knows the wire format, not a second place that knows about auth.
+ * `AuthBridge.jsx` calls `setAuthTokenGetter` once, from inside
+ * `<ClerkProvider>`, with Clerk's own `getToken`. Unset (the default, and
+ * always the case when accounts are not configured for this build), every
+ * request simply carries no `Authorization` header - identical to how every
+ * request worked before accounts existed.
+ */
+let getAuthToken = null
+
+export function setAuthTokenGetter(fn) {
+  getAuthToken = fn
+}
+
+async function authHeaders() {
+  if (!getAuthToken) return {}
+  try {
+    const token = await getAuthToken()
+    return token ? { Authorization: `Bearer ${token}` } : {}
+  } catch {
+    // A token fetch failing (expired session, network hiccup) is not this
+    // request's problem to report - it just goes out unauthenticated, the
+    // same as a signed-out tester's would.
+    return {}
+  }
+}
+
 /** Mock mode is opt-in and always announced in the header. See `MOCK` below. */
 export const MOCK = import.meta.env.VITE_MOCK === '1'
 
@@ -270,7 +299,7 @@ async function postChatAttempt(sessionId, message, signal) {
   try {
     response = await fetch(`${API_BASE}/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
       body: JSON.stringify({ session_id: sessionId, message }),
       signal: deadline.signal,
     })
@@ -370,7 +399,7 @@ export async function recordConsentOnServer(sessionId) {
   try {
     response = await fetch(`${API_BASE}/consent`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
       body: JSON.stringify({ session_id: sessionId, version: CONSENT_VERSION }),
     })
   } catch {
@@ -416,6 +445,7 @@ export async function fetchSessionMessages(sessionId) {
   try {
     response = await fetch(
       `${API_BASE}/sessions/${encodeURIComponent(sessionId)}/messages`,
+      { headers: await authHeaders() },
     )
   } catch {
     return null
@@ -426,6 +456,55 @@ export async function fetchSessionMessages(sessionId) {
     return Array.isArray(body?.messages) ? body.messages : null
   } catch {
     return null
+  }
+}
+
+/**
+ * This account's saved chats, most recently active first. Only meaningful
+ * when signed in - the caller is expected to check that first, since a
+ * signed-out request has nothing to authenticate the call with and the
+ * server refuses it with 401 rather than an empty list.
+ */
+export async function fetchMySessions() {
+  if (MOCK) return []
+  let response
+  try {
+    response = await fetch(`${API_BASE}/sessions`, { headers: await authHeaders() })
+  } catch {
+    return []
+  }
+  if (!response.ok) return []
+  try {
+    const body = await response.json()
+    return Array.isArray(body?.sessions) ? body.sessions : []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Attach a session this browser already knows about to the account that just
+ * signed in. Safe to call for a session the account already owns, or does not
+ * own at all (a stranger's claimed session): both come back `claimed: false`
+ * rather than an error, since neither is this call's problem to report.
+ */
+export async function claimSession(sessionId) {
+  if (MOCK) return false
+  let response
+  try {
+    response = await fetch(
+      `${API_BASE}/sessions/${encodeURIComponent(sessionId)}/claim`,
+      { method: 'POST', headers: await authHeaders() },
+    )
+  } catch {
+    return false
+  }
+  if (!response.ok) return false
+  try {
+    const body = await response.json()
+    return body?.claimed === true
+  } catch {
+    return false
   }
 }
 
