@@ -1,0 +1,67 @@
+# ---------------------------------------------------------------------------
+# Production stack for any single Linux VM (AWS EC2, Oracle, ...): the API behind
+# a Caddy TLS proxy.
+#
+#   docker compose --env-file .env.vm -f docker-compose.vm.yml up -d --build
+#
+# Neo4j (AuraDB) and PostgreSQL (Supabase) stay managed and are reached over the
+# internet from the values in .env.vm, exactly as on Render. Nothing stateful
+# is self-hosted here. See docs/DEPLOY_AWS.md.
+#
+# Why Caddy is in front: the frontend is served over https from Vercel, and a
+# browser refuses to let an https page call an http API (mixed content). The API
+# therefore needs a real certificate, and Caddy obtains and renews a Let's
+# Encrypt one on its own. It is also the single trusted proxy that
+# GITAGUIDE_RATE_LIMIT_TRUSTED_PROXY_HOPS=1 refers to.
+# ---------------------------------------------------------------------------
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gitaguide-api
+    restart: unless-stopped
+    env_file: .env.vm
+    volumes:
+      # Keeps the ONNX downloads across restarts; without it every container
+      # recreate re-downloads both models before /health can pass.
+      - model-cache:/models
+      - api-logs:/app/logs
+    # Not published to the host: only Caddy, on the compose network, can reach it.
+    expose:
+      - "8000"
+    logging: &log-limits
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2
+    container_name: gitaguide-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"    # Let's Encrypt HTTP-01 challenge and the redirect to https
+      - "443:443"
+    environment:
+      API_DOMAIN: "${API_DOMAIN:?set API_DOMAIN in .env.vm}"
+    volumes:
+      - ./deploy/vm/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates. Losing this volume means re-issuing, and Let's Encrypt
+      # rate-limits re-issuance for the same name.
+      - caddy-data:/data
+      - caddy-config:/config
+    # service_started, not service_healthy: the API needs 80-100s to load both
+    # models and Caddy should already be up, answering 502, rather than the
+    # whole stack refusing to start if that takes longer than the image's
+    # health-check window.
+    depends_on:
+      - api
+    logging: *log-limits
+
+volumes:
+  model-cache:
+  api-logs:
+  caddy-data:
+  caddy-config:

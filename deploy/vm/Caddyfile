@@ -1,0 +1,16 @@
+# Caddy reverse proxy for the GitaGuide API. Used by docker-compose.vm.yml.
+#
+# {$API_DOMAIN} is a hostname that already resolves to the VM's public IP, with
+# no scheme and no port - Caddy sees a bare hostname and turns on automatic
+# https for it (certificate from Let's Encrypt, http -> https redirect, renewal).
+{$API_DOMAIN} {
+	encode zstd gzip
+
+	# No timeout is configured on purpose. A turn can legitimately run for well
+	# over a minute (45s generation budget plus intent, retrieval and
+	# persistence) and the frontend waits 150s before giving up. Caddy applies
+	# no response deadline of its own, so the pipeline's budget stays the only
+	# thing that decides when a turn has taken too long. Adding a
+	# `response_header_timeout` here below ~150s would turn slow turns into 502s.
+	reverse_proxy api:8000
+}
