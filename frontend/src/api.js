@@ -81,8 +81,9 @@ export const SHOW_META = import.meta.env.VITE_SHOW_META !== '0'
  * request span forever behind the diya. This is deliberately generous, because
  * aborting a slow-but-working request is worse than waiting:
  *
- *     ~60s   worst-case Render free-tier cold start (instance wake + both
- *            ONNX models loaded before /health passes)
+ *     ~60s   worst-case cold start of a host that has gone to sleep, as free
+ *            tiers do (instance wake + both ONNX models loaded before /health
+ *            passes)
  *   + ~50s   worst-case turn (45s generation budget plus the local stages)
  *   = ~110s  worst realistic first message
  *

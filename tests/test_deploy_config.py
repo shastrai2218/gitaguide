@@ -34,7 +34,12 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 DOCKERFILE = ROOT / "Dockerfile"
-RENDER_YAML = ROOT / "render.yaml"
+#: The production settings the API container is started with. It is the tracked
+#: template of the (gitignored) ``.env.vm`` on the server, so it is where a
+#: change to a deployed value has to show up in review.
+PRODUCTION_ENV = ROOT / ".env.vm.example"
+#: The compose file that runs the API and its TLS proxy on the VM.
+VM_COMPOSE = ROOT / "docker-compose.vm.yml"
 
 
 @pytest.fixture(scope="module")
@@ -43,8 +48,18 @@ def dockerfile() -> str:
 
 
 @pytest.fixture(scope="module")
-def render_yaml() -> str:
-    return RENDER_YAML.read_text(encoding="utf-8")
+def production_env() -> str:
+    return PRODUCTION_ENV.read_text(encoding="utf-8")
+
+
+@pytest.fixture(scope="module")
+def vm_compose() -> str:
+    return VM_COMPOSE.read_text(encoding="utf-8")
+
+
+def _code_lines(text: str) -> list[str]:
+    """The lines that are not comments, so prose cannot trip a structural check."""
+    return [line for line in text.splitlines() if not line.lstrip().startswith("#")]
 
 
 # One worker
@@ -134,43 +149,42 @@ def test_gunicorn_is_not_used(dockerfile: str) -> None:
     )
 
 
-def test_render_does_not_override_the_start_command(render_yaml: str) -> None:
-    """An override in render.yaml would silently win over the Dockerfile CMD."""
-    for key in ("dockerCommand", "startCommand"):
-        assert key not in render_yaml, (
-            f"render.yaml sets {key}, which overrides the Dockerfile CMD and "
-            "therefore bypasses the single-worker guarantee asserted above"
+def test_the_vm_compose_does_not_override_the_start_command(vm_compose: str) -> None:
+    """A ``command:`` in the compose file would silently win over the Dockerfile CMD."""
+    for line in _code_lines(vm_compose):
+        assert not re.match(r"^\s+command\s*:", line), (
+            f"docker-compose.vm.yml sets {line.strip()!r}, which overrides the "
+            "Dockerfile CMD and therefore bypasses the single-worker guarantee "
+            "asserted above"
         )
 
 
-def test_render_runs_a_single_instance(render_yaml: str) -> None:
+def test_the_vm_runs_a_single_api_container(vm_compose: str) -> None:
     """Scaling out multiplies the limits exactly as extra workers would."""
-    instances = re.search(r"numInstances:\s*(\d+)", render_yaml)
-    assert instances is not None, "render.yaml does not pin numInstances"
-    assert instances.group(1) == "1", (
-        f"numInstances is {instances.group(1)}; the in-process limiter cannot "
-        "span instances any more than it can span workers"
-    )
+    code = "\n".join(_code_lines(vm_compose))
+    for key in ("replicas", "scale"):
+        assert not re.search(rf"^\s+{key}\s*:", code, re.MULTILINE), (
+            f"docker-compose.vm.yml sets {key}; the in-process limiter cannot "
+            "span containers any more than it can span workers"
+        )
 
 
 # Proxy hops
-def test_production_declares_its_proxy_hop_count(render_yaml: str) -> None:
-    """Behind Render there is exactly one proxy, and it has to be declared.
+def test_production_declares_its_proxy_hop_count(production_env: str) -> None:
+    """Behind Caddy there is exactly one proxy, and it has to be declared.
 
-    Left at the default of 0, the per-IP limit keys on Render's own address for
-    every request and stops being a per-IP limit at all.
+    Left at the default of 0, the per-IP limit keys on the proxy's own address
+    for every request and stops being a per-IP limit at all.
     """
-    match = re.search(
-        r'GITAGUIDE_RATE_LIMIT_TRUSTED_PROXY_HOPS\s*\n\s*value:\s*"?(\d+)"?', render_yaml
-    )
-    assert match is not None, (
-        "render.yaml does not set GITAGUIDE_RATE_LIMIT_TRUSTED_PROXY_HOPS; the "
+    hops = _env_value(production_env, "GITAGUIDE_RATE_LIMIT_TRUSTED_PROXY_HOPS")
+    assert hops is not None, (
+        ".env.vm.example does not set GITAGUIDE_RATE_LIMIT_TRUSTED_PROXY_HOPS; the "
         "per-IP limit would key on the proxy address"
     )
-    assert match.group(1) == "1", (
-        f"trusted proxy hops is {match.group(1)}. Render puts exactly one proxy "
-        "in front of the container. A larger number lets a client choose its own "
-        "rate-limit bucket by forging earlier X-Forwarded-For entries."
+    assert hops == "1", (
+        f"trusted proxy hops is {hops}. Caddy is the one proxy in front of the "
+        "container. A larger number lets a client choose its own rate-limit "
+        "bucket by forging earlier X-Forwarded-For entries."
     )
 
 
@@ -183,48 +197,55 @@ def test_the_default_is_to_trust_no_proxy_headers() -> None:
 
 # Memory-critical settings
 #
-# These only work as a set. INT8 is chosen because 512 MB cannot hold the fp32
-# encoder; but INT8 alone still leaves a single turn at 84% of the cap, so
-# concurrent turns must also be prevented. Shipping one without the other looks
-# fine in every test and dies under the first burst.
-def _env_value(render_yaml: str, key: str) -> str | None:
-    match = re.search(rf'{key}\s*\n\s*value:\s*"?([^"\n]+)"?', render_yaml)
-    return match.group(1).strip() if match else None
+# These only work as a set. INT8 is required because the graph is embedded with
+# the INT8 encoder (an fp32 query against it silently returns worse neighbours),
+# and INT8 was originally also what made a 512 MB host fit. INT8 alone still
+# leaves a single turn near the cap on a small instance, so concurrent turns must
+# also be prevented. Shipping one without the other looks fine in every test and
+# dies under the first burst.
+def _env_value(env_text: str, key: str) -> str | None:
+    """The value a dotenv file assigns to ``key``; commented-out lines are ignored."""
+    for line in _code_lines(env_text):
+        match = re.match(rf"^{re.escape(key)}=(.*)$", line.strip())
+        if match:
+            return match.group(1).strip().strip("'\"")
+    return None
 
 
-def test_production_uses_the_int8_encoder(render_yaml: str) -> None:
-    """The free tier cannot hold the fp32 encoder (497 MiB idle of 512)."""
-    assert _env_value(render_yaml, "GITAGUIDE_EMBEDDER_PRECISION") == "int8", (
-        "production must set GITAGUIDE_EMBEDDER_PRECISION=int8; the fp32 encoder "
-        "leaves ~1.5 MiB of headroom on a 512 MB instance"
+def test_production_uses_the_int8_encoder(production_env: str) -> None:
+    """The graph in Aura is embedded with INT8; the serving encoder must match."""
+    assert _env_value(production_env, "GITAGUIDE_EMBEDDER_PRECISION") == "int8", (
+        "production must set GITAGUIDE_EMBEDDER_PRECISION=int8: the stored vectors "
+        "were written by the INT8 encoder, and querying them with fp32 does not "
+        "error, it quietly returns worse neighbours"
     )
 
 
-def test_int8_in_production_requires_serialised_turns(render_yaml: str) -> None:
+def test_int8_in_production_requires_serialised_turns(production_env: str) -> None:
     """The pairing this test exists for.
 
-    INT8 buys headroom for *one* turn (429 MiB peak of 512). Two concurrent
-    turns exceed the cap, and the kernel's answer is SIGKILL - no traceback, a
+    INT8 buys headroom for *one* turn (429 MiB peak). Two concurrent turns
+    exceed a small host, and the kernel's answer is SIGKILL - no traceback, a
     bare 502 and a restart. So if the deployment is on INT8 because memory is
     tight, it must also serialise; the two are one decision.
     """
-    if _env_value(render_yaml, "GITAGUIDE_EMBEDDER_PRECISION") != "int8":
+    if _env_value(production_env, "GITAGUIDE_EMBEDDER_PRECISION") != "int8":
         pytest.skip("not an INT8 deployment; the pairing does not apply")
 
-    assert _env_value(render_yaml, "GITAGUIDE_PIPELINE_SERIALISE") == "true", (
+    assert _env_value(production_env, "GITAGUIDE_PIPELINE_SERIALISE") == "true", (
         "GITAGUIDE_EMBEDDER_PRECISION=int8 says this deployment is memory-bound, "
         "but GITAGUIDE_PIPELINE_SERIALISE is not true. INT8 leaves room for one "
         "turn, not two. Set both or neither."
     )
 
 
-def test_production_pins_one_onnx_thread(render_yaml: str) -> None:
-    """0.1 CPU cannot use a second intra-op thread; it only costs 47 MiB."""
-    assert _env_value(render_yaml, "GITAGUIDE_ONNX_INTRA_OP_THREADS") == "1"
+def test_production_pins_one_onnx_thread(production_env: str) -> None:
+    """A second intra-op thread only costs memory on the small production hosts."""
+    assert _env_value(production_env, "GITAGUIDE_ONNX_INTRA_OP_THREADS") == "1"
 
 
 def test_the_queue_timeout_is_shorter_than_the_client_deadline(
-    render_yaml: str,
+    production_env: str,
 ) -> None:
     """A queued turn must be shed before the browser gives up on it.
 
@@ -232,7 +253,7 @@ def test_the_queue_timeout_is_shorter_than_the_client_deadline(
     server was still willing to serve, which is the confusing half of both
     failure modes at once.
     """
-    timeout = _env_value(render_yaml, "GITAGUIDE_PIPELINE_QUEUE_TIMEOUT_SECONDS")
+    timeout = _env_value(production_env, "GITAGUIDE_PIPELINE_QUEUE_TIMEOUT_SECONDS")
     assert timeout is not None, "the queue timeout must be explicit in production"
     assert float(timeout) < MIN_REQUEST_TIMEOUT_SECONDS, (
         f"queue timeout {timeout}s is not shorter than the client's "
@@ -264,43 +285,90 @@ def test_serialisation_and_int8_default_safely_in_code(
 
 # CORS
 #
-# The service is Blueprint managed, so a sync applies whatever render.yaml says.
-# A `sync: false` entry with a value typed into the dashboard is exactly what a
-# sync would clear, and the failure is every /api call from the UI refused by
-# the browser while the server reports nothing wrong.
+# A wrong or missing origin means every /api call from the UI is refused by the
+# browser while the server reports nothing wrong, so the origin is pinned in the
+# tracked template and held here.
 FRONTEND_ORIGIN = "https://gitaguide-neon.vercel.app"
 
 
-def _cors_origins(render_yaml: str) -> list[str]:
-    """The origins render.yaml pins, parsed the way the app would parse them."""
+def _cors_origins_raw(production_env: str) -> str:
+    raw = _env_value(production_env, "GITAGUIDE_CORS_ORIGINS")
+    assert raw is not None, (
+        ".env.vm.example does not pin GITAGUIDE_CORS_ORIGINS; without it the "
+        "UI is refused by CORS"
+    )
+    return raw
+
+
+def _cors_origins(production_env: str) -> list[str]:
+    """The origins the template pins, parsed the way the app would parse them."""
     import json
 
     from app.config import Settings
 
-    # Not `_env_value`: that helper stops at the first double quote, and this
-    # value is a JSON list wrapped in single quotes so its quotes survive YAML.
-    match = re.search(r"GITAGUIDE_CORS_ORIGINS\s*\n\s*value:\s*(.+)", render_yaml)
-    assert match is not None, (
-        "render.yaml does not pin GITAGUIDE_CORS_ORIGINS. Left to the dashboard, a "
-        "Blueprint sync clears it and the UI is refused by CORS."
-    )
-    raw = match.group(1).strip().strip("'\"")
+    raw = _cors_origins_raw(production_env)
     parsed = json.loads(raw) if raw.startswith("[") else raw
     return Settings(mock_mode=True, cors_origins=parsed).cors_origins
 
 
-def test_render_pins_the_frontend_origin_for_cors(render_yaml: str) -> None:
-    origins = _cors_origins(render_yaml)
+def test_production_pins_the_frontend_origin_for_cors(production_env: str) -> None:
+    origins = _cors_origins(production_env)
     assert FRONTEND_ORIGIN in origins, f"the deployed UI origin is missing from {origins}"
 
 
-def test_cors_origins_are_exact_https_origins(render_yaml: str) -> None:
+def test_cors_origins_are_a_json_list(production_env: str) -> None:
+    """pydantic-settings parses a list field as JSON first, so ``a,b`` never boots.
+
+    Found deploying to EC2 on 19 Sep 2026: a comma-separated value made the API
+    exit at startup with a JSON decode error naming ``cors_origins``.
+    """
+    import json
+
+    from app.config import Settings
+
+    raw = _cors_origins_raw(production_env)
+    assert raw.startswith("["), f"CORS origins must be a JSON list, got {raw!r}"
+    # Exercise the real loading path, not just the parse: this is what failed.
+    import os
+
+    previous = os.environ.get("GITAGUIDE_CORS_ORIGINS")
+    os.environ["GITAGUIDE_CORS_ORIGINS"] = raw
+    try:
+        assert Settings(mock_mode=True, _env_file=None).cors_origins == json.loads(raw)
+    finally:
+        if previous is None:
+            os.environ.pop("GITAGUIDE_CORS_ORIGINS", None)
+        else:
+            os.environ["GITAGUIDE_CORS_ORIGINS"] = previous
+
+
+def test_cors_origins_are_exact_https_origins(production_env: str) -> None:
     """A trailing slash or a path is not an origin, and the browser will not match it."""
-    for origin in _cors_origins(render_yaml):
+    for origin in _cors_origins(production_env):
         assert origin.startswith("https://"), f"{origin!r} is not https"
         assert not origin.endswith("/"), f"{origin!r} has a trailing slash"
         assert origin.count("/") == 2, f"{origin!r} carries a path; an origin has none"
         assert "*" not in origin, "a wildcard would open the API to any site"
+
+
+# The database connection string
+#
+# Found deploying to EC2 on 19 Sep 2026. The Supabase *direct* host is IPv6-only
+# and unreachable from an EC2 instance; the *transaction* pooler (port 6543)
+# fails this app's SQLAlchemy + asyncpg engine, which uses prepared statements,
+# under concurrent queries; and asyncpg rejects ``?sslmode=``. The session
+# pooler is the one that works, and the template must not steer anyone off it.
+def test_the_database_dsn_template_uses_the_asyncpg_session_pooler(
+    production_env: str,
+) -> None:
+    dsn = _env_value(production_env, "GITAGUIDE_POSTGRES_DSN")
+    assert dsn is not None, ".env.vm.example does not set GITAGUIDE_POSTGRES_DSN"
+    assert dsn.startswith("postgresql+asyncpg://"), "the driver must be asyncpg"
+    assert "sslmode" not in dsn, "asyncpg rejects ?sslmode=; TLS is negotiated itself"
+    assert ".pooler.supabase.com:5432/" in dsn, (
+        "use Supabase's session pooler on port 5432: the transaction pooler (6543) "
+        "breaks prepared statements, and the direct host is IPv6-only"
+    )
 
 
 
@@ -378,9 +446,10 @@ def test_the_build_context_excludes_the_graph_export() -> None:
 
 # The router variables are declared, not left to defaults
 #
-# They were documented in DEPLOY.md on 13 Sep and never added to render.yaml,
-# so for three days the deployment ran on code defaults that happened to match.
-# That is luck, not configuration, and it is invisible in the dashboard.
+# They were documented in DEPLOY.md on 13 Sep and never added to the deployed
+# configuration, so for three days the deployment ran on code defaults that
+# happened to match. That is luck, not configuration, and it is invisible in the
+# hosting dashboard.
 ROUTER_ENV = {
     "GITAGUIDE_ROUTER_MODEL_ENABLED": "true",
     "GITAGUIDE_ROUTER_MODEL": "nvidia/nemotron-3.5-lightning-30b-a3b",
@@ -391,10 +460,10 @@ ROUTER_ENV = {
 
 
 @pytest.mark.parametrize(("key", "expected"), sorted(ROUTER_ENV.items()))
-def test_render_declares_the_router_variables(
-    render_yaml: str, key: str, expected: str
+def test_production_declares_the_router_variables(
+    production_env: str, key: str, expected: str
 ) -> None:
-    assert _env_value(render_yaml, key) == expected
+    assert _env_value(production_env, key) == expected
 
 
 def test_the_declared_router_values_match_the_code_defaults() -> None:

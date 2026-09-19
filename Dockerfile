@@ -36,19 +36,21 @@ COPY pytest.ini ./pytest.ini
 # this list covers every PROJECT_ROOT-relative path the image can read.
 COPY data ./data
 
-# Model cache. On Render this is ephemeral, so the first request after a deploy
-# pays the ONNX download; the lifespan handler warms both models at startup so
-# that cost lands before the health check passes, not on a tester's first turn.
+# Model cache. Without a persistent volume this is ephemeral, so the first
+# request after a rebuild pays the ONNX download (docker-compose.vm.yml mounts a
+# volume here so it survives restarts). The lifespan handler warms both models
+# at startup so that cost lands before the health check passes, not on a
+# tester's first turn.
 RUN mkdir -p /models
 
-# Telemetry is a rotating local file. On Render it does not survive a restart,
-# which is why the durable record is PostgreSQL and this is the convenience
-# view. Documented in docs/DEPLOY.md rather than pretended otherwise.
+# Telemetry is a rotating local file. On a host without a persistent volume it
+# does not survive a restart, which is why the durable record is PostgreSQL and
+# this is the convenience view.
 RUN mkdir -p /app/logs
 
 EXPOSE 8000
 
-# Render supplies $PORT; the default keeps `docker run` working unchanged.
+# A platform may supply $PORT; the default keeps `docker run` working unchanged.
 ENV PORT=8000
 
 # Two memory settings, both measured under the free tier's 512 MB on 7 Sep 2026.

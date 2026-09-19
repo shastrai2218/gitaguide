@@ -25,8 +25,8 @@ function assertDeployableConfig(env, mode) {
     throw new Error(
       'VITE_API_BASE is not set for this Vercel build. It defaults to the '
         + 'relative "/api", which does not exist on the Vercel domain, so every '
-        + 'turn would 404. Set it to the Render API origin, e.g. '
-        + 'https://gitaguide-api.onrender.com/api (see docs/DEPLOY.md step 4).',
+        + 'turn would 404. Set it to the API origin plus /api, e.g. '
+        + 'https://13-205-163-41.sslip.io/api (see docs/DEPLOY_AWS.md step 7).',
     )
   }
 }

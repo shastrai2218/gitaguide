@@ -2,7 +2,7 @@
 
 Run against the deployed API before letting anyone near it::
 
-    python -m scripts.prod_smoke https://gitaguide-api.onrender.com
+    python -m scripts.prod_smoke https://13-205-163-41.sslip.io
     python -m scripts.prod_smoke https://... --skip-rate-limit
 
 What it is for
@@ -203,7 +203,7 @@ class Smoke:
             "the process refuses to boot with disarmed rules or a budget "
             "below the floor, so a reachable service means both passed",
         )
-        print(f"{INFO} rule count is logged at boot: grep 'rules armed' in the Render logs")
+        print(f"{INFO} rule count is logged at boot: grep 'rules armed' in the API logs")
 
     def consent(self) -> None:
         self.section("3. consent is enforced server-side, at the current notice version")
@@ -468,7 +468,7 @@ class Smoke:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("base_url", help="e.g. https://gitaguide-api.onrender.com")
+    parser.add_argument("base_url", help="e.g. https://13-205-163-41.sslip.io")
     parser.add_argument("--timeout", type=float, default=120.0)
     parser.add_argument(
         "--skip-rate-limit",

@@ -8,8 +8,11 @@ that looks like success from the next step along.
 > [DEPLOY_AWS.md](DEPLOY_AWS.md) in place of **step 3 (Render)** and **step 6 (keep-warm)**;
 > steps 1, 2, 4, 4b and 5 below still apply, with one correction to step 2: use
 > Supabase's **session** pooler (port 5432), not the transaction pooler, because this
-> app's engine uses prepared statements. The Render sections are kept as the rollback
-> path and as the record of the original measurements.
+> app's engine uses prepared statements. The Render-specific text below is kept as the
+> historical record of the original deployment and its measurements; `render.yaml`, the
+> keep-warm workflow and `.env.production.example` it refers to were removed from the
+> repository and can be found in git history. The current settings template is
+> [`.env.vm.example`](../.env.vm.example).
 
 **You do the console work.** Nothing in this repository asks for a credential,
 and no automation here logs into anything. Keys and connection strings are
@@ -231,7 +234,7 @@ the API's first boot. Reasoning and the verification queries:
    | `GITAGUIDE_ROUTER_MAX_TOKENS` | `160` | the reply is one small JSON object; longer is malformed |
    | `GITAGUIDE_QUERY_REWRITE` | `on` | embed the router's English rewrite on the **vector** leg; the fulltext leg always keeps the person's own words. `off` restores the single-query path. Accepts `on`/`off` as well as `true`/`false` |
 
-   Full annotated list: [`.env.production.example`](../.env.production.example).
+   Full annotated list: [`.env.vm.example`](../.env.vm.example).
 
 4. **Create Web Service.** The first build takes 5–10 minutes: it installs the
    serving requirements and, on first boot, downloads both ONNX models.

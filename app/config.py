@@ -128,7 +128,7 @@ class Settings(BaseSettings):
     #:
     #: Default stays fp32 so local development and the existing local graph are
     #: unchanged. Production sets ``GITAGUIDE_EMBEDDER_PRECISION=int8`` because
-    #: the free tier cannot hold the fp32 encoder (see render.yaml).
+    #: the graph in Aura is embedded with the INT8 encoder (see .env.vm.example).
     embedder_precision: Literal["fp32", "int8"] = "fp32"
 
     # ------------------------------------------------------------------ corpus

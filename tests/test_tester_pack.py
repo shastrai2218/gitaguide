@@ -79,12 +79,12 @@ def test_the_browser_flag_is_keyed_by_version() -> None:
     assert match.group(1).endswith(CURRENT_CONSENT_VERSION)
 
 
-def test_render_sets_the_version_the_server_requires() -> None:
-    render_yaml = (ROOT / "render.yaml").read_text(encoding="utf-8")
-    match = re.search(r"GITAGUIDE_CONSENT_VERSION\s*\n\s*value:\s*\"?([\w.-]+)\"?", render_yaml)
-    assert match is not None, "render.yaml does not set GITAGUIDE_CONSENT_VERSION"
+def test_production_sets_the_version_the_server_requires() -> None:
+    production_env = (ROOT / ".env.vm.example").read_text(encoding="utf-8")
+    match = re.search(r"^GITAGUIDE_CONSENT_VERSION=([\w.-]+)\s*$", production_env, re.MULTILINE)
+    assert match is not None, ".env.vm.example does not set GITAGUIDE_CONSENT_VERSION"
     assert match.group(1) == CURRENT_CONSENT_VERSION, (
-        f"render.yaml sets {match.group(1)!r}; the frontend sends "
+        f".env.vm.example sets {match.group(1)!r}; the frontend sends "
         f"{CURRENT_CONSENT_VERSION!r}, so nobody could get past the gate"
     )
 

@@ -5,8 +5,7 @@
 #   docker compose --env-file .env.vm -f docker-compose.vm.yml up -d --build
 #
 # Neo4j (AuraDB) and PostgreSQL (Supabase) stay managed and are reached over the
-# internet from the values in .env.vm, exactly as on Render. Nothing stateful
-# is self-hosted here. See docs/DEPLOY_AWS.md.
+# internet from the values in .env.vm. Nothing stateful is self-hosted here. See docs/DEPLOY_AWS.md.
 #
 # Why Caddy is in front: the frontend is served over https from Vercel, and a
 # browser refuses to let an https page call an http API (mixed content). The API

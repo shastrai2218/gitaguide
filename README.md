@@ -299,11 +299,10 @@ gitaguide/
 ├── frontend/                    Vite + React 18 chat UI, consent gate, /privacy, /disclaimer
 ├── docs/                        DEPLOY, DEPLOY_AWS, DATA_MIGRATION, kg_measurements, tester-pack/
 ├── deploy/vm/                   Caddyfile for the EC2 stack (TLS proxy in front of the API)
-├── .github/workflows/           ci.yml (lint, tests, red-team, eval, UI build);
-│                                keepwarm.yml is Render-era and no longer needed
-├── Dockerfile  docker-compose.vm.yml  .env.vm.example   production image and EC2 stack
+├── .github/workflows/           ci.yml (lint, tests, red-team, eval, UI build)
+├── Dockerfile  docker-compose.vm.yml  .env.vm.example   production image, EC2 stack, and the
+│                                template of the deployed settings that the tests hold to account
 ├── docker-compose.yml  requirements.txt  requirements-dev.txt   local stack, dependencies
-├── render.yaml                  legacy Render blueprint, kept as the rollback path
 ```
 
 ## Limitations, stated

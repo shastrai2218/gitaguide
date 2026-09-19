@@ -244,17 +244,20 @@ instance's hostname. Either order works. Simplest:
 
 - If the old URL is still in `GITAGUIDE_CORS_ORIGINS`, remove it, then
   `docker compose --env-file .env.vm -f docker-compose.vm.yml up -d`.
-- Delete the old Vercel project, and suspend the Render service (`render.yaml`
-  stays as the rollback path).
-- Disable `.github/workflows/keepwarm.yml` (Actions → keep-warm → ⋯ → Disable),
-  or point `GITAGUIDE_HEALTH_URL` at the new hostname. Left pointing at a
-  suspended Render service it fails every 10 minutes.
+- Delete the old Vercel project, and delete the service in the Render dashboard.
+  The Render blueprint (`render.yaml`), the keep-warm workflow and the Render env
+  template were removed from the repo once the API had moved; they remain in git
+  history if a rollback is ever needed.
+- Remove what Render left on the GitHub side: Settings → Applications →
+  Installed GitHub Apps → Render → Configure → uninstall (or remove this
+  repository from its access), and delete the `GITAGUIDE_HEALTH_URL` variable under
+  Settings → Secrets and variables → Actions → Variables, which nothing uses now.
 - Send testers the new link. **Their browser state does not follow them.**
   Anonymous chats and the consent record live in `localStorage`, which is per
   origin, so each tester starts clean and sees the consent gate again. Only
   signed-in (Clerk) chats sync across.
 - Update the URL wherever the repo pins it: `README.md`,
-  `docs/tester-pack/ONBOARDING.md`, `docs/kg_measurements.md`, `render.yaml`,
+  `docs/tester-pack/ONBOARDING.md`, `docs/kg_measurements.md`,
   `.env.vm.example`, and the constants in `tests/test_deploy_config.py` and
   `tests/test_tester_pack.py`. The tests exist to catch this drift, so they fail
   until all of them agree.
@@ -267,15 +270,15 @@ instance's hostname. Either order works. Simplest:
 dc() { docker compose --env-file .env.vm -f docker-compose.vm.yml "$@"; }
 
 dc ps                          # both containers Up
-dc logs -f api                 # SAFETY_AUDIT, TURN_LATENCY, as on Render
+dc logs -f api                 # SAFETY_AUDIT, TURN_LATENCY, startup lines
 git pull && dc up -d --build   # deploy an update
 dc up -d                       # re-read .env.vm after editing it (restart does not)
 ```
 
 - **Rate limits and telemetry counters** are in-process, so one API container
   only. Do not scale it to two.
-- **Telemetry** lands in the `api-logs` volume and survives restarts, unlike on
-  Render, but PostgreSQL is still the durable record.
+- **Telemetry** lands in the `api-logs` volume and survives restarts, but
+  PostgreSQL is still the durable record.
 - **AuraDB Free still pauses after 3 days idle**; a gap in testing means
   resuming it in the Aura console.
 - **Disk:** container logs are capped at 3 x 10 MB each. Watch `df -h`.
