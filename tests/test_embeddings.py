@@ -150,6 +150,7 @@ def test_embedding_is_batched_so_peak_memory_is_bounded() -> None:
     pass asked numpy for 1.4 GiB and raised. On the 512 MB instance a far
     smaller list would be fatal, so the bound belongs here.
     """
+    pytest.importorskip("onnxruntime", reason="serving-path dependency, not installed in core CI")
     from app.embeddings import OnnxMiniLMEmbedder
 
     settings = Settings(mock_mode=False, embedder_precision="fp32", embedding_batch_size=8)
@@ -179,6 +180,7 @@ def test_int8_always_embeds_one_text_at_a_time() -> None:
     index and the query encoder ~0.98 apart - exactly the mismatch that choosing
     INT8 on both sides was meant to remove.
     """
+    pytest.importorskip("onnxruntime", reason="serving-path dependency, not installed in core CI")
     from app.embeddings import OnnxMiniLMEmbedder
 
     embedder = OnnxMiniLMEmbedder(
@@ -218,6 +220,7 @@ def test_batching_does_not_change_the_vectors() -> None:
     whatever embeds a query must agree, and they run with different list
     lengths.
     """
+    pytest.importorskip("onnxruntime", reason="serving-path dependency, not installed in core CI")
     from app.embeddings import OnnxMiniLMEmbedder
 
     texts = [f"a sentence about work and duty, number {index}" for index in range(5)]

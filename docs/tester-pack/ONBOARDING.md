@@ -17,7 +17,7 @@ medical or mental-health treatment.
 
 ## Where it is
 
-Open **https://gitaguide-livid.vercel.app** in any modern browser, on a phone
+Open **https://gitaguide-neon.vercel.app** in any modern browser, on a phone
 or a laptop. There is nothing to install and no account to create: the first
 screen asks you to read and accept the beta notice, and that is the whole
 sign-up.

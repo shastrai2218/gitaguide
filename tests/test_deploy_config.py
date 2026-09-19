@@ -268,7 +268,7 @@ def test_serialisation_and_int8_default_safely_in_code(
 # A `sync: false` entry with a value typed into the dashboard is exactly what a
 # sync would clear, and the failure is every /api call from the UI refused by
 # the browser while the server reports nothing wrong.
-FRONTEND_ORIGIN = "https://gitaguide-livid.vercel.app"
+FRONTEND_ORIGIN = "https://gitaguide-neon.vercel.app"
 
 
 def _cors_origins(render_yaml: str) -> list[str]:

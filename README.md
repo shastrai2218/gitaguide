@@ -11,7 +11,7 @@ verses through a knowledge graph, and answers only from those verses, citing eac
 and saying which graph path surfaced it. Every stage of that is stored with the turn and can
 be replayed, because the research claim of the project is explainability, not fluency.
 
-- **App (closed beta):** <https://gitaguide-livid.vercel.app> - by invitation; the first
+- **App (closed beta):** <https://gitaguide-neon.vercel.app> - by invitation; the first
   screen asks for consent to the beta notice, and nothing works until it is given.
 - **Tester pack:** [`docs/tester-pack/`](docs/tester-pack/) - [ONBOARDING](docs/tester-pack/ONBOARDING.md),
   [PRIVACY](docs/tester-pack/PRIVACY.md), [DISCLAIMER](docs/tester-pack/DISCLAIMER.md).

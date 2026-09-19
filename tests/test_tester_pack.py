@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PACK = ROOT / "docs" / "tester-pack"
 FRONTEND_CONTENT = ROOT / "frontend" / "src" / "content"
 
-FRONTEND_URL = "https://gitaguide-livid.vercel.app"
+FRONTEND_URL = "https://gitaguide-neon.vercel.app"
 
 
 # The documents exist and agree with their served copies
