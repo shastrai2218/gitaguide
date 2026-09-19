@@ -1,5 +1,10 @@
 # Render blueprint for the GitaGuide beta API.
 #
+# LEGACY since 19 Sep 2026: the API now runs on AWS EC2 (docs/DEPLOY_AWS.md,
+# docker-compose.vm.yml). This file is kept as the rollback path and because
+# tests/test_deploy_config.py holds the shared settings to it. Nothing deploys
+# from it while the Render service is suspended.
+#
 # Every secret is declared with `sync: false`, which means Render prompts for it
 # in the dashboard and never stores it in this file or in git. Nothing here
 # contains a key, a password, or a connection string - see .env.production.example

@@ -13,6 +13,8 @@ be replayed, because the research claim of the project is explainability, not fl
 
 - **App (closed beta):** <https://gitaguide-neon.vercel.app> - by invitation; the first
   screen asks for consent to the beta notice, and nothing works until it is given.
+- **API:** <https://13-205-163-41.sslip.io> (`/health` reports status), on AWS EC2 in Mumbai -
+  see [`docs/DEPLOY_AWS.md`](docs/DEPLOY_AWS.md).
 - **Tester pack:** [`docs/tester-pack/`](docs/tester-pack/) - [ONBOARDING](docs/tester-pack/ONBOARDING.md),
   [PRIVACY](docs/tester-pack/PRIVACY.md), [DISCLAIMER](docs/tester-pack/DISCLAIMER.md).
   The last two are also served by the app at `/privacy` and `/disclaimer`.
@@ -111,14 +113,16 @@ measured reason:
 
 ## Production stack
 
-The beta runs on free tiers, deliberately, and the trade-offs are written down rather than
-hidden ([`docs/DEPLOY.md`](docs/DEPLOY.md)).
+The beta runs on free tiers wherever it can, and the trade-offs are written down rather than
+hidden ([`docs/DEPLOY.md`](docs/DEPLOY.md) for the accounts, graph and database;
+[`docs/DEPLOY_AWS.md`](docs/DEPLOY_AWS.md) for the API host). The API host is the one paid
+component.
 
 | Component | Service | What matters about it |
 | --- | --- | --- |
-| API | **Render** (Free: 512 MB, 0.1 CPU) | one instance, one worker; sleeps after ~15 min idle, woken by a 10-minute GitHub Actions ping; cold start ~80 s |
-| Knowledge graph | **Neo4j AuraDB Free** | 3,836 verses / 14,709 edges, vector + full-text indexes; the username and database are the instance id, not `neo4j` |
-| Sessions, messages, safety logs, feedback | **Supabase PostgreSQL** | through the transaction pooler with `asyncpg`; schema created by `create_all` plus an additive `ADD COLUMN IF NOT EXISTS` pass |
+| API | **AWS EC2** `t3.small` (2 vCPU, 2 GiB), Mumbai (`ap-south-1`) | one instance, one worker, `docker compose` behind a Caddy TLS proxy (Let's Encrypt); always on, so no cold starts. Moved from Render Free on 19 Sep 2026: a turn went from 27.7 s to 15.5 s once the API sat near its databases (TCP round trip to Supabase 146 ms -> 1 ms, to Aura 197 ms -> 61 ms) |
+| Knowledge graph | **Neo4j AuraDB Free** | 3,836 verses / 14,709 edges, vector + full-text indexes; the username and database are the instance id, not `neo4j`; pauses after 3 days idle |
+| Sessions, messages, safety logs, feedback | **Supabase PostgreSQL** | through the **session** pooler (port 5432) with `asyncpg`, because the transaction pooler fails this engine's prepared statements under concurrency; schema created by `create_all` plus an additive `ADD COLUMN IF NOT EXISTS` pass |
 | UI | **Vercel** | Vite + React 18, plain CSS, no UI framework; `frontend/src/api.js` is the only file that knows the wire format |
 | Language model | **NVIDIA NIM** (developer / evaluation tier, ~40 requests/min per model) | `nvidia/nemotron-3-super-120b-a12b` primary, `nvidia/nemotron-3.5-lightning-30b-a3b` fallback; hybrid reasoning switched off; **no fake last resort in production** - a total outage becomes the overload reply, not a template dressed as guidance |
 | Telemetry | a rotating JSONL file plus daily counters on `/health` | text-free by construction and by test; the database is the durable record |
@@ -130,6 +134,12 @@ global one is what protects the NIM budget, because one turn spends two calls on
 model.
 
 ## Fitting 512 MB: INT8 and one turn at a time
+
+> **Since 19 Sep 2026 the API runs on a 2 GiB instance, so 512 MB is no longer the
+> constraint.** These measurements describe the original Render Free deployment. The
+> settings below are kept anyway: the graph in Aura is embedded with the INT8 encoder, so
+> the serving encoder must stay INT8, and the rate limiter and telemetry counters live in
+> process, so the API stays a single worker with serialised turns.
 
 The fp32 embedder did not fit: measured under Render Free's exact shape, the service idled at
 497 MiB of 512 and peaked at 511 MiB during one turn, and the kernel's answer to the second
@@ -236,12 +246,14 @@ Offline runs (hashing embedder, 16-verse sample) are a floor for development, no
 
 ## Operating the beta
 
-Console steps and their order are in [`docs/DEPLOY.md`](docs/DEPLOY.md); the graph and
-database moves are in [`docs/DATA_MIGRATION.md`](docs/DATA_MIGRATION.md). Before anyone is
-invited, and after every deploy:
+Console steps and their order are in [`docs/DEPLOY.md`](docs/DEPLOY.md) (accounts, graph,
+database) and [`docs/DEPLOY_AWS.md`](docs/DEPLOY_AWS.md) (the API host and the Vercel
+project); the graph and database moves are in
+[`docs/DATA_MIGRATION.md`](docs/DATA_MIGRATION.md). Before anyone is invited, and after
+every deploy:
 
 ```bash
-python -m scripts.prod_smoke https://gitaguide-api.onrender.com
+python -m scripts.prod_smoke https://13-205-163-41.sslip.io
 ```
 
 It asserts the things that look fine when they are wrong - mock mode off, real backends, a
@@ -285,9 +297,13 @@ gitaguide/
 ├── scripts/                     export/import/re-embed the graph, prod_smoke, NIM smoke
 ├── tests/                       offline unit + contract tests, deploy-config assertions
 ├── frontend/                    Vite + React 18 chat UI, consent gate, /privacy, /disclaimer
-├── docs/                        DEPLOY, DATA_MIGRATION, kg_measurements, tester-pack/
-├── .github/workflows/           ci.yml (lint, tests, red-team, eval, UI build), keepwarm.yml
-├── Dockerfile  render.yaml  docker-compose.yml  requirements.txt  requirements-dev.txt
+├── docs/                        DEPLOY, DEPLOY_AWS, DATA_MIGRATION, kg_measurements, tester-pack/
+├── deploy/vm/                   Caddyfile for the EC2 stack (TLS proxy in front of the API)
+├── .github/workflows/           ci.yml (lint, tests, red-team, eval, UI build);
+│                                keepwarm.yml is Render-era and no longer needed
+├── Dockerfile  docker-compose.vm.yml  .env.vm.example   production image and EC2 stack
+├── docker-compose.yml  requirements.txt  requirements-dev.txt   local stack, dependencies
+├── render.yaml                  legacy Render blueprint, kept as the rollback path
 ```
 
 ## Limitations, stated

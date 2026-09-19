@@ -4,6 +4,13 @@ Console steps, in the order they must happen. Each step ends with a check you
 can run before moving on, because every one of these services fails in a way
 that looks like success from the next step along.
 
+> **Current hosting (since 19 Sep 2026): the API runs on AWS EC2, not Render.** Follow
+> [DEPLOY_AWS.md](DEPLOY_AWS.md) in place of **step 3 (Render)** and **step 6 (keep-warm)**;
+> steps 1, 2, 4, 4b and 5 below still apply, with one correction to step 2: use
+> Supabase's **session** pooler (port 5432), not the transaction pooler, because this
+> app's engine uses prepared statements. The Render sections are kept as the rollback
+> path and as the record of the original measurements.
+
 **You do the console work.** Nothing in this repository asks for a credential,
 and no automation here logs into anything. Keys and connection strings are
 entered by you, in the provider dashboards, and never committed.
