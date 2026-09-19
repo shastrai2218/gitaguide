@@ -201,4 +201,4 @@ services:
       # the browser with nothing wrong on the server. Exact origin, https, no
       # trailing slash; JSON list so a second origin is an unambiguous edit.
       - key: GITAGUIDE_CORS_ORIGINS
-        value: '["https://gitaguide-livid.vercel.app"]'
+        value: '["https://gitaguide-neon.vercel.app"]'

@@ -36,8 +36,18 @@ Set aside about an hour. The first image build is the long part.
 1. Sign up at <https://aws.amazon.com/free/>. A card is required.
 2. Sign in to the console at <https://console.aws.amazon.com/> and pick the
    **region** in the top-right. Choose one near your testers and near where
-   Supabase and Aura live; every turn makes several round trips to both.
-   `ap-south-1` (Mumbai) is the natural choice for testers in India.
+   Supabase and Aura live; every turn makes a dozen or more round trips to
+   both. `ap-south-1` (Mumbai) is the natural choice for testers in India.
+
+   This matters more than it looks. Measured on 19 Sep 2026 with Supabase in
+   Mumbai and Aura in the Singapore area: from an instance in Stockholm each
+   query cost 309 ms (Supabase) and 400 ms (Aura), and one real turn took 27.7 s
+   with `persist` alone at 3.1 s. From Mumbai the same TCP round trips were
+   1 ms and 61 ms (Stockholm: 146 ms and 197 ms), and a turn took 15.5 s with
+   `persist` at 90 ms. Find each service's region first (Supabase: Project
+   Settings; Aura: instance details), then put the API in the region closest to
+   both. Keep the AWS console on that region the whole time: an Elastic IP and
+   a key pair belong to one region and are invisible from another.
 3. **Billing → Budgets → Create budget** → a monthly cost budget with an email
    alert at a figure you are comfortable with.
 
@@ -68,6 +78,16 @@ Set aside about an hour. The first image build is the long part.
 
    Do **not** open `8000`; the API is reachable only through Caddy. Port 80 must
    be open even though the site is https: Let's Encrypt validates over it.
+
+   **If SSH times out although the "My IP" rule looks right:** some home and
+   mobile ISPs send web traffic and SSH out through *different* public
+   addresses, so the console's "My IP" (what a web page sees) is not the address
+   your SSH connection arrives from. On 19 Sep 2026 the console said
+   `152.59.61.98` while the server saw SSH from `152.59.56.189`. Find the real one
+   from an instance you can already reach with `echo ${SSH_CLIENT%% *}`, or
+   allow the provider's block (for example `152.59.0.0/16`) instead of one
+   address. Ports 80/443 answering "refused" while 22 times out means the
+   security group, not the instance, is dropping SSH.
 6. **Storage:** raise the root volume from the default 8 GB to **20 GB** (gp3).
    The image, model cache and build layers do not fit comfortably in 8.
 7. **Launch instance.**
@@ -137,6 +157,16 @@ Fill in `API_DOMAIN` and every `REPLACE_ME`, taking the values from the same
 places as DEPLOY.md steps 1 and 2: the Supabase DSN with `+asyncpg` and no
 `sslmode`, and the Aura URI, username, database and password. On Aura Free the
 username and database are the **instance id**, not `neo4j`.
+
+**Supabase: use the Session pooler (port 5432), not the Transaction pooler
+(6543) that DEPLOY.md names.** Measured on 19 Sep 2026: 75 concurrent
+parameterised queries through this app's SQLAlchemy + asyncpg engine succeed on
+the session pooler and fail on the transaction pooler, because the engine uses
+prepared statements and transaction mode does not support them. The **direct**
+connection (`db.<ref>.supabase.co`) is IPv6-only and unreachable from an EC2
+instance, which has no IPv6 by default. So the host is
+`aws-0-<region>.pooler.supabase.com:5432` and the user is `postgres.<project-ref>`.
+Percent-encode special characters in the password (`#` becomes `%23`).
 
 `GITAGUIDE_RATE_LIMIT_TRUSTED_PROXY_HOPS=1` (Caddy is the one proxy) is already
 set. `GITAGUIDE_CORS_ORIGINS` must be your Vercel origin as a **JSON list**.
