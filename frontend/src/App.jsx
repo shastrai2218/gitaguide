@@ -13,6 +13,7 @@ import {
   fetchSessionMessages,
   isOffline,
   recordConsentOnServer,
+  SESSION_FORBIDDEN,
   sendMessage,
 } from './api.js'
 import AssistantTurn from './components/AssistantTurn.jsx'
@@ -32,11 +33,14 @@ import {
   getSessionId,
   hasConsented,
   listSessions,
+  purgeAccountSessions,
   recordConsent,
   renameSession,
   rotateSessionId,
   setActiveSessionId,
+  setSessionOwner,
   touchSession,
+  unverifiedSessions,
 } from './session.js'
 
 /**
@@ -70,7 +74,15 @@ function restoredEntry(record) {
 export default function App() {
   const [consented, setConsented] = useState(hasConsented)
   const [sessionId, setSessionId] = useState(getSessionId)
-  const [sessions, setSessions] = useState(listSessions)
+  // Until Clerk says who is signed in, show only anonymous chats: the safe view.
+  // An account's chats appear once the account is known to be signed in, never
+  // the other way round.
+  const [sessions, setSessions] = useState(() => listSessions(null))
+  // Null means signed out. With no Clerk key configured nobody can sign in, so
+  // auth is trivially "ready"; otherwise it is ready once Clerk has loaded.
+  const [authUserId, setAuthUserId] = useState(null)
+  const [authReady, setAuthReady] = useState(!CLERK_ENABLED)
+  const authUserIdRef = useRef(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [entries, setEntries] = useState([])
   const [busy, setBusy] = useState(false)
@@ -81,7 +93,56 @@ export default function App() {
   const bottomRef = useRef(null)
   const abortRef = useRef(null)
 
-  const handleSessionsSynced = useCallback(() => setSessions(listSessions()), [])
+  /** The chats the current viewer may see, from this browser's registry. */
+  const refreshSessions = useCallback(
+    () => setSessions(listSessions(authUserIdRef.current)),
+    [],
+  )
+  const handleSessionsSynced = refreshSessions
+
+  /**
+   * Clerk has told us who is signed in (`null` = nobody).
+   *
+   * Signing out must leave no account chat visible in this browser: they are
+   * removed from the saved list, and if one of them is the chat on screen the
+   * screen moves to a fresh one. The account's transcripts stay on the server,
+   * which refuses anyone else, and come back on the next sign-in.
+   */
+  const handleAuthState = useCallback((userId) => {
+    authUserIdRef.current = userId
+    setAuthUserId(userId)
+    setAuthReady(true)
+
+    if (userId === null) {
+      const removed = purgeAccountSessions()
+      if (removed.includes(getSessionId())) handleNewSession()
+      verifyUnverifiedSessions()
+    }
+    setSessions(listSessions(userId))
+    // handleNewSession / verifyUnverifiedSessions are hoisted function
+    // declarations that only touch state setters and refs, so this callback is
+    // safe to keep stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  /**
+   * Saved-chat entries from before ownership was tracked are hidden until
+   * checked. Signed out, the server answers for each: 403 means an account owns
+   * it (drop it), a readable answer means it is anonymous, and no answer leaves
+   * it hidden to be tried again next time rather than guessed at.
+   */
+  async function verifyUnverifiedSessions() {
+    const pending = unverifiedSessions()
+    if (!pending.length) return
+    await Promise.all(
+      pending.map(async (entry) => {
+        const result = await fetchSessionMessages(entry.id, 1)
+        if (result === SESSION_FORBIDDEN) deleteSession(entry.id)
+        else if (Array.isArray(result)) setSessionOwner(entry.id, null)
+      }),
+    )
+    if (authUserIdRef.current === null) setSessions(listSessions(null))
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' })
@@ -108,25 +169,48 @@ export default function App() {
   // optional: `fetchSessionMessages` returns null when it is not implemented,
   // and the transcript simply starts empty. Restored turns carry no trace, so
   // their meta line is absent rather than fabricated.
+  //
+  // Waits for auth to be known (`authReady`): fetching an account's chat before
+  // the token is available would be refused, and would look like an empty chat.
+  // It runs again when who is signed in changes, so a chat opened while signed
+  // out is re-checked at sign-in and an account's chat is re-checked at sign-out.
   useEffect(() => {
     let cancelled = false
-    if (!consented) return undefined
+    if (!consented || !authReady) return undefined
 
     fetchSessionMessages(sessionId).then((messages) => {
-      if (cancelled || !messages?.length) return
-      setEntries(messages.map(restoredEntry))
+      if (cancelled) return
+      if (messages === SESSION_FORBIDDEN) {
+        // This chat belongs to an account we are not signed in as. Forget the
+        // pointer and move to a fresh chat instead of showing or continuing it.
+        deleteSession(sessionId)
+        setSessions(listSessions(authUserIdRef.current))
+        setEntries([])
+        handleNewSession()
+        return
+      }
+      if (!messages?.length) return
+      // Only fill an empty screen. This also runs when who is signed in changes,
+      // and it must not replace a conversation already on screen with a bare
+      // reload of itself (which would drop each turn's detail line).
+      setEntries((current) => (current.length > 0 ? current : messages.map(restoredEntry)))
       // A session with real history belongs in the sidebar even if this
       // browser's registry does not know about it yet - an older tab, or a
       // saved chat opened before the registry existed.
       const firstUserMessage = messages.find((record) => record.role === 'user')
-      touchSession(sessionId, deriveSessionTitle(firstUserMessage?.content))
-      setSessions(listSessions())
+      touchSession(
+        sessionId,
+        deriveSessionTitle(firstUserMessage?.content),
+        authUserIdRef.current,
+      )
+      setSessions(listSessions(authUserIdRef.current))
     })
 
     return () => {
       cancelled = true
     }
-  }, [consented, sessionId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [consented, sessionId, authReady, authUserId])
 
   const send = useCallback(
     async (text, { replaceLast = false } = {}) => {
@@ -144,8 +228,10 @@ export default function App() {
         setEntries((current) => [...current, { kind: 'assistant', turn }])
         // First successful turn is what saves a chat to the sidebar, and what
         // names it - later turns only bump its place at the top of the list.
-        touchSession(sessionId, deriveSessionTitle(text))
-        setSessions(listSessions())
+        // Signed in, sending is what claims the chat for the account on the
+        // server, so it is tagged as the account's here too.
+        touchSession(sessionId, deriveSessionTitle(text), authUserIdRef.current)
+        setSessions(listSessions(authUserIdRef.current))
       } catch (error) {
         if (error?.name === 'AbortError') return
 
@@ -241,13 +327,13 @@ export default function App() {
       return
     }
     deleteSession(id)
-    setSessions(listSessions())
+    refreshSessions()
     if (id === sessionId) handleNewSession()
   }
 
   function handleRenameSession(id, title) {
     renameSession(id, title)
-    setSessions(listSessions())
+    refreshSessions()
   }
 
   /**
@@ -292,7 +378,9 @@ export default function App() {
 
   return (
     <div className="shell">
-      {CLERK_ENABLED && <AuthBridge onSessionsSynced={handleSessionsSynced} />}
+      {CLERK_ENABLED && (
+        <AuthBridge onAuthState={handleAuthState} onSessionsSynced={handleSessionsSynced} />
+      )}
       <Sidebar
         sessions={sessions}
         activeSessionId={sessionId}

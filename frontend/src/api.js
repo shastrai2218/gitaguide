@@ -433,20 +433,33 @@ export async function sendFeedback(messageId, rating, comment = '') {
 }
 
 /**
- * Optional history endpoint. Returns `null` — not an error — when the backend
- * does not implement it, so the caller can simply skip restoring history.
+ * What `fetchSessionMessages` returns when the server says the chat belongs to
+ * an account this browser is not signed in as (HTTP 403). Distinct from `null`,
+ * which means "no history to restore": a caller that treated the two alike
+ * would keep showing a chat it has no right to.
  */
-export async function fetchSessionMessages(sessionId) {
+export const SESSION_FORBIDDEN = 'forbidden'
+
+/**
+ * Optional history endpoint. Returns `null` — not an error — when the backend
+ * does not implement it or cannot be reached, so the caller can simply skip
+ * restoring history, and `SESSION_FORBIDDEN` when the chat is another
+ * account's. `limit` caps the number of turns fetched; 1 is enough to ask "may
+ * I read this chat" without downloading it.
+ */
+export async function fetchSessionMessages(sessionId, limit = null) {
   if (MOCK) return null
   let response
   try {
+    const query = limit ? `?limit=${encodeURIComponent(limit)}` : ''
     response = await fetch(
-      `${API_BASE}/sessions/${encodeURIComponent(sessionId)}/messages`,
+      `${API_BASE}/sessions/${encodeURIComponent(sessionId)}/messages${query}`,
       { headers: await authHeaders() },
     )
   } catch {
     return null
   }
+  if (response.status === 403) return SESSION_FORBIDDEN
   if (!response.ok) return null
   try {
     const body = await response.json()
