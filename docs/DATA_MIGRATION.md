@@ -119,7 +119,8 @@ Every Neo4j tutorial uses `neo4j` as both the username and the database name.
 | `GITAGUIDE_NEO4J_DATABASE` | `1c4ad18d` |
 
 The app's defaults are `neo4j` for both, so both must be set explicitly — in
-your shell for the import, and in Render for the service. A wrong username gives
+your shell for the import, and in `.env.vm` on the API host for the service
+(originally in Render's dashboard). A wrong username gives
 `Unauthorized`; a wrong database gives `database does not exist`. Neither
 mentions Aura's naming, so it is easy to spend a while suspecting the password.
 
@@ -230,12 +231,17 @@ is to leave it off entirely.
 The result:
 
 ```
-GITAGUIDE_POSTGRES_DSN=postgresql+asyncpg://postgres.abcdefghijklm:YOURPASSWORD@aws-0-ap-south-1.pooler.supabase.com:6543/postgres
+GITAGUIDE_POSTGRES_DSN=postgresql+asyncpg://postgres.abcdefghijklm:YOURPASSWORD@aws-0-ap-south-1.pooler.supabase.com:5432/postgres
 ```
 
-**Use the pooler on port 6543, not direct on 5432.** Render's instance opens
-several connections and reconnects on every deploy; the direct connection limit
-on Supabase's free tier is small enough that this matters.
+**Use the *session* pooler (`.pooler.supabase.com`, port 5432), not the
+transaction pooler on 6543 and not the direct `db.<ref>.supabase.co` host.**
+This paragraph originally recommended 6543 for the Render deployment. Measured
+on 19 Sep 2026 while moving to EC2: this app's SQLAlchemy + asyncpg engine uses
+prepared statements, which the transaction pooler does not support under
+concurrent queries, and the direct host is IPv6-only and unreachable from the
+VM. `tests/test_deploy_config.py` now holds the template to the session pooler;
+see `docs/DEPLOY_AWS.md` step 6.
 
 If your password contains `@`, `/`, `:` or `#`, percent-encode it — those
 characters otherwise terminate fields in a URL and the parse failure will not
