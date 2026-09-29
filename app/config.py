@@ -293,7 +293,10 @@ class Settings(BaseSettings):
     telemetry_max_bytes: int = 10_000_000
     telemetry_backup_count: int = 5
     #: Salt for the session pseudonym. Change it per deployment; changing it
-    #: makes old and new logs ungroupable, which is the intended trade.
+    #: makes old and new logs ungroupable, which is the intended trade. This
+    #: default is public, so with ``environment=prod`` the process refuses to
+    #: start on it, on an empty value, or on the template placeholder
+    #: (:func:`app.pipeline.gate_selftest.check_telemetry_salt`).
     telemetry_session_salt: str = "gitaguide-beta"
 
     # ---------------------------------------------------------------- consent

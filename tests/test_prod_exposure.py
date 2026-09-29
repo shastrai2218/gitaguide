@@ -48,6 +48,9 @@ OPENAPI_PROBES = [("GET", "/openapi.json", None), ("GET", "/docs", None), ("GET"
 
 
 def _prod_settings(**overrides: object) -> Settings:
+    # A real-looking salt: in prod the boot check refuses the default one
+    # (tests/test_telemetry_salt.py), and these tests are about routes.
+    overrides.setdefault("telemetry_session_salt", "test-only-salt-not-the-default-0123")
     return Settings(mock_mode=True, environment="prod", **overrides)
 
 
