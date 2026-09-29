@@ -59,7 +59,6 @@ def get_orchestrator(request: Request) -> GuidanceOrchestrator:
 
 
 OrchestratorDep = Annotated[GuidanceOrchestrator, Depends(get_orchestrator)]
-SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
 @research_router.post("/chat", response_model=ChatResponse, tags=["chat"])
@@ -114,10 +113,16 @@ async def explain(message_id: str, orchestrator: OrchestratorDep) -> ExplainResp
 
 
 @router.get("/health", response_model=HealthResponse, tags=["ops"])
-async def health(
-    orchestrator: OrchestratorDep, settings: SettingsDep, request: Request
-) -> HealthResponse:
-    """Component-level health, including which backends are actually in use."""
+async def health(orchestrator: OrchestratorDep, request: Request) -> HealthResponse:
+    """Component-level health, including which backends are actually in use.
+
+    Reads the settings the app was *built* with (``app.state.settings``), not
+    the process-wide cache: ``create_app(settings)`` is how tests and the
+    lifespan configure everything else, and a health page that answered from a
+    different object could report a build sha or mock flag the running
+    pipeline does not have.
+    """
+    settings: Settings = getattr(request.app.state, "settings", None) or get_settings()
     components = await orchestrator.health()
     telemetry = getattr(request.app.state, "telemetry", None)
     if telemetry is not None:
@@ -132,6 +137,7 @@ async def health(
     return HealthResponse(
         status="ok",
         app=settings.app_name,
+        build_sha=settings.build_sha,
         mock_mode=settings.mock_mode,
         components=components,
     )

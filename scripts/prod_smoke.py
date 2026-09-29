@@ -136,6 +136,17 @@ class Smoke:
         assert isinstance(body, dict)
         components = body.get("components", {})
 
+        # Which commit is answering. Before this field existed, nothing recorded
+        # what production ran and every report had to say "UNKNOWN".
+        sha = str(body.get("build_sha") or "")
+        self.check(
+            bool(sha) and sha != "unknown",
+            "build sha is recorded",
+            f"build_sha={sha!r}"
+            if sha and sha != "unknown"
+            else "the image was built without GIT_SHA - use the runbook's dc helper",
+        )
+
         self.check(
             body.get("mock_mode") is False,
             "mock_mode is false",

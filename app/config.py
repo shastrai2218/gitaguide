@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     app_name: str = "GitaGuide"
     environment: Literal["dev", "test", "prod"] = "dev"
     log_level: str = "INFO"
+    #: The git commit the running image was built from, stamped by the
+    #: Dockerfile's ``GIT_SHA`` build arg and reported by ``GET /health``.
+    #: "unknown" outside a stamped image (a local checkout, a bare
+    #: ``docker build``), which the production smoke test refuses to accept.
+    build_sha: str = "unknown"
 
     #: Master offline switch. When true every external dependency is replaced
     #: by an in-memory fake behind the identical interface.

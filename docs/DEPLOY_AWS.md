@@ -171,10 +171,12 @@ Percent-encode special characters in the password (`#` becomes `%23`).
 `GITAGUIDE_RATE_LIMIT_TRUSTED_PROXY_HOPS=1` (Caddy is the one proxy) is already
 set. `GITAGUIDE_CORS_ORIGINS` must be your Vercel origin as a **JSON list**.
 
-Then build and start:
+Then build and start. `GIT_SHA` is stamped into the image and reported by
+`/health` as `build_sha`, so it is always possible to say which commit is
+running; the smoke test fails if it is missing:
 
 ```bash
-docker compose --env-file .env.vm -f docker-compose.vm.yml up -d --build
+GIT_SHA=$(git rev-parse --short HEAD) docker compose --env-file .env.vm -f docker-compose.vm.yml up -d --build
 docker compose --env-file .env.vm -f docker-compose.vm.yml logs -f api
 ```
 
@@ -267,12 +269,14 @@ instance's hostname. Either order works. Simplest:
 ## Day to day
 
 ```bash
-dc() { docker compose --env-file .env.vm -f docker-compose.vm.yml "$@"; }
+# GIT_SHA is read at build time and shows up in /health as build_sha.
+dc() { GIT_SHA=$(git rev-parse --short HEAD) docker compose --env-file .env.vm -f docker-compose.vm.yml "$@"; }
 
 dc ps                          # both containers Up
 dc logs -f api                 # SAFETY_AUDIT, TURN_LATENCY, startup lines
 git pull && dc up -d --build   # deploy an update
 dc up -d                       # re-read .env.vm after editing it (restart does not)
+curl -s https://<your-hostname>/health | grep -o '"build_sha":"[^"]*"'   # which commit is live
 ```
 
 - **Rate limits and telemetry counters** are in-process, so one API container
