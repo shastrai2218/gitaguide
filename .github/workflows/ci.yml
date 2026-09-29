@@ -38,9 +38,16 @@ jobs:
           # mock mode replaces those backends with in-process fakes. PyJWT is
           # a hard import of app.auth (pulled in by app.main via the beta
           # router) even when no Clerk issuer is configured, so it belongs
-          # here rather than with the ML extras.
+          # here rather than with the ML extras. The neo4j driver is a small
+          # pure-Python wheel that tests/test_keepalive_neo4j.py needs in order
+          # to monkeypatch it; neo4j-graphrag and the ONNX runtime stay out.
+          #
+          # tests/test_ci_dependencies.py holds this line to what the tests
+          # import: a package missing here fails locally, not eleven days
+          # later on master.
           pip install fastapi "uvicorn[standard]" pydantic pydantic-settings httpx \
-                      "SQLAlchemy>=2.0" aiosqlite "PyJWT[crypto]" pytest pytest-asyncio pytest-cov ruff
+                      "SQLAlchemy>=2.0" aiosqlite "PyJWT[crypto]" "neo4j>=5" \
+                      pytest pytest-asyncio pytest-cov ruff
 
       - name: Lint (ruff)
         run: ruff check app corpus kg eval tests
