@@ -199,6 +199,9 @@ class HealthResponse(BaseModel):
     status: str = "ok"
     app: str = "GitaGuide"
     version: str = "0.1.0"
+    #: The commit the image was built from (``Settings.build_sha``); the one
+    #: field that says *which* GitaGuide is answering, since ``version`` does not.
+    build_sha: str = "unknown"
     mock_mode: bool = True
     components: dict[str, Any] = Field(default_factory=dict)
 

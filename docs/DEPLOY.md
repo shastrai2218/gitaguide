@@ -330,7 +330,9 @@ required for the app to work.
    - **Publishable key** (`pk_live_...`) → Vercel env var
      `VITE_CLERK_PUBLISHABLE_KEY`, scope Production.
    - **Frontend API URL** (`https://your-app.clerk.accounts.dev`, or a custom
-     domain on a paid plan) → Render env var `GITAGUIDE_CLERK_ISSUER`.
+     domain on a paid plan) → `GITAGUIDE_CLERK_ISSUER` in `.env.vm` on the
+     API host (the commented-out slot in `.env.vm.example`), then
+     `dc up -d` so the container re-reads the file.
 3. Redeploy both. There is no secret key to set on the API: verification
    checks a token's signature against Clerk's own published JWKS
    (`{issuer}/.well-known/jwks.json`), so the backend never calls Clerk and

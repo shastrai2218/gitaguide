@@ -171,10 +171,12 @@ Percent-encode special characters in the password (`#` becomes `%23`).
 `GITAGUIDE_RATE_LIMIT_TRUSTED_PROXY_HOPS=1` (Caddy is the one proxy) is already
 set. `GITAGUIDE_CORS_ORIGINS` must be your Vercel origin as a **JSON list**.
 
-Then build and start:
+Then build and start. `GIT_SHA` is stamped into the image and reported by
+`/health` as `build_sha`, so it is always possible to say which commit is
+running; the smoke test fails if it is missing:
 
 ```bash
-docker compose --env-file .env.vm -f docker-compose.vm.yml up -d --build
+GIT_SHA=$(git rev-parse --short HEAD) docker compose --env-file .env.vm -f docker-compose.vm.yml up -d --build
 docker compose --env-file .env.vm -f docker-compose.vm.yml logs -f api
 ```
 
@@ -267,20 +269,36 @@ instance's hostname. Either order works. Simplest:
 ## Day to day
 
 ```bash
-dc() { docker compose --env-file .env.vm -f docker-compose.vm.yml "$@"; }
+# GIT_SHA is read at build time and shows up in /health as build_sha.
+dc() { GIT_SHA=$(git rev-parse --short HEAD) docker compose --env-file .env.vm -f docker-compose.vm.yml "$@"; }
 
 dc ps                          # both containers Up
 dc logs -f api                 # SAFETY_AUDIT, TURN_LATENCY, startup lines
 git pull && dc up -d --build   # deploy an update
 dc up -d                       # re-read .env.vm after editing it (restart does not)
+curl -s https://<your-hostname>/health | grep -o '"build_sha":"[^"]*"'   # which commit is live
 ```
 
 - **Rate limits and telemetry counters** are in-process, so one API container
   only. Do not scale it to two.
 - **Telemetry** lands in the `api-logs` volume and survives restarts, but
   PostgreSQL is still the durable record.
-- **AuraDB Free still pauses after 3 days idle**; a gap in testing means
-  resuming it in the Aura console.
+- **AuraDB Free pauses after 3 days idle**, and a paused graph does not error:
+  retrieval quietly falls back to the in-memory retriever over the 16-verse
+  sample. `scripts/keepalive_neo4j.py` makes one read-only query a day so the
+  instance never goes idle, and exits non-zero if the graph is paused, empty
+  or unreachable. It runs from cron on the host, inside the API container
+  (which already has the credentials). Install it once:
+
+  ```bash
+  (crontab -l 2>/dev/null; echo '17 3 * * * docker exec gitaguide-api python -m scripts.keepalive_neo4j >> $HOME/keepalive.log 2>&1') | crontab -
+  crontab -l                                   # confirm the line is there
+  docker exec gitaguide-api python -m scripts.keepalive_neo4j   # run it once by hand
+  tail -3 ~/keepalive.log                      # "[ok] ... N verses" after the first run
+  ```
+
+  If the log shows `[FAIL]`, resume the instance at <https://console.neo4j.io>
+  and check `/health` reports `retrieval_backend: neo4j-hybrid-cypher` again.
 - **Disk:** container logs are capped at 3 x 10 MB each. Watch `df -h`.
 
 ## If something is wrong

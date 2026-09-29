@@ -98,6 +98,51 @@ def check_generation_budget(settings: Settings | None = None) -> None:
     raise StartupConfigError("refusing to start: " + detail)
 
 
+#: Salt values that mean "nobody set one". The code default is public in this
+#: repository, so a deployment running on it has pseudonyms anyone can
+#: recompute from a session id; the template's placeholder is what a copied
+#: `.env.vm.example` carries until someone edits it; empty is unset.
+PLACEHOLDER_SALTS: frozenset[str] = frozenset({"", "gitaguide-beta"})
+PLACEHOLDER_SALT_MARKER = "REPLACE_ME"
+
+
+def check_telemetry_salt(settings: Settings | None = None) -> None:
+    """In prod, refuse to start on a salt that is not actually a secret.
+
+    Telemetry never stores a session id, only ``sha256(salt + session_id)``
+    (:func:`app.telemetry.hash_session`), which is a pseudonym exactly as long
+    as the salt is private. Three values make it public: unset, the literal
+    placeholder from ``.env.vm.example``, and the code default, which this
+    repository publishes. None of them errors anywhere - the log fills up with
+    hashes that look fine and are reversible by anyone holding a session id.
+
+    Outside prod this is a no-op: a laptop, a test and the CI matrix all run on
+    the default salt and should keep doing so. In prod the check raises
+    :class:`StartupConfigError` rather than substituting a random value, for
+    the same reason :func:`check_generation_budget` does not clamp - a salt
+    generated at boot would change on every restart, quietly, and the operator
+    would never learn the variable was ignored.
+    """
+    settings = settings or get_settings()
+    if not settings.is_prod:
+        return
+    salt = settings.telemetry_session_salt
+    if salt not in PLACEHOLDER_SALTS and PLACEHOLDER_SALT_MARKER not in salt.upper():
+        return
+
+    detail = (
+        "GITAGUIDE_TELEMETRY_SESSION_SALT is "
+        + ("unset" if not salt else "a placeholder" if PLACEHOLDER_SALT_MARKER in salt.upper() else "the public code default")
+        + ". Telemetry pseudonymises session ids by hashing them with this salt, "
+        "so a salt that is empty, copied from .env.vm.example unedited, or the "
+        "default that ships in the repository makes every pseudonym reversible "
+        "by anyone who knows a session id. Set it to a long random string once "
+        "and keep it."
+    )
+    logger.critical("STARTUP CONFIG REJECTED: %s", detail)
+    raise StartupConfigError("refusing to start: " + detail)
+
+
 def check_router_lexicon() -> int:
     """Say loudly, at boot, whether the stage-1 lexicon actually loaded.
 
@@ -147,12 +192,13 @@ def run_startup_self_test(
 ) -> None:
     """Every boot-time assertion, in one call for :mod:`app.main`.
 
-    Ordered cheapest first, and config before behaviour: a rejected budget is a
-    typo in an environment variable, and saying so before the model checks run
-    makes the error easier to act on. The lexicon check runs last because it is
-    the only one that does not refuse to start.
+    Ordered cheapest first, and config before behaviour: a rejected budget or
+    salt is a typo in an environment variable, and saying so before the model
+    checks run makes the error easier to act on. The lexicon check runs last
+    because it is the only one that does not refuse to start.
     """
     check_generation_budget(settings)
+    check_telemetry_salt(settings)
     run_gate_self_test(gate)
     check_router_lexicon()
 

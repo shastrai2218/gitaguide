@@ -15,8 +15,11 @@ a permanent injunction on 5 April 2024 against "reproduction, storage in
 electronic format, and public communication" of them - so GitaGuide does not
 store, embed or transmit a word of that edition. It **links** to it, which is
 not reproduction, and generates from the public-domain Purohit Swami
-translation it already holds. That is decision (b′), recorded in
-``docs/legal/``.
+translation it already holds. That is decision (b′). This docstring is where
+it is recorded: a legal-correspondence directory under ``docs`` was planned
+for the BBT permission and never created, and ``tests/test_beta_api.py``
+holds the behaviour (a Gita citation links vedabase.io; no BBT text is
+stored).
 
 So a Gita citation carries a deep link to the authoritative rendering on
 vedabase.io while the answer itself is grounded in the PD text. A tester who

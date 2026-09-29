@@ -22,6 +22,10 @@ look healthy while being wrong:
 * A rate limiter probed sequentially looks disabled even when it is working,
   because a token bucket refills faster than a slow caller drains it - so the
   burst here is sent concurrently.
+* The research surface (``POST /chat``, ``GET /explain/{id}``,
+  ``GET /safety/logs``) and the OpenAPI pages served from a deployment with
+  ``environment`` set to anything but ``prod`` - which is how, on 19 Sep 2026,
+  any conversation on the live service was readable by anyone.
 
 So this asserts the *evidence*, not the absence of errors.
 
@@ -131,6 +135,17 @@ class Smoke:
 
         assert isinstance(body, dict)
         components = body.get("components", {})
+
+        # Which commit is answering. Before this field existed, nothing recorded
+        # what production ran and every report had to say "UNKNOWN".
+        sha = str(body.get("build_sha") or "")
+        self.check(
+            bool(sha) and sha != "unknown",
+            "build sha is recorded",
+            f"build_sha={sha!r}"
+            if sha and sha != "unknown"
+            else "the image was built without GIT_SHA - use the runbook's dc helper",
+        )
 
         self.check(
             body.get("mock_mode") is False,
@@ -436,6 +451,38 @@ class Smoke:
             str(detail.get("message"))[:60],
         )
 
+    def research_surface_off(self) -> None:
+        """The routes that must not exist on a deployed service.
+
+        Each is asserted as a bare 404 - FastAPI's ``{"detail": "Not Found"}``
+        for a path that is not mounted - rather than any 4xx, because
+        ``GET /explain/<unknown id>`` answers 404 with a *different* detail
+        when the route exists, and that is exactly the case being ruled out.
+        Costs no NIM budget: none of these reach the pipeline.
+        """
+        self.section("9. the research surface and the OpenAPI pages are not served")
+        probes: list[tuple[str, str, str, dict | None]] = [
+            ("GET /safety/logs", "GET", "/safety/logs", None),
+            ("GET /explain/{id}", "GET", f"/explain/{uuid.uuid4()}", None),
+            ("POST /chat", "POST", "/chat", {"message": "smoke: must not reach the pipeline"}),
+            ("GET /openapi.json", "GET", "/openapi.json", None),
+            ("GET /docs", "GET", "/docs", None),
+            ("GET /redoc", "GET", "/redoc", None),
+        ]
+        for label, method, path, payload in probes:
+            if method == "POST":
+                status, body, _ = self.request(path, payload)
+            else:
+                status, body, _ = self.request(path)
+            unmounted = status == 404 and (
+                not isinstance(body, dict) or body.get("detail") == "Not Found"
+            )
+            self.check(
+                unmounted,
+                f"{label} is not mounted",
+                "" if unmounted else f"got {status}: is the deployment running as environment=prod?",
+            )
+
     # ------------------------------------------------------------------ run
     def run(self, skip_rate_limit: bool) -> int:
         print(f"GitaGuide production smoke test\n  target : {self.base}\n  session: {self.session}")
@@ -452,6 +499,7 @@ class Smoke:
             print("\n8. the rate limiter is really on\n" + f"{INFO} skipped (--skip-rate-limit)")
         else:
             self.rate_limit()
+        self.research_surface_off()
 
         print(f"\n{'-' * 60}")
         if self.failures:

@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     app_name: str = "GitaGuide"
     environment: Literal["dev", "test", "prod"] = "dev"
     log_level: str = "INFO"
+    #: The git commit the running image was built from, stamped by the
+    #: Dockerfile's ``GIT_SHA`` build arg and reported by ``GET /health``.
+    #: "unknown" outside a stamped image (a local checkout, a bare
+    #: ``docker build``), which the production smoke test refuses to accept.
+    build_sha: str = "unknown"
 
     #: Master offline switch. When true every external dependency is replaced
     #: by an in-memory fake behind the identical interface.
@@ -288,7 +293,10 @@ class Settings(BaseSettings):
     telemetry_max_bytes: int = 10_000_000
     telemetry_backup_count: int = 5
     #: Salt for the session pseudonym. Change it per deployment; changing it
-    #: makes old and new logs ungroupable, which is the intended trade.
+    #: makes old and new logs ungroupable, which is the intended trade. This
+    #: default is public, so with ``environment=prod`` the process refuses to
+    #: start on it, on an empty value, or on the template placeholder
+    #: (:func:`app.pipeline.gate_selftest.check_telemetry_salt`).
     telemetry_session_salt: str = "gitaguide-beta"
 
     # ---------------------------------------------------------------- consent
@@ -370,6 +378,16 @@ class Settings(BaseSettings):
         if self.use_real_emotion_model is not None:
             return self.use_real_emotion_model
         return not self.mock_mode
+
+    @property
+    def is_prod(self) -> bool:
+        """The deployed shape.
+
+        In prod the research surface (``POST /chat``, ``GET /explain/{id}``,
+        ``GET /safety/logs``) and the OpenAPI pages are not mounted at all; see
+        :func:`app.main.create_app`. Everything the beta UI calls is unaffected.
+        """
+        return self.environment == "prod"
 
     @property
     def auth_enabled(self) -> bool:
