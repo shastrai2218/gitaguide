@@ -19,6 +19,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Stamped into the image and reported by GET /health as build_sha.
+        # Set from the shell at build time - the runbook's `dc` helper does
+        # `GIT_SHA=$(git rev-parse --short HEAD)` - so the deployed commit is
+        # always knowable. Unset, the image says "unknown" and the smoke test
+        # fails on it rather than guessing.
+        GIT_SHA: "${GIT_SHA:-unknown}"
     container_name: gitaguide-api
     restart: unless-stopped
     env_file: .env.vm
