@@ -274,7 +274,8 @@ gitaguide/
 │   ├── embeddings.py            MiniLM on onnxruntime (fp32 / int8) + the offline hashing embedder
 │   ├── telemetry.py             text-free JSONL events + daily counters
 │   ├── api/
-│   │   ├── routes.py            POST /chat, GET /explain/{id}, GET /health, GET /safety/logs
+│   │   ├── routes.py            GET /health; the research surface (POST /chat, GET /explain/{id},
+│   │                            GET /safety/logs) is mounted only outside prod
 │   │   ├── beta.py              /api/chat, /api/consent, /api/feedback, /api/sessions/{id}/messages
 │   │   ├── ratelimit.py         token buckets; X-Forwarded-For read by declared proxy hops
 │   │   ├── concurrency.py       the Semaphore(1) pipeline gate

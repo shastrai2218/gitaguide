@@ -1,9 +1,24 @@
-"""HTTP surface: ``POST /chat``, ``GET /explain/{message_id}``, ``GET /health``.
+"""HTTP surface: ``GET /health`` always; the research routes outside prod.
 
 The routes are deliberately thin - they translate HTTP to
 :class:`app.pipeline.schemas.UserTurn` and back. All pipeline decisions
 (including the safety short-circuit) live in the orchestrator, so the CLI, the
 evaluation scripts and the API all exercise identical logic.
+
+Two routers, because they have two audiences:
+
+* ``router`` carries ``GET /health`` and is mounted everywhere.
+* ``research_router`` carries ``POST /chat`` (the full trace), ``GET
+  /explain/{message_id}`` and ``GET /safety/logs``. They exist for the
+  evaluation scripts and the explanation panel on a developer's machine, and
+  the beta UI never calls them. In prod they are **not mounted** (see
+  :func:`app.main.create_app`): on 19 Sep 2026 the three chained into a
+  complete privacy failure on the deployed service - ``/safety/logs`` listed
+  the session and message ids of every crisis-flagged turn, ``/explain`` turned
+  a message id into its verbatim text, and ``/chat`` took a message with no
+  consent and no rate limit. Not mounting them means there is nothing to
+  guard, nothing to leak, and no admin secret to manage; the safety log and the
+  stored traces stay readable in PostgreSQL for whoever operates the database.
 """
 
 from __future__ import annotations
@@ -26,7 +41,10 @@ from app.pipeline.schemas import UserTurn
 
 logger = logging.getLogger(__name__)
 
+#: Mounted in every environment: ``GET /health``.
 router = APIRouter()
+#: Mounted only when ``Settings.is_prod`` is false. See the module docstring.
+research_router = APIRouter()
 
 
 def get_orchestrator(request: Request) -> GuidanceOrchestrator:
@@ -44,7 +62,7 @@ OrchestratorDep = Annotated[GuidanceOrchestrator, Depends(get_orchestrator)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
-@router.post("/chat", response_model=ChatResponse, tags=["chat"])
+@research_router.post("/chat", response_model=ChatResponse, tags=["chat"])
 async def chat(
     payload: ChatRequest,
     orchestrator: OrchestratorDep,
@@ -70,7 +88,7 @@ async def chat(
     return ChatResponse.from_result(result)
 
 
-@router.get("/explain/{message_id}", response_model=ExplainResponse, tags=["chat"])
+@research_router.get("/explain/{message_id}", response_model=ExplainResponse, tags=["chat"])
 async def explain(message_id: str, orchestrator: OrchestratorDep) -> ExplainResponse:
     """Return the stored pipeline trace for a previously generated answer."""
     record = await orchestrator.explain(message_id)
@@ -119,7 +137,7 @@ async def health(
     )
 
 
-@router.get("/safety/logs", response_model=list[SafetyLogOut], tags=["ops"])
+@research_router.get("/safety/logs", response_model=list[SafetyLogOut], tags=["ops"])
 async def safety_logs(
     orchestrator: OrchestratorDep,
     limit: Annotated[int, Query(ge=1, le=500)] = 50,

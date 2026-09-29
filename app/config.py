@@ -372,6 +372,16 @@ class Settings(BaseSettings):
         return not self.mock_mode
 
     @property
+    def is_prod(self) -> bool:
+        """The deployed shape.
+
+        In prod the research surface (``POST /chat``, ``GET /explain/{id}``,
+        ``GET /safety/logs``) and the OpenAPI pages are not mounted at all; see
+        :func:`app.main.create_app`. Everything the beta UI calls is unaffected.
+        """
+        return self.environment == "prod"
+
+    @property
     def auth_enabled(self) -> bool:
         """True once a Clerk issuer is configured. False leaves every session anonymous."""
         return bool(self.clerk_issuer)
