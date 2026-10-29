@@ -1,0 +1,1596 @@
+{
+  "description": "Pooled gold set (pool depth 5 from three retrievers), labelled by two annotators working jointly (consensus labels; independence not claimed); exact agreement 0.999; 0 disagreements not yet adjudicated.",
+  "corpus": [
+    "data/graph_export/verses.jsonl"
+  ],
+  "pairs": [
+    {
+      "id": "gp-001",
+      "category": "emotional",
+      "expected_intent": "seek_guidance",
+      "query": "I feel like a failure after my exam results",
+      "relevant": [
+        "BG-2.48",
+        "BG-6.23",
+        "BG-6.38"
+      ],
+      "graded": {
+        "BG-2.48": 2,
+        "BG-6.23": 1,
+        "BG-6.38": 1
+      }
+    },
+    {
+      "id": "gp-002",
+      "category": "emotional",
+      "expected_intent": "emotional_support",
+      "query": "My father passed away last month and I cannot stop crying",
+      "relevant": [
+        "BG-2.11",
+        "BG-2.25",
+        "BG-2.26",
+        "BG-2.27",
+        "BG-2.28"
+      ],
+      "graded": {
+        "BG-2.11": 2,
+        "BG-2.25": 2,
+        "BG-2.26": 2,
+        "BG-2.27": 2,
+        "BG-2.28": 2
+      }
+    },
+    {
+      "id": "gp-003",
+      "category": "emotional",
+      "expected_intent": "emotional_support",
+      "query": "I am anxious all the time about my future and cannot sleep",
+      "relevant": [
+        "BG-16.5",
+        "BG-2.30",
+        "BG-6.26"
+      ],
+      "graded": {
+        "BG-16.5": 1,
+        "BG-2.30": 1,
+        "BG-6.26": 1
+      }
+    },
+    {
+      "id": "gp-004",
+      "category": "emotional",
+      "expected_intent": "emotional_support",
+      "query": "I hate myself for the mistakes I have made",
+      "relevant": [
+        "BG-18.48",
+        "BG-6.5"
+      ],
+      "graded": {
+        "BG-18.48": 1,
+        "BG-6.5": 2
+      }
+    },
+    {
+      "id": "gp-005",
+      "category": "emotional",
+      "expected_intent": "seek_guidance",
+      "query": "Nothing I do seems to matter. What is the point of any of this?",
+      "relevant": [
+        "BG-2.47",
+        "BG-3.8",
+        "BG-9.27"
+      ],
+      "graded": {
+        "BG-2.47": 1,
+        "BG-3.8": 1,
+        "BG-9.27": 1
+      }
+    },
+    {
+      "id": "gp-006",
+      "category": "emotional",
+      "expected_intent": "emotional_support",
+      "query": "I am jealous of my friends who are doing better than me",
+      "relevant": [],
+      "graded": {}
+    },
+    {
+      "id": "gp-007",
+      "category": "emotional",
+      "expected_intent": "seek_guidance",
+      "query": "How do I stop worrying about things I cannot control?",
+      "relevant": [
+        "BG-12.11",
+        "BG-2.66",
+        "BG-6.25",
+        "BG-6.26"
+      ],
+      "graded": {
+        "BG-12.11": 1,
+        "BG-2.66": 1,
+        "BG-6.25": 1,
+        "BG-6.26": 1
+      }
+    },
+    {
+      "id": "gp-008",
+      "category": "emotional",
+      "expected_intent": "seek_guidance",
+      "query": "I feel restless and my mind never settles",
+      "relevant": [
+        "BG-12.8",
+        "BG-12.9",
+        "BG-17.16",
+        "BG-2.41",
+        "BG-6.26",
+        "BG-6.33",
+        "BG-6.34",
+        "BG-8.8"
+      ],
+      "graded": {
+        "BG-12.8": 1,
+        "BG-12.9": 1,
+        "BG-17.16": 1,
+        "BG-2.41": 1,
+        "BG-6.26": 2,
+        "BG-6.33": 2,
+        "BG-6.34": 2,
+        "BG-8.8": 1
+      }
+    },
+    {
+      "id": "gp-009",
+      "category": "emotional",
+      "expected_intent": "emotional_support",
+      "query": "I am afraid of dying",
+      "relevant": [
+        "BG-2.26",
+        "BG-8.5"
+      ],
+      "graded": {
+        "BG-2.26": 1,
+        "BG-8.5": 1
+      }
+    },
+    {
+      "id": "gp-010",
+      "category": "emotional",
+      "expected_intent": "seek_guidance",
+      "query": "I keep chasing success but I never feel satisfied",
+      "relevant": [
+        "BG-18.26",
+        "BG-18.27",
+        "BG-3.17",
+        "BG-7.2"
+      ],
+      "graded": {
+        "BG-18.26": 1,
+        "BG-18.27": 1,
+        "BG-3.17": 2,
+        "BG-7.2": 1
+      }
+    },
+    {
+      "id": "gp-011",
+      "category": "emotional",
+      "expected_intent": "seek_guidance",
+      "query": "How do I find peace when everything around me is chaotic?",
+      "relevant": [
+        "BG-18.51",
+        "BG-18.62",
+        "BG-2.64",
+        "BG-2.65",
+        "BG-5.12",
+        "BG-6.15",
+        "BG-6.25",
+        "BG-6.7"
+      ],
+      "graded": {
+        "BG-18.51": 1,
+        "BG-18.62": 1,
+        "BG-2.64": 2,
+        "BG-2.65": 1,
+        "BG-5.12": 1,
+        "BG-6.15": 1,
+        "BG-6.25": 1,
+        "BG-6.7": 1
+      }
+    },
+    {
+      "id": "gp-012",
+      "category": "emotional",
+      "expected_intent": "emotional_support",
+      "query": "I feel alone even when I am surrounded by people",
+      "relevant": [],
+      "graded": {}
+    },
+    {
+      "id": "gp-013",
+      "category": "professional",
+      "expected_intent": "professional_dilemma",
+      "query": "My manager takes credit for my work and plays politics",
+      "relevant": [
+        "BG-18.6",
+        "BG-2.47"
+      ],
+      "graded": {
+        "BG-18.6": 1,
+        "BG-2.47": 1
+      }
+    },
+    {
+      "id": "gp-014",
+      "category": "professional",
+      "expected_intent": "professional_dilemma",
+      "query": "Should I quit my stable job to join a startup?",
+      "relevant": [
+        "BG-18.48",
+        "BG-3.35"
+      ],
+      "graded": {
+        "BG-18.48": 1,
+        "BG-3.35": 1
+      }
+    },
+    {
+      "id": "gp-015",
+      "category": "professional",
+      "expected_intent": "professional_dilemma",
+      "query": "I am working sixteen hours a day and I am burnt out",
+      "relevant": [],
+      "graded": {}
+    },
+    {
+      "id": "gp-016",
+      "category": "professional",
+      "expected_intent": "professional_dilemma",
+      "query": "A colleague keeps provoking me in meetings and I want to lash out",
+      "relevant": [],
+      "graded": {}
+    },
+    {
+      "id": "gp-017",
+      "category": "professional",
+      "expected_intent": "professional_dilemma",
+      "query": "There is corruption in my department but reporting it could cost my job",
+      "relevant": [
+        "AS-2.8.21",
+        "AS-2.8.22",
+        "BG-2.33"
+      ],
+      "graded": {
+        "AS-2.8.21": 1,
+        "AS-2.8.22": 1,
+        "BG-2.33": 1
+      }
+    },
+    {
+      "id": "gp-018",
+      "category": "professional",
+      "expected_intent": "professional_dilemma",
+      "query": "I did not get the promotion I deserved",
+      "relevant": [
+        "BG-2.47"
+      ],
+      "graded": {
+        "BG-2.47": 2
+      }
+    },
+    {
+      "id": "gp-019",
+      "category": "professional",
+      "expected_intent": "professional_dilemma",
+      "query": "How do I decide whom to trust with responsibility in my team?",
+      "relevant": [
+        "AS-1.8.1"
+      ],
+      "graded": {
+        "AS-1.8.1": 2
+      }
+    },
+    {
+      "id": "gp-020",
+      "category": "professional",
+      "expected_intent": "professional_dilemma",
+      "query": "My boss micromanages every small thing I do",
+      "relevant": [],
+      "graded": {}
+    },
+    {
+      "id": "gp-021",
+      "category": "professional",
+      "expected_intent": "professional_dilemma",
+      "query": "Should I take a job that pays more but bores me?",
+      "relevant": [
+        "BG-3.35"
+      ],
+      "graded": {
+        "BG-3.35": 1
+      }
+    },
+    {
+      "id": "gp-022",
+      "category": "professional",
+      "expected_intent": "professional_dilemma",
+      "query": "I made a costly mistake at work and I am terrified of the consequences",
+      "relevant": [
+        "BG-2.40"
+      ],
+      "graded": {
+        "BG-2.40": 1
+      }
+    },
+    {
+      "id": "gp-023",
+      "category": "professional",
+      "expected_intent": "professional_dilemma",
+      "query": "My team keeps missing deadlines and I do not know how to fix it",
+      "relevant": [
+        "AS-1.19.9",
+        "AS-2.14.2",
+        "AS-2.9.1",
+        "AS-3.14.1"
+      ],
+      "graded": {
+        "AS-1.19.9": 1,
+        "AS-2.14.2": 2,
+        "AS-2.9.1": 1,
+        "AS-3.14.1": 1
+      }
+    },
+    {
+      "id": "gp-024",
+      "category": "professional",
+      "expected_intent": "professional_dilemma",
+      "query": "I have to dismiss someone from my team for the first time",
+      "relevant": [
+        "AS-3.14.11"
+      ],
+      "graded": {
+        "AS-3.14.11": 1
+      }
+    },
+    {
+      "id": "gp-025",
+      "category": "statecraft",
+      "expected_intent": "professional_dilemma",
+      "query": "How should a leader choose ministers and advisers?",
+      "relevant": [
+        "AS-1.10.1",
+        "AS-1.10.12",
+        "AS-1.15.11",
+        "AS-1.15.12",
+        "AS-1.15.13",
+        "AS-1.15.15",
+        "AS-1.8.1",
+        "AS-1.8.4",
+        "AS-1.8.8",
+        "AS-6.1.6"
+      ],
+      "graded": {
+        "AS-1.10.1": 2,
+        "AS-1.10.12": 2,
+        "AS-1.15.11": 1,
+        "AS-1.15.12": 1,
+        "AS-1.15.13": 1,
+        "AS-1.15.15": 1,
+        "AS-1.8.1": 2,
+        "AS-1.8.4": 2,
+        "AS-1.8.8": 2,
+        "AS-6.1.6": 1
+      }
+    },
+    {
+      "id": "gp-026",
+      "category": "statecraft",
+      "expected_intent": "professional_dilemma",
+      "query": "How do I audit the people who handle money in my organisation?",
+      "relevant": [
+        "AS-2.5.20",
+        "AS-2.6.25",
+        "AS-2.7.15",
+        "AS-2.7.24",
+        "AS-2.7.25",
+        "AS-2.8.16",
+        "AS-2.8.21",
+        "AS-2.9.11",
+        "AS-2.9.7"
+      ],
+      "graded": {
+        "AS-2.5.20": 1,
+        "AS-2.6.25": 1,
+        "AS-2.7.15": 2,
+        "AS-2.7.24": 2,
+        "AS-2.7.25": 2,
+        "AS-2.8.16": 2,
+        "AS-2.8.21": 1,
+        "AS-2.9.11": 2,
+        "AS-2.9.7": 2
+      }
+    },
+    {
+      "id": "gp-027",
+      "category": "statecraft",
+      "expected_intent": "professional_dilemma",
+      "query": "When should I make peace with a rival instead of fighting?",
+      "relevant": [
+        "AS-10.3.20",
+        "AS-7.1.8",
+        "AS-7.14.1",
+        "AS-7.2.1",
+        "AS-7.3.11",
+        "AS-7.4.3",
+        "AS-7.6.29"
+      ],
+      "graded": {
+        "AS-10.3.20": 2,
+        "AS-7.1.8": 2,
+        "AS-7.14.1": 1,
+        "AS-7.2.1": 2,
+        "AS-7.3.11": 2,
+        "AS-7.4.3": 1,
+        "AS-7.6.29": 1
+      }
+    },
+    {
+      "id": "gp-028",
+      "category": "statecraft",
+      "expected_intent": "professional_dilemma",
+      "query": "How should a ruler divide and organise his working day?",
+      "relevant": [
+        "AS-1.19.3",
+        "AS-1.19.7"
+      ],
+      "graded": {
+        "AS-1.19.3": 2,
+        "AS-1.19.7": 1
+      }
+    },
+    {
+      "id": "gp-029",
+      "category": "statecraft",
+      "expected_intent": "professional_dilemma",
+      "query": "How do I detect and handle a conspiracy inside my own camp?",
+      "relevant": [
+        "AS-1.16.10",
+        "AS-13.5.6",
+        "AS-9.3.12"
+      ],
+      "graded": {
+        "AS-1.16.10": 1,
+        "AS-13.5.6": 1,
+        "AS-9.3.12": 2
+      }
+    },
+    {
+      "id": "gp-030",
+      "category": "statecraft",
+      "expected_intent": "professional_dilemma",
+      "query": "What makes a treaty or an alliance worth entering?",
+      "relevant": [
+        "AS-7.12.24",
+        "AS-7.2.1",
+        "AS-7.2.3",
+        "AS-7.2.7",
+        "AS-7.7.3",
+        "AS-7.9.1",
+        "AS-8.1.14",
+        "AS-9.5.1"
+      ],
+      "graded": {
+        "AS-7.12.24": 1,
+        "AS-7.2.1": 1,
+        "AS-7.2.3": 2,
+        "AS-7.2.7": 2,
+        "AS-7.7.3": 2,
+        "AS-7.9.1": 2,
+        "AS-8.1.14": 1,
+        "AS-9.5.1": 1
+      }
+    },
+    {
+      "id": "gp-031",
+      "category": "statecraft",
+      "expected_intent": "professional_dilemma",
+      "query": "How should punishment be applied so it is neither too harsh nor too lenient?",
+      "relevant": [
+        "AS-1.4.5",
+        "AS-3.17.3",
+        "AS-4.9.15",
+        "AS-7.5.16",
+        "AS-8.3.6"
+      ],
+      "graded": {
+        "AS-1.4.5": 2,
+        "AS-3.17.3": 2,
+        "AS-4.9.15": 1,
+        "AS-7.5.16": 1,
+        "AS-8.3.6": 1
+      }
+    },
+    {
+      "id": "gp-032",
+      "category": "statecraft",
+      "expected_intent": "professional_dilemma",
+      "query": "How do I gather reliable information about what is really happening?",
+      "relevant": [
+        "AS-1.12.15",
+        "AS-1.12.8",
+        "AS-1.16.11",
+        "AS-1.16.12",
+        "AS-2.35.13"
+      ],
+      "graded": {
+        "AS-1.12.15": 2,
+        "AS-1.12.8": 1,
+        "AS-1.16.11": 1,
+        "AS-1.16.12": 1,
+        "AS-2.35.13": 1
+      }
+    },
+    {
+      "id": "gp-033",
+      "category": "relationship",
+      "expected_intent": "seek_guidance",
+      "query": "My parents want me to marry someone I do not love",
+      "relevant": [
+        "AS-3.15.6",
+        "AS-3.2.3"
+      ],
+      "graded": {
+        "AS-3.15.6": 1,
+        "AS-3.2.3": 1
+      }
+    },
+    {
+      "id": "gp-034",
+      "category": "relationship",
+      "expected_intent": "seek_guidance",
+      "query": "I had a bitter fight with my brother over family property",
+      "relevant": [
+        "AS-3.5.3",
+        "AS-3.5.5",
+        "AS-3.5.6",
+        "AS-4.7.17"
+      ],
+      "graded": {
+        "AS-3.5.3": 1,
+        "AS-3.5.5": 1,
+        "AS-3.5.6": 1,
+        "AS-4.7.17": 1
+      }
+    },
+    {
+      "id": "gp-035",
+      "category": "relationship",
+      "expected_intent": "seek_guidance",
+      "query": "My wife and I keep arguing about money",
+      "relevant": [],
+      "graded": {}
+    },
+    {
+      "id": "gp-036",
+      "category": "relationship",
+      "expected_intent": "seek_guidance",
+      "query": "How do I care for my ageing parents without resenting them?",
+      "relevant": [
+        "AS-8.3.20"
+      ],
+      "graded": {
+        "AS-8.3.20": 1
+      }
+    },
+    {
+      "id": "gp-037",
+      "category": "hinglish",
+      "expected_intent": "emotional_support",
+      "query": "mujhe lagta hai sab kuch meri galti hai, I can't focus on anything",
+      "relevant": [
+        "BG-12.10",
+        "BG-12.9"
+      ],
+      "graded": {
+        "BG-12.10": 1,
+        "BG-12.9": 1
+      }
+    },
+    {
+      "id": "gp-038",
+      "category": "hinglish",
+      "expected_intent": "professional_dilemma",
+      "query": "office mein sab log politics karte hain, main kya karun",
+      "relevant": [],
+      "graded": {}
+    },
+    {
+      "id": "gp-039",
+      "category": "hinglish",
+      "expected_intent": "seek_guidance",
+      "query": "papa chahte hain main unka business sambhalun but mera mann nahi hai",
+      "relevant": [],
+      "graded": {}
+    },
+    {
+      "id": "gp-040",
+      "category": "hinglish",
+      "expected_intent": "emotional_support",
+      "query": "bahut tension hai exam ka, neend nahi aati raat ko",
+      "relevant": [
+        "BG-6.16",
+        "BG-6.17"
+      ],
+      "graded": {
+        "BG-6.16": 1,
+        "BG-6.17": 2
+      }
+    },
+    {
+      "id": "gq-041",
+      "category": "emotional",
+      "expected_intent": "emotional_support",
+      "query": "I compare myself with everyone on social media and feel worthless",
+      "relevant": [],
+      "graded": {}
+    },
+    {
+      "id": "gq-042",
+      "category": "emotional",
+      "expected_intent": "emotional_support",
+      "query": "I get angry very quickly and later regret what I said",
+      "relevant": [
+        "AS-8.3.2",
+        "AS-8.3.3",
+        "AS-8.3.4",
+        "AS-8.3.5",
+        "AS-8.3.7",
+        "BG-2.62",
+        "BG-2.63"
+      ],
+      "graded": {
+        "AS-8.3.2": 1,
+        "AS-8.3.3": 1,
+        "AS-8.3.4": 1,
+        "AS-8.3.5": 1,
+        "AS-8.3.7": 1,
+        "BG-2.62": 1,
+        "BG-2.63": 2
+      }
+    },
+    {
+      "id": "gq-043",
+      "category": "emotional",
+      "expected_intent": "seek_guidance",
+      "query": "I cannot let go of a mistake I made years ago",
+      "relevant": [
+        "BG-18.48",
+        "BG-18.66",
+        "BG-5.17"
+      ],
+      "graded": {
+        "BG-18.48": 1,
+        "BG-18.66": 2,
+        "BG-5.17": 1
+      }
+    },
+    {
+      "id": "gq-044",
+      "category": "emotional",
+      "expected_intent": "emotional_support",
+      "query": "My mother is seriously ill and I am scared of losing her",
+      "relevant": [
+        "BG-2.27"
+      ],
+      "graded": {
+        "BG-2.27": 1
+      }
+    },
+    {
+      "id": "gq-045",
+      "category": "emotional",
+      "expected_intent": "seek_guidance",
+      "query": "I have everything I wanted and still feel empty inside",
+      "relevant": [
+        "BG-10.9",
+        "BG-16.13",
+        "BG-7.2"
+      ],
+      "graded": {
+        "BG-10.9": 1,
+        "BG-16.13": 1,
+        "BG-7.2": 1
+      }
+    },
+    {
+      "id": "gq-046",
+      "category": "emotional",
+      "expected_intent": "seek_guidance",
+      "query": "How do I stay calm when people criticise me?",
+      "relevant": [
+        "BG-2.63"
+      ],
+      "graded": {
+        "BG-2.63": 1
+      }
+    },
+    {
+      "id": "gq-047",
+      "category": "emotional",
+      "expected_intent": "emotional_support",
+      "query": "I feel guilty for being happy when others around me are suffering",
+      "relevant": [
+        "AS-1.19.13"
+      ],
+      "graded": {
+        "AS-1.19.13": 1
+      }
+    },
+    {
+      "id": "gq-048",
+      "category": "emotional",
+      "expected_intent": "seek_guidance",
+      "query": "I procrastinate on everything important and hate myself for it",
+      "relevant": [
+        "BG-18.45",
+        "BG-18.59",
+        "BG-18.60",
+        "BG-2.47"
+      ],
+      "graded": {
+        "BG-18.45": 1,
+        "BG-18.59": 1,
+        "BG-18.60": 1,
+        "BG-2.47": 1
+      }
+    },
+    {
+      "id": "gq-049",
+      "category": "emotional",
+      "expected_intent": "seek_guidance",
+      "query": "How can I stop craving things that are bad for me?",
+      "relevant": [
+        "AS-1.6.1",
+        "BG-17.9",
+        "BG-18.39",
+        "BG-2.62",
+        "BG-6.24"
+      ],
+      "graded": {
+        "AS-1.6.1": 2,
+        "BG-17.9": 1,
+        "BG-18.39": 1,
+        "BG-2.62": 2,
+        "BG-6.24": 2
+      }
+    },
+    {
+      "id": "gq-050",
+      "category": "emotional",
+      "expected_intent": "emotional_support",
+      "query": "I feel nobody understands what I am going through",
+      "relevant": [],
+      "graded": {}
+    },
+    {
+      "id": "gq-051",
+      "category": "professional",
+      "expected_intent": "professional_dilemma",
+      "query": "My startup is failing and I have to tell my investors",
+      "relevant": [],
+      "graded": {}
+    },
+    {
+      "id": "gq-052",
+      "category": "professional",
+      "expected_intent": "professional_dilemma",
+      "query": "I was asked to hide a product defect from customers",
+      "relevant": [
+        "AS-5.2.6",
+        "BG-4.17"
+      ],
+      "graded": {
+        "AS-5.2.6": 1,
+        "BG-4.17": 1
+      }
+    },
+    {
+      "id": "gq-053",
+      "category": "professional",
+      "expected_intent": "professional_dilemma",
+      "query": "How should I negotiate with a much more powerful client?",
+      "relevant": [
+        "AS-2.10.36",
+        "AS-7.15.1",
+        "AS-9.4.7"
+      ],
+      "graded": {
+        "AS-2.10.36": 1,
+        "AS-7.15.1": 1,
+        "AS-9.4.7": 1
+      }
+    },
+    {
+      "id": "gq-054",
+      "category": "professional",
+      "expected_intent": "professional_dilemma",
+      "query": "Two senior members of my team are fighting and dividing the team",
+      "relevant": [
+        "AS-8.4.11",
+        "AS-8.5.11"
+      ],
+      "graded": {
+        "AS-8.4.11": 2,
+        "AS-8.5.11": 1
+      }
+    },
+    {
+      "id": "gq-055",
+      "category": "professional",
+      "expected_intent": "professional_dilemma",
+      "query": "I have been offered a bribe to approve a contract",
+      "relevant": [
+        "AS-4.4.6"
+      ],
+      "graded": {
+        "AS-4.4.6": 1
+      }
+    },
+    {
+      "id": "gq-056",
+      "category": "professional",
+      "expected_intent": "professional_dilemma",
+      "query": "I am afraid to speak up in meetings even when I know the answer",
+      "relevant": [],
+      "graded": {}
+    },
+    {
+      "id": "gq-057",
+      "category": "professional",
+      "expected_intent": "professional_dilemma",
+      "query": "How do I reward good work fairly in my team?",
+      "relevant": [
+        "AS-1.13.11",
+        "AS-10.3.16",
+        "AS-2.23.4",
+        "AS-2.9.5",
+        "AS-3.14.8",
+        "AS-7.4.17"
+      ],
+      "graded": {
+        "AS-1.13.11": 1,
+        "AS-10.3.16": 1,
+        "AS-2.23.4": 1,
+        "AS-2.9.5": 2,
+        "AS-3.14.8": 2,
+        "AS-7.4.17": 1
+      }
+    },
+    {
+      "id": "gq-058",
+      "category": "professional",
+      "expected_intent": "professional_dilemma",
+      "query": "My work feels meaningless and I only do it for the money",
+      "relevant": [
+        "BG-2.47"
+      ],
+      "graded": {
+        "BG-2.47": 2
+      }
+    },
+    {
+      "id": "gq-059",
+      "category": "professional",
+      "expected_intent": "professional_dilemma",
+      "query": "Should I report my friend at work who is stealing from the company?",
+      "relevant": [
+        "AS-2.8.22"
+      ],
+      "graded": {
+        "AS-2.8.22": 1
+      }
+    },
+    {
+      "id": "gq-060",
+      "category": "professional",
+      "expected_intent": "professional_dilemma",
+      "query": "How do I plan my finances when my income is uncertain?",
+      "relevant": [
+        "AS-2.5.21",
+        "AS-2.6.21",
+        "AS-8.4.31"
+      ],
+      "graded": {
+        "AS-2.5.21": 1,
+        "AS-2.6.21": 1,
+        "AS-8.4.31": 1
+      }
+    },
+    {
+      "id": "gq-061",
+      "category": "statecraft",
+      "expected_intent": "scripture_question",
+      "query": "What qualities should a king or leader cultivate in himself?",
+      "relevant": [
+        "AS-1.5.11",
+        "AS-6.1.2",
+        "AS-6.1.5"
+      ],
+      "graded": {
+        "AS-1.5.11": 2,
+        "AS-6.1.2": 2,
+        "AS-6.1.5": 2
+      }
+    },
+    {
+      "id": "gq-062",
+      "category": "statecraft",
+      "expected_intent": "scripture_question",
+      "query": "How should a ruler collect taxes without harming the people?",
+      "relevant": [
+        "AS-1.13.3",
+        "AS-2.1.11",
+        "AS-2.1.9",
+        "AS-2.9.9",
+        "AS-5.2.1",
+        "AS-5.2.28"
+      ],
+      "graded": {
+        "AS-1.13.3": 1,
+        "AS-2.1.11": 1,
+        "AS-2.1.9": 1,
+        "AS-2.9.9": 1,
+        "AS-5.2.1": 2,
+        "AS-5.2.28": 2
+      }
+    },
+    {
+      "id": "gq-063",
+      "category": "statecraft",
+      "expected_intent": "scripture_question",
+      "query": "How should a state protect itself against famine and disaster?",
+      "relevant": [
+        "AS-4.3.9",
+        "AS-8.4.1",
+        "AS-8.4.4",
+        "AS-8.4.5"
+      ],
+      "graded": {
+        "AS-4.3.9": 2,
+        "AS-8.4.1": 1,
+        "AS-8.4.4": 1,
+        "AS-8.4.5": 1
+      }
+    },
+    {
+      "id": "gq-064",
+      "category": "statecraft",
+      "expected_intent": "scripture_question",
+      "query": "What are the duties of a king towards his subjects?",
+      "relevant": [
+        "AS-1.13.5",
+        "AS-1.19.12",
+        "AS-3.1.29",
+        "AS-4.3.25",
+        "AS-5.3.1",
+        "AS-5.3.22",
+        "AS-7.5.20"
+      ],
+      "graded": {
+        "AS-1.13.5": 2,
+        "AS-1.19.12": 2,
+        "AS-3.1.29": 2,
+        "AS-4.3.25": 2,
+        "AS-5.3.1": 1,
+        "AS-5.3.22": 1,
+        "AS-7.5.20": 1
+      }
+    },
+    {
+      "id": "gq-065",
+      "category": "statecraft",
+      "expected_intent": "scripture_question",
+      "query": "How should a leader test the loyalty of his ministers?",
+      "relevant": [
+        "AS-1.10.1",
+        "AS-1.10.12",
+        "AS-1.15.15",
+        "AS-1.8.1",
+        "AS-1.8.4",
+        "AS-1.8.6"
+      ],
+      "graded": {
+        "AS-1.10.1": 2,
+        "AS-1.10.12": 2,
+        "AS-1.15.15": 1,
+        "AS-1.8.1": 1,
+        "AS-1.8.4": 2,
+        "AS-1.8.6": 1
+      }
+    },
+    {
+      "id": "gq-066",
+      "category": "statecraft",
+      "expected_intent": "scripture_question",
+      "query": "When is it wise to form an alliance with a neighbouring state?",
+      "relevant": [
+        "AS-7.2.3",
+        "AS-7.2.7",
+        "AS-7.7.2",
+        "AS-7.9.2",
+        "AS-7.9.33",
+        "AS-8.1.14",
+        "AS-8.4.8"
+      ],
+      "graded": {
+        "AS-7.2.3": 2,
+        "AS-7.2.7": 2,
+        "AS-7.7.2": 1,
+        "AS-7.9.2": 1,
+        "AS-7.9.33": 1,
+        "AS-8.1.14": 1,
+        "AS-8.4.8": 1
+      }
+    },
+    {
+      "id": "gq-067",
+      "category": "statecraft",
+      "expected_intent": "scripture_question",
+      "query": "How should judges settle disputes fairly?",
+      "relevant": [
+        "AS-1.19.7",
+        "AS-3.11.18",
+        "AS-3.19.15",
+        "AS-3.20.19",
+        "AS-3.20.21",
+        "AS-3.8.1",
+        "AS-4.1.12",
+        "AS-4.9.11",
+        "AS-4.9.12"
+      ],
+      "graded": {
+        "AS-1.19.7": 1,
+        "AS-3.11.18": 2,
+        "AS-3.19.15": 2,
+        "AS-3.20.19": 1,
+        "AS-3.20.21": 2,
+        "AS-3.8.1": 1,
+        "AS-4.1.12": 1,
+        "AS-4.9.11": 2,
+        "AS-4.9.12": 2
+      }
+    },
+    {
+      "id": "gq-068",
+      "category": "statecraft",
+      "expected_intent": "scripture_question",
+      "query": "How should the treasury be managed and guarded?",
+      "relevant": [
+        "AS-2.11.1",
+        "AS-2.5.18",
+        "AS-2.5.3",
+        "AS-2.8.1",
+        "AS-5.6.3",
+        "AS-6.1.9",
+        "AS-8.1.10"
+      ],
+      "graded": {
+        "AS-2.11.1": 2,
+        "AS-2.5.18": 2,
+        "AS-2.5.3": 2,
+        "AS-2.8.1": 1,
+        "AS-5.6.3": 2,
+        "AS-6.1.9": 1,
+        "AS-8.1.10": 1
+      }
+    },
+    {
+      "id": "gq-069",
+      "category": "statecraft",
+      "expected_intent": "scripture_question",
+      "query": "What causes rebellion among the people and how can it be prevented?",
+      "relevant": [
+        "AS-7.5.21",
+        "AS-7.5.22",
+        "AS-7.5.24",
+        "AS-7.5.27",
+        "AS-7.5.9",
+        "AS-8.4.10",
+        "AS-8.4.11",
+        "AS-8.5.22",
+        "AS-9.7.1"
+      ],
+      "graded": {
+        "AS-7.5.21": 2,
+        "AS-7.5.22": 2,
+        "AS-7.5.24": 2,
+        "AS-7.5.27": 1,
+        "AS-7.5.9": 1,
+        "AS-8.4.10": 1,
+        "AS-8.4.11": 1,
+        "AS-8.5.22": 2,
+        "AS-9.7.1": 1
+      }
+    },
+    {
+      "id": "gq-070",
+      "category": "statecraft",
+      "expected_intent": "scripture_question",
+      "query": "How should a king train and educate a prince?",
+      "relevant": [
+        "AS-1.17.10",
+        "AS-1.17.3",
+        "AS-1.17.8",
+        "AS-1.18.1"
+      ],
+      "graded": {
+        "AS-1.17.10": 1,
+        "AS-1.17.3": 1,
+        "AS-1.17.8": 1,
+        "AS-1.18.1": 1
+      }
+    },
+    {
+      "id": "gq-071",
+      "category": "statecraft",
+      "expected_intent": "scripture_question",
+      "query": "What is the role of spies in running a kingdom?",
+      "relevant": [
+        "AS-1.12.18",
+        "AS-1.12.21",
+        "AS-1.12.22",
+        "AS-1.12.6",
+        "AS-1.13.8",
+        "AS-12.2.8",
+        "AS-12.3.1",
+        "AS-12.3.2",
+        "AS-12.3.3",
+        "AS-9.6.16"
+      ],
+      "graded": {
+        "AS-1.12.18": 2,
+        "AS-1.12.21": 2,
+        "AS-1.12.22": 1,
+        "AS-1.12.6": 2,
+        "AS-1.13.8": 2,
+        "AS-12.2.8": 1,
+        "AS-12.3.1": 1,
+        "AS-12.3.2": 1,
+        "AS-12.3.3": 1,
+        "AS-9.6.16": 1
+      }
+    },
+    {
+      "id": "gq-072",
+      "category": "statecraft",
+      "expected_intent": "scripture_question",
+      "query": "How should trade and merchants be regulated?",
+      "relevant": [
+        "AS-2.12.16",
+        "AS-2.16.3",
+        "AS-2.16.7",
+        "AS-2.36.6",
+        "AS-2.36.7",
+        "AS-4.2.20",
+        "AS-5.2.6",
+        "AS-8.4.20",
+        "AS-8.4.21"
+      ],
+      "graded": {
+        "AS-2.12.16": 2,
+        "AS-2.16.3": 1,
+        "AS-2.16.7": 2,
+        "AS-2.36.6": 1,
+        "AS-2.36.7": 1,
+        "AS-4.2.20": 1,
+        "AS-5.2.6": 1,
+        "AS-8.4.20": 1,
+        "AS-8.4.21": 1
+      }
+    },
+    {
+      "id": "gq-073",
+      "category": "statecraft",
+      "expected_intent": "scripture_question",
+      "query": "How should a weak kingdom behave towards a stronger one?",
+      "relevant": [
+        "AS-12.1.3",
+        "AS-12.1.6",
+        "AS-7.14.17",
+        "AS-7.15.1",
+        "AS-7.15.13",
+        "AS-7.3.17",
+        "AS-7.3.8"
+      ],
+      "graded": {
+        "AS-12.1.3": 2,
+        "AS-12.1.6": 2,
+        "AS-7.14.17": 2,
+        "AS-7.15.1": 2,
+        "AS-7.15.13": 2,
+        "AS-7.3.17": 2,
+        "AS-7.3.8": 1
+      }
+    },
+    {
+      "id": "gq-074",
+      "category": "statecraft",
+      "expected_intent": "scripture_question",
+      "query": "What punishment is appropriate for officials who take bribes?",
+      "relevant": [
+        "AS-2.5.17",
+        "AS-2.7.28",
+        "AS-2.8.20",
+        "AS-4.4.6"
+      ],
+      "graded": {
+        "AS-2.5.17": 1,
+        "AS-2.7.28": 1,
+        "AS-2.8.20": 1,
+        "AS-4.4.6": 2
+      }
+    },
+    {
+      "id": "gq-075",
+      "category": "statecraft",
+      "expected_intent": "scripture_question",
+      "query": "How should agriculture and irrigation be supported by the state?",
+      "relevant": [
+        "AS-2.1.10",
+        "AS-2.1.25",
+        "AS-2.24.16",
+        "AS-2.24.17",
+        "AS-3.9.14",
+        "AS-7.11.3",
+        "AS-7.14.12"
+      ],
+      "graded": {
+        "AS-2.1.10": 2,
+        "AS-2.1.25": 2,
+        "AS-2.24.16": 1,
+        "AS-2.24.17": 1,
+        "AS-3.9.14": 1,
+        "AS-7.11.3": 1,
+        "AS-7.14.12": 1
+      }
+    },
+    {
+      "id": "gq-076",
+      "category": "statecraft",
+      "expected_intent": "scripture_question",
+      "query": "What should a leader do when advisers give conflicting counsel?",
+      "relevant": [
+        "AS-1.15.11",
+        "AS-1.15.12",
+        "AS-1.15.13",
+        "AS-1.15.15"
+      ],
+      "graded": {
+        "AS-1.15.11": 1,
+        "AS-1.15.12": 1,
+        "AS-1.15.13": 1,
+        "AS-1.15.15": 2
+      }
+    },
+    {
+      "id": "gq-077",
+      "category": "relationship",
+      "expected_intent": "emotional_support",
+      "query": "My partner and I keep fighting about small things",
+      "relevant": [],
+      "graded": {}
+    },
+    {
+      "id": "gq-078",
+      "category": "relationship",
+      "expected_intent": "seek_guidance",
+      "query": "How do I set boundaries with parents who control my life decisions?",
+      "relevant": [],
+      "graded": {}
+    },
+    {
+      "id": "gq-079",
+      "category": "relationship",
+      "expected_intent": "emotional_support",
+      "query": "My best friend stopped talking to me and I do not know why",
+      "relevant": [
+        "AS-8.5.29",
+        "AS-8.5.31",
+        "AS-8.5.32"
+      ],
+      "graded": {
+        "AS-8.5.29": 1,
+        "AS-8.5.31": 1,
+        "AS-8.5.32": 1
+      }
+    },
+    {
+      "id": "gq-080",
+      "category": "relationship",
+      "expected_intent": "emotional_support",
+      "query": "I went through a breakup and cannot stop thinking about my ex",
+      "relevant": [],
+      "graded": {}
+    },
+    {
+      "id": "gq-081",
+      "category": "relationship",
+      "expected_intent": "seek_guidance",
+      "query": "My siblings and I are fighting over our inheritance",
+      "relevant": [
+        "AS-3.5.1",
+        "AS-3.5.14",
+        "AS-3.5.5",
+        "AS-3.5.6",
+        "AS-3.5.7",
+        "AS-3.5.8",
+        "AS-3.6.3",
+        "BG-1.37"
+      ],
+      "graded": {
+        "AS-3.5.1": 2,
+        "AS-3.5.14": 1,
+        "AS-3.5.5": 2,
+        "AS-3.5.6": 2,
+        "AS-3.5.7": 2,
+        "AS-3.5.8": 2,
+        "AS-3.6.3": 2,
+        "BG-1.37": 1
+      }
+    },
+    {
+      "id": "gq-082",
+      "category": "relationship",
+      "expected_intent": "seek_guidance",
+      "query": "How can I be a better parent to my teenage child?",
+      "relevant": [],
+      "graded": {}
+    },
+    {
+      "id": "gq-083",
+      "category": "relationship",
+      "expected_intent": "seek_guidance",
+      "query": "Should I stay in a friendship that only takes from me?",
+      "relevant": [
+        "AS-7.9.25",
+        "AS-7.9.29",
+        "AS-7.9.4",
+        "AS-7.9.5",
+        "AS-7.9.6",
+        "AS-7.9.9"
+      ],
+      "graded": {
+        "AS-7.9.25": 1,
+        "AS-7.9.29": 1,
+        "AS-7.9.4": 1,
+        "AS-7.9.5": 1,
+        "AS-7.9.6": 2,
+        "AS-7.9.9": 1
+      }
+    },
+    {
+      "id": "gq-084",
+      "category": "relationship",
+      "expected_intent": "emotional_support",
+      "query": "My in-laws do not accept me",
+      "relevant": [],
+      "graded": {}
+    },
+    {
+      "id": "gq-085",
+      "category": "relationship",
+      "expected_intent": "seek_guidance",
+      "query": "How do I rebuild trust after I lied to someone I love?",
+      "relevant": [
+        "AS-7.6.19"
+      ],
+      "graded": {
+        "AS-7.6.19": 1
+      }
+    },
+    {
+      "id": "gq-086",
+      "category": "relationship",
+      "expected_intent": "seek_guidance",
+      "query": "I am attached to someone who does not feel the same way",
+      "relevant": [
+        "BG-2.62"
+      ],
+      "graded": {
+        "BG-2.62": 1
+      }
+    },
+    {
+      "id": "gq-087",
+      "category": "relationship",
+      "expected_intent": "seek_guidance",
+      "query": "How do I care for my ageing parents without losing myself?",
+      "relevant": [
+        "AS-8.3.20"
+      ],
+      "graded": {
+        "AS-8.3.20": 1
+      }
+    },
+    {
+      "id": "gq-088",
+      "category": "relationship",
+      "expected_intent": "seek_guidance",
+      "query": "My friend is making bad choices; should I intervene?",
+      "relevant": [
+        "AS-7.18.15",
+        "AS-7.9.35",
+        "BG-18.64"
+      ],
+      "graded": {
+        "AS-7.18.15": 1,
+        "AS-7.9.35": 2,
+        "BG-18.64": 1
+      }
+    },
+    {
+      "id": "gq-089",
+      "category": "hinglish",
+      "expected_intent": "emotional_support",
+      "query": "Mujhe bahut akela mehsoos hota hai, kya karun?",
+      "relevant": [],
+      "graded": {}
+    },
+    {
+      "id": "gq-090",
+      "category": "hinglish",
+      "expected_intent": "seek_guidance",
+      "query": "Exam mein fail ho gaya, ab kya karu samajh nahi aa raha",
+      "relevant": [
+        "BG-3.25",
+        "BG-6.38"
+      ],
+      "graded": {
+        "BG-3.25": 1,
+        "BG-6.38": 1
+      }
+    },
+    {
+      "id": "gq-091",
+      "category": "hinglish",
+      "expected_intent": "professional_dilemma",
+      "query": "Boss har baat pe daant ta hai, job chhod du kya?",
+      "relevant": [
+        "BG-3.35",
+        "BG-3.8"
+      ],
+      "graded": {
+        "BG-3.35": 1,
+        "BG-3.8": 1
+      }
+    },
+    {
+      "id": "gq-092",
+      "category": "hinglish",
+      "expected_intent": "seek_guidance",
+      "query": "Gussa bahut aata hai, control kaise karu?",
+      "relevant": [
+        "BG-3.41",
+        "BG-6.36"
+      ],
+      "graded": {
+        "BG-3.41": 1,
+        "BG-6.36": 1
+      }
+    },
+    {
+      "id": "gq-093",
+      "category": "hinglish",
+      "expected_intent": "emotional_support",
+      "query": "Papa ki death ke baad sab khali lagta hai",
+      "relevant": [
+        "BG-2.1",
+        "BG-2.11",
+        "BG-2.27"
+      ],
+      "graded": {
+        "BG-2.1": 1,
+        "BG-2.11": 2,
+        "BG-2.27": 2
+      }
+    },
+    {
+      "id": "gq-094",
+      "category": "hinglish",
+      "expected_intent": "seek_guidance",
+      "query": "Result ki chinta chhod ke kaam kaise karu?",
+      "relevant": [
+        "BG-9.28"
+      ],
+      "graded": {
+        "BG-9.28": 1
+      }
+    },
+    {
+      "id": "gq-095",
+      "category": "hinglish",
+      "expected_intent": "seek_guidance",
+      "query": "Dost ne dhokha diya, maaf karu ya nahi?",
+      "relevant": [
+        "AS-8.5.31",
+        "AS-8.5.32"
+      ],
+      "graded": {
+        "AS-8.5.31": 1,
+        "AS-8.5.32": 1
+      }
+    },
+    {
+      "id": "gq-096",
+      "category": "hinglish",
+      "expected_intent": "professional_dilemma",
+      "query": "Team ko kaise lead karu jab koi sunta hi nahi?",
+      "relevant": [],
+      "graded": {}
+    },
+    {
+      "id": "gq-097",
+      "category": "hinglish",
+      "expected_intent": "seek_guidance",
+      "query": "Mann shant nahi rehta, dhyan kaise lagaun?",
+      "relevant": [
+        "BG-2.66",
+        "BG-6.33",
+        "BG-8.27"
+      ],
+      "graded": {
+        "BG-2.66": 2,
+        "BG-6.33": 1,
+        "BG-8.27": 1
+      }
+    },
+    {
+      "id": "gq-098",
+      "category": "hinglish",
+      "expected_intent": "seek_guidance",
+      "query": "Shaadi ke liye ghar wale pressure daal rahe hain",
+      "relevant": [
+        "AS-3.2.3",
+        "AS-4.12.11"
+      ],
+      "graded": {
+        "AS-3.2.3": 1,
+        "AS-4.12.11": 1
+      }
+    },
+    {
+      "id": "gq-099",
+      "category": "hinglish",
+      "expected_intent": "professional_dilemma",
+      "query": "Business partner pe bharosa karu ya nahi?",
+      "relevant": [
+        "AS-7.5.37",
+        "AS-9.3.9"
+      ],
+      "graded": {
+        "AS-7.5.37": 1,
+        "AS-9.3.9": 1
+      }
+    },
+    {
+      "id": "gq-100",
+      "category": "hinglish",
+      "expected_intent": "seek_guidance",
+      "query": "Apna kartavya kaise pehchanu?",
+      "relevant": [
+        "AS-1.3.13",
+        "BG-18.47",
+        "BG-18.48",
+        "BG-18.60",
+        "BG-2.31",
+        "BG-3.35"
+      ],
+      "graded": {
+        "AS-1.3.13": 1,
+        "BG-18.47": 2,
+        "BG-18.48": 1,
+        "BG-18.60": 1,
+        "BG-2.31": 1,
+        "BG-3.35": 1
+      }
+    }
+  ]
+}

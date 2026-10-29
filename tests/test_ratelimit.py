@@ -101,6 +101,7 @@ def limited_client() -> Iterator[TestClient]:
         Settings(
             mock_mode=True,
             environment="test",
+            rate_limit_enabled=True,
             rate_limit_session_per_minute=1,
             rate_limit_session_burst=1,
             rate_limit_ip_per_minute=1000,

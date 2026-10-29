@@ -167,6 +167,7 @@ def test_rate_limit_rejections_are_counted(tmp_path: Path) -> None:
             mock_mode=True,
             environment="test",
             consent_required=False,
+            rate_limit_enabled=True,
             rate_limit_session_per_minute=1,
             rate_limit_session_burst=1,
             telemetry_enabled=True,

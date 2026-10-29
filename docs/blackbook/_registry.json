@@ -1,0 +1,386 @@
+[
+ [
+  "ch",
+  "bm_ch1",
+  "1",
+  "Introduction"
+ ],
+ [
+  "h2",
+  "bm_s1_1",
+  "1.1",
+  "Background of the Project Topic"
+ ],
+ [
+  "h2",
+  "bm_s1_2",
+  "1.2",
+  "Motivation and Scope of the Report"
+ ],
+ [
+  "h2",
+  "bm_s1_3",
+  "1.3",
+  "Problem Statement"
+ ],
+ [
+  "h2",
+  "bm_s1_4",
+  "1.4",
+  "Salient Contribution"
+ ],
+ [
+  "h2",
+  "bm_s1_5",
+  "1.5",
+  "Organization of the Report"
+ ],
+ [
+  "ch",
+  "bm_ch2",
+  "2",
+  "Literature Survey"
+ ],
+ [
+  "h2",
+  "bm_s2_1",
+  "2.1",
+  "Introduction to the Overall Topic"
+ ],
+ [
+  "h2",
+  "bm_s2_2",
+  "2.2",
+  "Survey of Existing Systems"
+ ],
+ [
+  "tbl",
+  "bm_tbl_cmp",
+  "2.1",
+  "Capability comparison with the closest systems"
+ ],
+ [
+  "ch",
+  "bm_ch3",
+  "3",
+  "Methodology and Implementation"
+ ],
+ [
+  "h2",
+  "bm_s3_1",
+  "3.1",
+  "Block Diagram"
+ ],
+ [
+  "fig",
+  "bm_fig_pipeline",
+  "3.1",
+  "The GitaGuide pipeline. Shaded stages are safety gates. A blocked turn leaves after stage 3 with the helpline response only; routes that need no verse skip stage 6."
+ ],
+ [
+  "fig",
+  "bm_fig_component",
+  "3.2",
+  "Component diagram of the deployed system."
+ ],
+ [
+  "fig",
+  "bm_fig_sequence",
+  "3.3",
+  "Sequence diagram of one normal turn."
+ ],
+ [
+  "h2",
+  "bm_s3_2",
+  "3.2",
+  "Hardware Description"
+ ],
+ [
+  "tbl",
+  "bm_tbl_hw",
+  "3.1",
+  "Hardware and infrastructure"
+ ],
+ [
+  "h2",
+  "bm_s3_3",
+  "3.3",
+  "Software Description, Flowchart and Algorithms"
+ ],
+ [
+  "tbl",
+  "bm_tbl_sw",
+  "3.2",
+  "Software stack"
+ ],
+ [
+  "tbl",
+  "bm_tbl_gate",
+  "3.3",
+  "Layers of the safety gate"
+ ],
+ [
+  "h2",
+  "bm_s3_4",
+  "3.4",
+  "Implementation Screenshots"
+ ],
+ [
+  "fig",
+  "bm_fig_shot_landing",
+  "3.4",
+  "Closed-beta notice and consent screen of the deployed app (gitaguide-neon.vercel.app)."
+ ],
+ [
+  "fig",
+  "bm_fig_shot_answer",
+  "3.5",
+  "A guidance answer with the cited verses, the retrieval path behind each verse, and the stage trace and timings in the line below."
+ ],
+ [
+  "fig",
+  "bm_fig_shot_crisis",
+  "3.6",
+  "The crisis gate: a high-risk message returns the fixed helpline reply with no verse and no generation call."
+ ],
+ [
+  "h2",
+  "bm_s3_5",
+  "3.5",
+  "Evaluation Method"
+ ],
+ [
+  "ch",
+  "bm_ch4",
+  "4",
+  "Results and Analysis"
+ ],
+ [
+  "h2",
+  "bm_s4_1",
+  "4.1",
+  "Safety Gate Evaluation"
+ ],
+ [
+  "tbl",
+  "bm_tbl_safety",
+  "4.1",
+  "Safety gate results"
+ ],
+ [
+  "h2",
+  "bm_s4_2",
+  "4.2",
+  "Conversational Routing and Answer Format"
+ ],
+ [
+  "tbl",
+  "bm_tbl_routing",
+  "4.2",
+  "Effect of conversational routing (local stack)"
+ ],
+ [
+  "tbl",
+  "bm_tbl_len",
+  "4.3",
+  "Reply length by route (local stack, 40 messages)"
+ ],
+ [
+  "h2",
+  "bm_s4_3",
+  "4.3",
+  "Retrieval Quality"
+ ],
+ [
+  "tbl",
+  "bm_tbl_gold",
+  "4.4",
+  "Retrieval on the 40-query gold set (production retriever, fp32, 2 September 2026)"
+ ],
+ [
+  "tbl",
+  "bm_tbl_ablate",
+  "4.5",
+  "Component ablations (offline replica, fp32 query encoder, 17 October 2026)"
+ ],
+ [
+  "tbl",
+  "bm_tbl_pool",
+  "4.6",
+  "Pooled-set hit rates at k = 5 (81 scored queries) and pool membership"
+ ],
+ [
+  "h2",
+  "bm_s4_4",
+  "4.4",
+  "Emotion Model and Intent Classification"
+ ],
+ [
+  "tbl",
+  "bm_tbl_emo",
+  "4.7",
+  "Emotion model on the public GoEmotions test split (n = 1,500, threshold 0.5, ordered by F1)"
+ ],
+ [
+  "tbl",
+  "bm_tbl_intent",
+  "4.8",
+  "Intent classification, per-class results (live, n = 100)"
+ ],
+ [
+  "tbl",
+  "bm_tbl_conf",
+  "4.9",
+  "Intent confusion matrix, live production API (rows = expected, columns = predicted; n = 100)"
+ ],
+ [
+  "h2",
+  "bm_s4_5",
+  "4.5",
+  "Answer Quality and Faithfulness"
+ ],
+ [
+  "tbl",
+  "bm_tbl_human",
+  "4.10",
+  "Preliminary human evaluation of 30 answers (1–5 scale)"
+ ],
+ [
+  "h2",
+  "bm_s4_6",
+  "4.6",
+  "Moral Red Team and the Safety Fix"
+ ],
+ [
+  "tbl",
+  "bm_tbl_redteam",
+  "4.11",
+  "Red-team review of re-captured replies (17 October 2026, n = 33, 0 errors)"
+ ],
+ [
+  "h2",
+  "bm_s4_7",
+  "4.7",
+  "Latency and Resources"
+ ],
+ [
+  "fig",
+  "bm_fig_latency",
+  "4.1",
+  "Median per-stage latency of a normal turn on the live stack (n = 5, log scale). Dark bars are model round trips."
+ ],
+ [
+  "fig",
+  "bm_fig_memory",
+  "4.2",
+  "Resident memory on a 512 MiB instance, before and after the four settings that travel together (INT8 embedder, one thread, arena limit, serialised turns)."
+ ],
+ [
+  "h2",
+  "bm_s4_8",
+  "4.8",
+  "Explainability and Observability"
+ ],
+ [
+  "h2",
+  "bm_s4_9",
+  "4.9",
+  "Discussion"
+ ],
+ [
+  "tbl",
+  "bm_tbl_risks",
+  "4.12",
+  "Risks named in the literature and their status"
+ ],
+ [
+  "ch",
+  "bm_ch5",
+  "5",
+  "Advantages, Limitations and Applications"
+ ],
+ [
+  "h2",
+  "bm_s5_1",
+  "5.1",
+  "Advantages"
+ ],
+ [
+  "h2",
+  "bm_s5_2",
+  "5.2",
+  "Limitations and Challenges"
+ ],
+ [
+  "h2",
+  "bm_s5_3",
+  "5.3",
+  "Applications"
+ ],
+ [
+  "ch",
+  "bm_ch6",
+  "6",
+  "Conclusion and Future Scope"
+ ],
+ [
+  "h2",
+  "bm_s6_1",
+  "6.1",
+  "Conclusion"
+ ],
+ [
+  "h2",
+  "bm_s6_2",
+  "6.2",
+  "Future Scope"
+ ],
+ [
+  "refs",
+  "bm_refs",
+  "",
+  "References"
+ ],
+ [
+  "app",
+  "bm_appA",
+  "A",
+  "Sample Code"
+ ],
+ [
+  "app",
+  "bm_appB",
+  "B",
+  "Data Sheets"
+ ],
+ [
+  "tbl",
+  "bm_tbl_corpus",
+  "B.1",
+  "Corpus and graph composition"
+ ],
+ [
+  "tbl",
+  "bm_tbl_params",
+  "B.2",
+  "Main configuration parameters (app/config.py)"
+ ],
+ [
+  "app",
+  "bm_appC",
+  "C",
+  "List of Components"
+ ],
+ [
+  "tbl",
+  "bm_tbl_pkgs",
+  "C.1",
+  "Python packages (requirements.txt)"
+ ],
+ [
+  "app",
+  "bm_appD",
+  "D",
+  "List of Papers Presented and Published"
+ ]
+]

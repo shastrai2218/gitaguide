@@ -1,0 +1,1061 @@
+{
+  "k": 5,
+  "backend": "in-memory-hybrid",
+  "embedder": "all-MiniLM-L6-v2-onnx-fp32",
+  "provenance": {
+    "backend": "in-memory-hybrid",
+    "embedder": "all-MiniLM-L6-v2-onnx-fp32",
+    "corpus_size": 0,
+    "timestamp": "2026-10-17T08:00:19+00:00",
+    "git_commit": "b8026b6-dirty"
+  },
+  "ablations": {
+    "deterministic_intent": true
+  },
+  "n_queries": 40,
+  "recall_at_k": 0.2208,
+  "precision_at_k": 0.155,
+  "mrr": 0.3879,
+  "ndcg_at_k": 0.2066,
+  "hit_rate": 0.65,
+  "intent_accuracy": 0.475,
+  "queries": [
+    {
+      "id": "gp-001",
+      "query": "I feel like a failure after my exam results",
+      "expected_intent": "seek_guidance",
+      "predicted_intent": "seek_guidance",
+      "category": "emotional",
+      "relevant": [
+        "BG-2.47",
+        "BG-2.38",
+        "BG-18.47",
+        "BG-6.5"
+      ],
+      "retrieved": [
+        "BG-6.6",
+        "BG-18.66",
+        "BG-2.62",
+        "BG-2.14",
+        "BG-6.5"
+      ],
+      "hits": [
+        "BG-6.5"
+      ],
+      "recall_at_k": 0.25,
+      "precision_at_k": 0.2,
+      "reciprocal_rank": 0.2,
+      "ndcg_at_k": 0.0923
+    },
+    {
+      "id": "gp-002",
+      "query": "My father passed away last month and I cannot stop crying",
+      "expected_intent": "emotional_support",
+      "predicted_intent": "emotional_support",
+      "category": "emotional",
+      "relevant": [
+        "BG-2.11",
+        "BG-2.20",
+        "BG-2.13",
+        "BG-18.66"
+      ],
+      "retrieved": [
+        "BG-2.11",
+        "BG-2.14",
+        "BG-18.66",
+        "BG-6.5",
+        "BG-2.71"
+      ],
+      "hits": [
+        "BG-2.11",
+        "BG-18.66"
+      ],
+      "recall_at_k": 0.5,
+      "precision_at_k": 0.4,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_k": 0.5963
+    },
+    {
+      "id": "gp-003",
+      "query": "I am anxious all the time about my future and cannot sleep",
+      "expected_intent": "emotional_support",
+      "predicted_intent": "emotional_support",
+      "category": "emotional",
+      "relevant": [
+        "BG-2.47",
+        "BG-6.35",
+        "BG-6.34",
+        "BG-2.48"
+      ],
+      "retrieved": [
+        "BG-12.15",
+        "BG-2.47",
+        "BG-2.3",
+        "BG-2.71",
+        "BG-2.14"
+      ],
+      "hits": [
+        "BG-2.47"
+      ],
+      "recall_at_k": 0.25,
+      "precision_at_k": 0.2,
+      "reciprocal_rank": 0.5,
+      "ndcg_at_k": 0.301
+    },
+    {
+      "id": "gp-004",
+      "query": "I hate myself for the mistakes I have made",
+      "expected_intent": "emotional_support",
+      "predicted_intent": "emotional_support",
+      "category": "emotional",
+      "relevant": [
+        "BG-6.5",
+        "BG-6.6",
+        "BG-18.66"
+      ],
+      "retrieved": [
+        "BG-2.62",
+        "BG-6.6",
+        "BG-6.5",
+        "BG-12.15",
+        "AS-1.7.6"
+      ],
+      "hits": [
+        "BG-6.6",
+        "BG-6.5"
+      ],
+      "recall_at_k": 0.6667,
+      "precision_at_k": 0.4,
+      "reciprocal_rank": 0.5,
+      "ndcg_at_k": 0.6013
+    },
+    {
+      "id": "gp-005",
+      "query": "Nothing I do seems to matter. What is the point of any of this?",
+      "expected_intent": "seek_guidance",
+      "predicted_intent": "other",
+      "category": "emotional",
+      "relevant": [
+        "BG-3.35",
+        "BG-2.47",
+        "BG-3.9",
+        "BG-16.8"
+      ],
+      "retrieved": [
+        "BG-2.47",
+        "BG-12.15",
+        "BG-2.11",
+        "BG-2.3",
+        "BG-2.62"
+      ],
+      "hits": [
+        "BG-2.47"
+      ],
+      "recall_at_k": 0.25,
+      "precision_at_k": 0.2,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_k": 0.477
+    },
+    {
+      "id": "gp-006",
+      "query": "I am jealous of my friends who are doing better than me",
+      "expected_intent": "emotional_support",
+      "predicted_intent": "other",
+      "category": "emotional",
+      "relevant": [
+        "BG-4.22",
+        "BG-3.35",
+        "BG-2.38"
+      ],
+      "retrieved": [
+        "BG-3.35",
+        "BG-6.5",
+        "BG-2.14",
+        "BG-6.6",
+        "BG-2.62"
+      ],
+      "hits": [
+        "BG-3.35"
+      ],
+      "recall_at_k": 0.3333,
+      "precision_at_k": 0.2,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_k": 0.5317
+    },
+    {
+      "id": "gp-007",
+      "query": "How do I stop worrying about things I cannot control?",
+      "expected_intent": "seek_guidance",
+      "predicted_intent": "seek_guidance",
+      "category": "emotional",
+      "relevant": [
+        "BG-2.47",
+        "BG-3.19",
+        "BG-2.48"
+      ],
+      "retrieved": [
+        "BG-2.62",
+        "BG-2.47",
+        "AS-1.7.6",
+        "BG-2.3",
+        "BG-2.71"
+      ],
+      "hits": [
+        "BG-2.47"
+      ],
+      "recall_at_k": 0.3333,
+      "precision_at_k": 0.2,
+      "reciprocal_rank": 0.5,
+      "ndcg_at_k": 0.3354
+    },
+    {
+      "id": "gp-008",
+      "query": "I feel restless and my mind never settles",
+      "expected_intent": "seek_guidance",
+      "predicted_intent": "other",
+      "category": "emotional",
+      "relevant": [
+        "BG-6.34",
+        "BG-6.35",
+        "BG-6.26",
+        "BG-6.24"
+      ],
+      "retrieved": [
+        "BG-2.47",
+        "BG-12.15",
+        "BG-2.71",
+        "BG-2.14",
+        "BG-2.11"
+      ],
+      "hits": [],
+      "recall_at_k": 0.0,
+      "precision_at_k": 0.0,
+      "reciprocal_rank": 0.0,
+      "ndcg_at_k": 0.0
+    },
+    {
+      "id": "gp-009",
+      "query": "I am afraid of dying",
+      "expected_intent": "emotional_support",
+      "predicted_intent": "other",
+      "category": "emotional",
+      "relevant": [
+        "BG-2.20",
+        "BG-2.13",
+        "BG-2.11"
+      ],
+      "retrieved": [
+        "BG-12.15",
+        "BG-2.3",
+        "BG-18.66",
+        "BG-2.47",
+        "BG-2.14"
+      ],
+      "hits": [],
+      "recall_at_k": 0.0,
+      "precision_at_k": 0.0,
+      "reciprocal_rank": 0.0,
+      "ndcg_at_k": 0.0
+    },
+    {
+      "id": "gp-010",
+      "query": "I keep chasing success but I never feel satisfied",
+      "expected_intent": "seek_guidance",
+      "predicted_intent": "other",
+      "category": "emotional",
+      "relevant": [
+        "BG-2.47",
+        "BG-4.22",
+        "BG-2.48",
+        "BG-16.21"
+      ],
+      "retrieved": [
+        "BG-2.47",
+        "BG-6.5",
+        "BG-3.35",
+        "BG-2.14",
+        "BG-2.3"
+      ],
+      "hits": [
+        "BG-2.47"
+      ],
+      "recall_at_k": 0.25,
+      "precision_at_k": 0.2,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_k": 0.477
+    },
+    {
+      "id": "gp-011",
+      "query": "How do I find peace when everything around me is chaotic?",
+      "expected_intent": "seek_guidance",
+      "predicted_intent": "seek_guidance",
+      "category": "emotional",
+      "relevant": [
+        "BG-2.64",
+        "BG-2.65",
+        "BG-6.15",
+        "BG-18.62"
+      ],
+      "retrieved": [
+        "BG-2.71",
+        "BG-2.62",
+        "AS-7.1.2",
+        "BG-2.47",
+        "BG-2.14"
+      ],
+      "hits": [],
+      "recall_at_k": 0.0,
+      "precision_at_k": 0.0,
+      "reciprocal_rank": 0.0,
+      "ndcg_at_k": 0.0
+    },
+    {
+      "id": "gp-012",
+      "query": "I feel alone even when I am surrounded by people",
+      "expected_intent": "emotional_support",
+      "predicted_intent": "emotional_support",
+      "category": "emotional",
+      "relevant": [
+        "BG-6.30",
+        "BG-9.29",
+        "BG-9.4"
+      ],
+      "retrieved": [
+        "BG-18.66",
+        "BG-6.5",
+        "BG-2.71",
+        "BG-2.14",
+        "BG-6.6"
+      ],
+      "hits": [],
+      "recall_at_k": 0.0,
+      "precision_at_k": 0.0,
+      "reciprocal_rank": 0.0,
+      "ndcg_at_k": 0.0
+    },
+    {
+      "id": "gp-013",
+      "query": "My manager takes credit for my work and plays politics",
+      "expected_intent": "professional_dilemma",
+      "predicted_intent": "professional_dilemma",
+      "category": "professional",
+      "relevant": [
+        "BG-2.47",
+        "AS-2.8.20",
+        "AS-2.9.1",
+        "AS-2.8.13"
+      ],
+      "retrieved": [
+        "AS-1.7.6",
+        "AS-1.19.34",
+        "AS-2.9.1",
+        "AS-1.9.1",
+        "BG-3.35"
+      ],
+      "hits": [
+        "AS-2.9.1"
+      ],
+      "recall_at_k": 0.25,
+      "precision_at_k": 0.2,
+      "reciprocal_rank": 0.3333,
+      "ndcg_at_k": 0.1404
+    },
+    {
+      "id": "gp-014",
+      "query": "Should I quit my stable job to join a startup?",
+      "expected_intent": "professional_dilemma",
+      "predicted_intent": "professional_dilemma",
+      "category": "professional",
+      "relevant": [
+        "BG-3.35",
+        "BG-18.47",
+        "BG-2.47"
+      ],
+      "retrieved": [
+        "AS-1.7.6",
+        "AS-1.9.1",
+        "BG-2.47",
+        "AS-2.9.1",
+        "AS-7.1.2"
+      ],
+      "hits": [
+        "BG-2.47"
+      ],
+      "recall_at_k": 0.3333,
+      "precision_at_k": 0.2,
+      "reciprocal_rank": 0.3333,
+      "ndcg_at_k": 0.1329
+    },
+    {
+      "id": "gp-015",
+      "query": "I am working sixteen hours a day and I am burnt out",
+      "expected_intent": "professional_dilemma",
+      "predicted_intent": "emotional_support",
+      "category": "professional",
+      "relevant": [
+        "AS-1.19.2",
+        "AS-1.19.3",
+        "AS-2.7.8"
+      ],
+      "retrieved": [
+        "BG-2.47",
+        "BG-6.5",
+        "BG-2.3",
+        "BG-2.71",
+        "BG-2.14"
+      ],
+      "hits": [],
+      "recall_at_k": 0.0,
+      "precision_at_k": 0.0,
+      "reciprocal_rank": 0.0,
+      "ndcg_at_k": 0.0
+    },
+    {
+      "id": "gp-016",
+      "query": "A colleague keeps provoking me in meetings and I want to lash out",
+      "expected_intent": "professional_dilemma",
+      "predicted_intent": "professional_dilemma",
+      "category": "professional",
+      "relevant": [
+        "BG-2.62",
+        "BG-16.21",
+        "BG-5.23",
+        "AS-1.6.1"
+      ],
+      "retrieved": [
+        "AS-1.7.6",
+        "AS-1.19.34",
+        "BG-2.62",
+        "AS-2.9.1",
+        "AS-7.1.2"
+      ],
+      "hits": [
+        "BG-2.62"
+      ],
+      "recall_at_k": 0.25,
+      "precision_at_k": 0.2,
+      "reciprocal_rank": 0.3333,
+      "ndcg_at_k": 0.2385
+    },
+    {
+      "id": "gp-017",
+      "query": "There is corruption in my department but reporting it could cost my job",
+      "expected_intent": "professional_dilemma",
+      "predicted_intent": "professional_dilemma",
+      "category": "professional",
+      "relevant": [
+        "AS-2.8.13",
+        "AS-2.8.20",
+        "AS-2.5.17",
+        "AS-2.9.1"
+      ],
+      "retrieved": [
+        "AS-1.7.6",
+        "AS-1.19.34",
+        "AS-2.9.1",
+        "AS-1.9.1",
+        "AS-7.1.2"
+      ],
+      "hits": [
+        "AS-2.9.1"
+      ],
+      "recall_at_k": 0.25,
+      "precision_at_k": 0.2,
+      "reciprocal_rank": 0.3333,
+      "ndcg_at_k": 0.1193
+    },
+    {
+      "id": "gp-018",
+      "query": "I did not get the promotion I deserved",
+      "expected_intent": "professional_dilemma",
+      "predicted_intent": "professional_dilemma",
+      "category": "professional",
+      "relevant": [
+        "BG-2.47",
+        "BG-2.38",
+        "BG-4.22",
+        "BG-3.35"
+      ],
+      "retrieved": [
+        "AS-1.7.6",
+        "AS-1.19.34",
+        "BG-2.47",
+        "BG-6.5",
+        "AS-2.9.1"
+      ],
+      "hits": [
+        "BG-2.47"
+      ],
+      "recall_at_k": 0.25,
+      "precision_at_k": 0.2,
+      "reciprocal_rank": 0.3333,
+      "ndcg_at_k": 0.2385
+    },
+    {
+      "id": "gp-019",
+      "query": "How do I decide whom to trust with responsibility in my team?",
+      "expected_intent": "professional_dilemma",
+      "predicted_intent": "seek_guidance",
+      "category": "professional",
+      "relevant": [
+        "AS-1.9.1",
+        "AS-2.9.1",
+        "AS-1.8.6",
+        "AS-1.16.1"
+      ],
+      "retrieved": [
+        "AS-1.9.1",
+        "AS-2.9.1",
+        "BG-2.62",
+        "BG-3.35",
+        "BG-2.47"
+      ],
+      "hits": [
+        "AS-1.9.1",
+        "AS-2.9.1"
+      ],
+      "recall_at_k": 0.5,
+      "precision_at_k": 0.4,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_k": 0.778
+    },
+    {
+      "id": "gp-020",
+      "query": "My boss micromanages every small thing I do",
+      "expected_intent": "professional_dilemma",
+      "predicted_intent": "professional_dilemma",
+      "category": "professional",
+      "relevant": [
+        "BG-3.35",
+        "AS-2.9.1",
+        "AS-1.16.1"
+      ],
+      "retrieved": [
+        "AS-1.7.6",
+        "AS-1.9.1",
+        "BG-2.3",
+        "AS-1.19.34",
+        "AS-2.9.1"
+      ],
+      "hits": [
+        "AS-2.9.1"
+      ],
+      "recall_at_k": 0.3333,
+      "precision_at_k": 0.2,
+      "reciprocal_rank": 0.2,
+      "ndcg_at_k": 0.1236
+    },
+    {
+      "id": "gp-021",
+      "query": "Should I take a job that pays more but bores me?",
+      "expected_intent": "professional_dilemma",
+      "predicted_intent": "seek_guidance",
+      "category": "professional",
+      "relevant": [
+        "BG-3.35",
+        "BG-18.47",
+        "BG-2.47"
+      ],
+      "retrieved": [
+        "BG-2.62",
+        "BG-18.66",
+        "BG-2.47",
+        "BG-3.35",
+        "BG-2.3"
+      ],
+      "hits": [
+        "BG-2.47",
+        "BG-3.35"
+      ],
+      "recall_at_k": 0.6667,
+      "precision_at_k": 0.4,
+      "reciprocal_rank": 0.3333,
+      "ndcg_at_k": 0.3619
+    },
+    {
+      "id": "gp-022",
+      "query": "I made a costly mistake at work and I am terrified of the consequences",
+      "expected_intent": "professional_dilemma",
+      "predicted_intent": "other",
+      "category": "professional",
+      "relevant": [
+        "BG-2.38",
+        "BG-18.66",
+        "BG-6.5",
+        "BG-2.47"
+      ],
+      "retrieved": [
+        "BG-2.47",
+        "BG-12.15",
+        "BG-2.3",
+        "BG-3.35",
+        "BG-18.66"
+      ],
+      "hits": [
+        "BG-2.47",
+        "BG-18.66"
+      ],
+      "recall_at_k": 0.5,
+      "precision_at_k": 0.4,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_k": 0.4231
+    },
+    {
+      "id": "gp-023",
+      "query": "My team keeps missing deadlines and I do not know how to fix it",
+      "expected_intent": "professional_dilemma",
+      "predicted_intent": "professional_dilemma",
+      "category": "professional",
+      "relevant": [
+        "AS-3.14.1",
+        "AS-3.14.3",
+        "AS-1.19.2",
+        "AS-2.9.1"
+      ],
+      "retrieved": [
+        "AS-1.9.1",
+        "AS-1.7.6",
+        "AS-1.19.34",
+        "AS-2.9.1",
+        "AS-7.1.2"
+      ],
+      "hits": [
+        "AS-2.9.1"
+      ],
+      "recall_at_k": 0.25,
+      "precision_at_k": 0.2,
+      "reciprocal_rank": 0.25,
+      "ndcg_at_k": 0.1027
+    },
+    {
+      "id": "gp-024",
+      "query": "I have to dismiss someone from my team for the first time",
+      "expected_intent": "professional_dilemma",
+      "predicted_intent": "professional_dilemma",
+      "category": "professional",
+      "relevant": [
+        "AS-2.8.20",
+        "AS-3.14.1",
+        "AS-2.9.1",
+        "AS-1.9.1"
+      ],
+      "retrieved": [
+        "AS-1.9.1",
+        "AS-1.19.34",
+        "BG-2.3",
+        "AS-1.7.6",
+        "BG-2.14"
+      ],
+      "hits": [
+        "AS-1.9.1"
+      ],
+      "recall_at_k": 0.25,
+      "precision_at_k": 0.2,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_k": 0.2808
+    },
+    {
+      "id": "gp-025",
+      "query": "How should a leader choose ministers and advisers?",
+      "expected_intent": "professional_dilemma",
+      "predicted_intent": "other",
+      "category": "statecraft",
+      "relevant": [
+        "AS-1.9.1",
+        "AS-1.8.6",
+        "AS-1.8.8",
+        "AS-1.16.1"
+      ],
+      "retrieved": [
+        "AS-1.9.1",
+        "AS-2.9.1",
+        "AS-7.1.2",
+        "AS-1.19.34",
+        "AS-1.7.6"
+      ],
+      "hits": [
+        "AS-1.9.1"
+      ],
+      "recall_at_k": 0.25,
+      "precision_at_k": 0.2,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_k": 0.477
+    },
+    {
+      "id": "gp-026",
+      "query": "How do I audit the people who handle money in my organisation?",
+      "expected_intent": "professional_dilemma",
+      "predicted_intent": "seek_guidance",
+      "category": "statecraft",
+      "relevant": [
+        "AS-2.8.13",
+        "AS-2.8.20",
+        "AS-2.5.17",
+        "AS-2.9.10"
+      ],
+      "retrieved": [
+        "AS-2.9.1",
+        "BG-3.35",
+        "AS-1.9.1",
+        "BG-2.47",
+        "BG-2.62"
+      ],
+      "hits": [],
+      "recall_at_k": 0.0,
+      "precision_at_k": 0.0,
+      "reciprocal_rank": 0.0,
+      "ndcg_at_k": 0.0
+    },
+    {
+      "id": "gp-027",
+      "query": "When should I make peace with a rival instead of fighting?",
+      "expected_intent": "professional_dilemma",
+      "predicted_intent": "seek_guidance",
+      "category": "statecraft",
+      "relevant": [
+        "AS-7.1.5",
+        "AS-7.3.16",
+        "AS-7.17.2",
+        "AS-6.2.3"
+      ],
+      "retrieved": [
+        "BG-2.71",
+        "BG-2.62",
+        "AS-7.1.2",
+        "BG-2.47",
+        "BG-3.35"
+      ],
+      "hits": [],
+      "recall_at_k": 0.0,
+      "precision_at_k": 0.0,
+      "reciprocal_rank": 0.0,
+      "ndcg_at_k": 0.0
+    },
+    {
+      "id": "gp-028",
+      "query": "How should a ruler divide and organise his working day?",
+      "expected_intent": "professional_dilemma",
+      "predicted_intent": "other",
+      "category": "statecraft",
+      "relevant": [
+        "AS-1.19.2",
+        "AS-1.19.3",
+        "AS-1.19.5"
+      ],
+      "retrieved": [
+        "AS-1.19.34",
+        "AS-1.9.1",
+        "AS-2.9.1",
+        "BG-2.47",
+        "BG-3.35"
+      ],
+      "hits": [],
+      "recall_at_k": 0.0,
+      "precision_at_k": 0.0,
+      "reciprocal_rank": 0.0,
+      "ndcg_at_k": 0.0
+    },
+    {
+      "id": "gp-029",
+      "query": "How do I detect and handle a conspiracy inside my own camp?",
+      "expected_intent": "professional_dilemma",
+      "predicted_intent": "seek_guidance",
+      "category": "statecraft",
+      "relevant": [
+        "AS-1.16.10",
+        "AS-11.1.4",
+        "AS-1.14.2"
+      ],
+      "retrieved": [
+        "BG-2.62",
+        "BG-2.47",
+        "AS-2.9.1",
+        "BG-2.3",
+        "BG-3.35"
+      ],
+      "hits": [],
+      "recall_at_k": 0.0,
+      "precision_at_k": 0.0,
+      "reciprocal_rank": 0.0,
+      "ndcg_at_k": 0.0
+    },
+    {
+      "id": "gp-030",
+      "query": "What makes a treaty or an alliance worth entering?",
+      "expected_intent": "professional_dilemma",
+      "predicted_intent": "other",
+      "category": "statecraft",
+      "relevant": [
+        "AS-7.17.2",
+        "AS-7.1.5",
+        "AS-7.3.16"
+      ],
+      "retrieved": [
+        "AS-1.7.6",
+        "BG-2.47",
+        "BG-3.35",
+        "AS-7.1.2",
+        "BG-12.15"
+      ],
+      "hits": [],
+      "recall_at_k": 0.0,
+      "precision_at_k": 0.0,
+      "reciprocal_rank": 0.0,
+      "ndcg_at_k": 0.0
+    },
+    {
+      "id": "gp-031",
+      "query": "How should punishment be applied so it is neither too harsh nor too lenient?",
+      "expected_intent": "professional_dilemma",
+      "predicted_intent": "other",
+      "category": "statecraft",
+      "relevant": [
+        "AS-7.5.16",
+        "AS-4.11.16",
+        "AS-3.18.1"
+      ],
+      "retrieved": [
+        "BG-2.11",
+        "AS-7.1.2",
+        "AS-1.9.1",
+        "BG-2.47",
+        "AS-1.19.34"
+      ],
+      "hits": [],
+      "recall_at_k": 0.0,
+      "precision_at_k": 0.0,
+      "reciprocal_rank": 0.0,
+      "ndcg_at_k": 0.0
+    },
+    {
+      "id": "gp-032",
+      "query": "How do I gather reliable information about what is really happening?",
+      "expected_intent": "professional_dilemma",
+      "predicted_intent": "seek_guidance",
+      "category": "statecraft",
+      "relevant": [
+        "AS-1.16.10",
+        "AS-1.10.3",
+        "AS-11.1.4",
+        "AS-1.10.5"
+      ],
+      "retrieved": [
+        "BG-2.62",
+        "BG-2.47",
+        "BG-12.15",
+        "BG-2.11",
+        "BG-3.35"
+      ],
+      "hits": [],
+      "recall_at_k": 0.0,
+      "precision_at_k": 0.0,
+      "reciprocal_rank": 0.0,
+      "ndcg_at_k": 0.0
+    },
+    {
+      "id": "gp-033",
+      "query": "My parents want me to marry someone I do not love",
+      "expected_intent": "seek_guidance",
+      "predicted_intent": "seek_guidance",
+      "category": "relationship",
+      "relevant": [
+        "BG-3.35",
+        "BG-18.47",
+        "AS-1.3.8"
+      ],
+      "retrieved": [
+        "BG-2.62",
+        "BG-2.47",
+        "BG-2.71",
+        "BG-18.66",
+        "BG-2.14"
+      ],
+      "hits": [],
+      "recall_at_k": 0.0,
+      "precision_at_k": 0.0,
+      "reciprocal_rank": 0.0,
+      "ndcg_at_k": 0.0
+    },
+    {
+      "id": "gp-034",
+      "query": "I had a bitter fight with my brother over family property",
+      "expected_intent": "seek_guidance",
+      "predicted_intent": "seek_guidance",
+      "category": "relationship",
+      "relevant": [
+        "AS-3.5.4",
+        "AS-3.1.5",
+        "BG-2.62",
+        "BG-16.21"
+      ],
+      "retrieved": [
+        "BG-2.62",
+        "BG-6.6",
+        "BG-6.5",
+        "BG-2.71",
+        "BG-18.66"
+      ],
+      "hits": [
+        "BG-2.62"
+      ],
+      "recall_at_k": 0.25,
+      "precision_at_k": 0.2,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_k": 0.2808
+    },
+    {
+      "id": "gp-035",
+      "query": "My wife and I keep arguing about money",
+      "expected_intent": "seek_guidance",
+      "predicted_intent": "other",
+      "category": "relationship",
+      "relevant": [
+        "AS-3.2.4",
+        "BG-2.62",
+        "BG-16.21"
+      ],
+      "retrieved": [
+        "BG-2.62",
+        "BG-2.14",
+        "BG-6.5",
+        "BG-12.15",
+        "BG-6.6"
+      ],
+      "hits": [
+        "BG-2.62"
+      ],
+      "recall_at_k": 0.3333,
+      "precision_at_k": 0.2,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_k": 0.3194
+    },
+    {
+      "id": "gp-036",
+      "query": "How do I care for my ageing parents without resenting them?",
+      "expected_intent": "seek_guidance",
+      "predicted_intent": "seek_guidance",
+      "category": "relationship",
+      "relevant": [
+        "BG-2.13",
+        "BG-3.35",
+        "AS-1.5.6"
+      ],
+      "retrieved": [
+        "BG-2.62",
+        "BG-2.71",
+        "BG-2.14",
+        "BG-2.11",
+        "BG-12.15"
+      ],
+      "hits": [],
+      "recall_at_k": 0.0,
+      "precision_at_k": 0.0,
+      "reciprocal_rank": 0.0,
+      "ndcg_at_k": 0.0
+    },
+    {
+      "id": "gp-037",
+      "query": "mujhe lagta hai sab kuch meri galti hai, I can't focus on anything",
+      "expected_intent": "emotional_support",
+      "predicted_intent": "other",
+      "category": "hinglish",
+      "relevant": [
+        "BG-6.5",
+        "BG-6.6",
+        "BG-18.66"
+      ],
+      "retrieved": [
+        "BG-2.47",
+        "BG-2.14",
+        "BG-2.62",
+        "BG-2.3",
+        "BG-6.5"
+      ],
+      "hits": [
+        "BG-6.5"
+      ],
+      "recall_at_k": 0.3333,
+      "precision_at_k": 0.2,
+      "reciprocal_rank": 0.2,
+      "ndcg_at_k": 0.2057
+    },
+    {
+      "id": "gp-038",
+      "query": "office mein sab log politics karte hain, main kya karun",
+      "expected_intent": "professional_dilemma",
+      "predicted_intent": "professional_dilemma",
+      "category": "hinglish",
+      "relevant": [
+        "BG-2.47",
+        "AS-2.8.20",
+        "AS-2.9.1"
+      ],
+      "retrieved": [
+        "AS-1.7.6",
+        "AS-1.19.34",
+        "AS-2.9.1",
+        "AS-1.9.1",
+        "AS-7.1.2"
+      ],
+      "hits": [
+        "AS-2.9.1"
+      ],
+      "recall_at_k": 0.3333,
+      "precision_at_k": 0.2,
+      "reciprocal_rank": 0.3333,
+      "ndcg_at_k": 0.1597
+    },
+    {
+      "id": "gp-039",
+      "query": "papa chahte hain main unka business sambhalun but mera mann nahi hai",
+      "expected_intent": "seek_guidance",
+      "predicted_intent": "professional_dilemma",
+      "category": "hinglish",
+      "relevant": [
+        "BG-3.35",
+        "BG-18.47",
+        "BG-2.47"
+      ],
+      "retrieved": [
+        "AS-1.7.6",
+        "BG-2.71",
+        "BG-2.47",
+        "BG-2.3",
+        "AS-1.19.34"
+      ],
+      "hits": [
+        "BG-2.47"
+      ],
+      "recall_at_k": 0.3333,
+      "precision_at_k": 0.2,
+      "reciprocal_rank": 0.3333,
+      "ndcg_at_k": 0.1329
+    },
+    {
+      "id": "gp-040",
+      "query": "bahut tension hai exam ka, neend nahi aati raat ko",
+      "expected_intent": "emotional_support",
+      "predicted_intent": "seek_guidance",
+      "category": "hinglish",
+      "relevant": [
+        "BG-2.47",
+        "BG-6.35",
+        "BG-2.38"
+      ],
+      "retrieved": [
+        "BG-2.62",
+        "BG-2.47",
+        "BG-2.71",
+        "BG-2.3",
+        "BG-12.15"
+      ],
+      "hits": [
+        "BG-2.47"
+      ],
+      "recall_at_k": 0.3333,
+      "precision_at_k": 0.2,
+      "reciprocal_rank": 0.5,
+      "ndcg_at_k": 0.3354
+    }
+  ]
+}

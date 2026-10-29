@@ -33,7 +33,10 @@ import threading
 import time
 from dataclasses import dataclass, field
 
+from fastapi import HTTPException, Request, status
+
 from app.config import Settings
+from app.telemetry import Telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -220,4 +223,54 @@ def build_rate_limiter(settings: Settings) -> RateLimiter:
         ip_burst=settings.rate_limit_ip_burst,
         global_per_minute=settings.rate_limit_global_per_minute,
         global_burst=settings.rate_limit_global_burst,
+    )
+
+
+def client_ip(request: Request) -> str | None:
+    """The address to rate-limit this request on.
+
+    Delegates the proxy reasoning to
+    :func:`app.api.ratelimit.client_ip_from`, which reads ``X-Forwarded-For``
+    only as far as the configured number of trusted proxies allows. Used solely
+    as a rate-limit key; nothing security-relevant is decided from it.
+    """
+    settings = getattr(request.app.state, "settings", None)
+    hops = settings.rate_limit_trusted_proxy_hops if settings is not None else 0
+    return client_ip_from(
+        request.headers.get("x-forwarded-for"),
+        request.client.host if request.client else None,
+        hops,
+    )
+
+
+def enforce_rate_limit(request: Request, session_id: str | None) -> None:
+    """Raise 429 with ``Retry-After`` when a bucket is empty."""
+    settings = getattr(request.app.state, "settings", None)
+    limiter: RateLimiter | None = getattr(request.app.state, "rate_limiter", None)
+    if limiter is None or (settings is not None and not settings.rate_limit_enabled):
+        return
+
+    decision = limiter.check(session_id, client_ip(request))
+    if decision.allowed:
+        return
+
+    telemetry: Telemetry | None = getattr(request.app.state, "telemetry", None)
+    if telemetry is not None:
+        telemetry.record_rate_limited(decision.scope)
+
+    wait = decision.retry_after_seconds
+    logger.info(
+        "rate limited: scope=%s retry_after=%ss session=%s",
+        decision.scope,
+        wait,
+        session_id or "-",
+    )
+    raise HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail={
+            "message": RATE_LIMITED_MESSAGE,
+            "retry_after_seconds": wait,
+            "scope": decision.scope,
+        },
+        headers={"Retry-After": str(wait)},
     )

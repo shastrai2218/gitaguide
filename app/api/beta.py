@@ -50,7 +50,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
 from app.api.concurrency import PipelineBusyError, PipelineGate
-from app.api.ratelimit import RATE_LIMITED_MESSAGE, RateLimiter, client_ip_from
+from app.api.ratelimit import enforce_rate_limit
 from app.api.routes import OrchestratorDep
 from app.auth import CurrentUserDep, RequireUserDep
 from app.config import CURRENT_CONSENT_VERSION
@@ -309,57 +309,6 @@ async def _require_consent(
     )
 
 
-# Rate limiting
-def _client_ip(request: Request) -> str | None:
-    """The address to rate-limit this request on.
-
-    Delegates the proxy reasoning to
-    :func:`app.api.ratelimit.client_ip_from`, which reads ``X-Forwarded-For``
-    only as far as the configured number of trusted proxies allows. Used solely
-    as a rate-limit key; nothing security-relevant is decided from it.
-    """
-    settings = getattr(request.app.state, "settings", None)
-    hops = settings.rate_limit_trusted_proxy_hops if settings is not None else 0
-    return client_ip_from(
-        request.headers.get("x-forwarded-for"),
-        request.client.host if request.client else None,
-        hops,
-    )
-
-
-def _enforce_rate_limit(request: Request, session_id: str | None) -> None:
-    """Raise 429 with ``Retry-After`` when a bucket is empty."""
-    settings = getattr(request.app.state, "settings", None)
-    limiter: RateLimiter | None = getattr(request.app.state, "rate_limiter", None)
-    if limiter is None or (settings is not None and not settings.rate_limit_enabled):
-        return
-
-    decision = limiter.check(session_id, _client_ip(request))
-    if decision.allowed:
-        return
-
-    telemetry: Telemetry | None = getattr(request.app.state, "telemetry", None)
-    if telemetry is not None:
-        telemetry.record_rate_limited(decision.scope)
-
-    wait = decision.retry_after_seconds
-    logger.info(
-        "rate limited: scope=%s retry_after=%ss session=%s",
-        decision.scope,
-        wait,
-        session_id or "-",
-    )
-    raise HTTPException(
-        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-        detail={
-            "message": RATE_LIMITED_MESSAGE,
-            "retry_after_seconds": wait,
-            "scope": decision.scope,
-        },
-        headers={"Retry-After": str(wait)},
-    )
-
-
 # Pipeline admission
 async def _run_turn(
     orchestrator: GuidanceOrchestrator,
@@ -400,7 +349,7 @@ async def beta_chat(
     which is what :attr:`GuidanceResult.crisis` records: that path returns
     before retrieval and generation run.
     """
-    _enforce_rate_limit(request, payload.session_id)
+    enforce_rate_limit(request, payload.session_id)
     await _require_consent(request, orchestrator, payload.session_id)
     if payload.session_id:
         await _ensure_session_access(orchestrator, payload.session_id, current_user_id)

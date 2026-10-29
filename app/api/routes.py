@@ -13,6 +13,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
+from app.api.ratelimit import enforce_rate_limit
 from app.api.schemas import (
     ChatRequest,
     ChatResponse,
@@ -46,6 +47,7 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 @router.post("/chat", response_model=ChatResponse, tags=["chat"])
 async def chat(
+    request: Request,
     payload: ChatRequest,
     orchestrator: OrchestratorDep,
 ) -> ChatResponse:
@@ -54,6 +56,7 @@ async def chat(
     A crisis turn returns HTTP 200 with ``crisis=true`` and no retrieval trace:
     the gate short-circuits before retrieval and generation, by design.
     """
+    enforce_rate_limit(request, payload.session_id)
     turn = UserTurn(
         message=payload.message,
         session_id=payload.session_id,

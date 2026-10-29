@@ -1,0 +1,802 @@
+[
+  {
+    "id": "gp-001",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "emotional_support",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-002",
+    "expected_intent": "emotional_support",
+    "predicted_intent": "emotional_support",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-003",
+    "expected_intent": "emotional_support",
+    "predicted_intent": "emotional_support",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-004",
+    "expected_intent": "emotional_support",
+    "predicted_intent": "crisis",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-005",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "crisis",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-006",
+    "expected_intent": "emotional_support",
+    "predicted_intent": "emotional_support",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-007",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "seek_guidance",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-008",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "emotional_support",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-009",
+    "expected_intent": "emotional_support",
+    "predicted_intent": "crisis",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-010",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "seek_guidance",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-011",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "seek_guidance",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-012",
+    "expected_intent": "emotional_support",
+    "predicted_intent": "emotional_support",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-013",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-014",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-015",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-016",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-017",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-018",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-019",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-020",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-021",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-022",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-023",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-024",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-025",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-026",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-027",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "seek_guidance",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-028",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-029",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-030",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "seek_guidance",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-031",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "seek_guidance",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-032",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "seek_guidance",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-033",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "seek_guidance",
+    "category": null,
+    "query": null,
+    "blocked": null
+  },
+  {
+    "id": "gp-034",
+    "category": "relationship",
+    "query": "I had a bitter fight with my brother over family property",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "professional_dilemma",
+    "blocked": false
+  },
+  {
+    "id": "gp-035",
+    "category": "relationship",
+    "query": "My wife and I keep arguing about money",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "professional_dilemma",
+    "blocked": false
+  },
+  {
+    "id": "gp-036",
+    "category": "relationship",
+    "query": "How do I care for my ageing parents without resenting them?",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gp-037",
+    "category": "hinglish",
+    "query": "mujhe lagta hai sab kuch meri galti hai, I can't focus on anything",
+    "expected_intent": "emotional_support",
+    "predicted_intent": "emotional_support",
+    "blocked": false
+  },
+  {
+    "id": "gp-038",
+    "category": "hinglish",
+    "query": "office mein sab log politics karte hain, main kya karun",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "blocked": false
+  },
+  {
+    "id": "gp-039",
+    "category": "hinglish",
+    "query": "papa chahte hain main unka business sambhalun but mera mann nahi hai",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "professional_dilemma",
+    "blocked": false
+  },
+  {
+    "id": "gp-040",
+    "category": "hinglish",
+    "query": "bahut tension hai exam ka, neend nahi aati raat ko",
+    "expected_intent": "emotional_support",
+    "predicted_intent": "emotional_support",
+    "blocked": false
+  },
+  {
+    "id": "gq-041",
+    "category": "emotional",
+    "query": "I compare myself with everyone on social media and feel worthless",
+    "expected_intent": "emotional_support",
+    "predicted_intent": "emotional_support",
+    "blocked": false
+  },
+  {
+    "id": "gq-042",
+    "category": "emotional",
+    "query": "I get angry very quickly and later regret what I said",
+    "expected_intent": "emotional_support",
+    "predicted_intent": "other",
+    "blocked": false
+  },
+  {
+    "id": "gq-043",
+    "category": "emotional",
+    "query": "I cannot let go of a mistake I made years ago",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "emotional_support",
+    "blocked": false
+  },
+  {
+    "id": "gq-044",
+    "category": "emotional",
+    "query": "My mother is seriously ill and I am scared of losing her",
+    "expected_intent": "emotional_support",
+    "predicted_intent": "emotional_support",
+    "blocked": false
+  },
+  {
+    "id": "gq-045",
+    "category": "emotional",
+    "query": "I have everything I wanted and still feel empty inside",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "emotional_support",
+    "blocked": false
+  },
+  {
+    "id": "gq-046",
+    "category": "emotional",
+    "query": "How do I stay calm when people criticise me?",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gq-047",
+    "category": "emotional",
+    "query": "I feel guilty for being happy when others around me are suffering",
+    "expected_intent": "emotional_support",
+    "predicted_intent": "emotional_support",
+    "blocked": false
+  },
+  {
+    "id": "gq-048",
+    "category": "emotional",
+    "query": "I procrastinate on everything important and hate myself for it",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "emotional_support",
+    "blocked": false
+  },
+  {
+    "id": "gq-049",
+    "category": "emotional",
+    "query": "How can I stop craving things that are bad for me?",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gq-050",
+    "category": "emotional",
+    "query": "I feel nobody understands what I am going through",
+    "expected_intent": "emotional_support",
+    "predicted_intent": "emotional_support",
+    "blocked": false
+  },
+  {
+    "id": "gq-051",
+    "category": "professional",
+    "query": "My startup is failing and I have to tell my investors",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "blocked": false
+  },
+  {
+    "id": "gq-052",
+    "category": "professional",
+    "query": "I was asked to hide a product defect from customers",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "blocked": false
+  },
+  {
+    "id": "gq-053",
+    "category": "professional",
+    "query": "How should I negotiate with a much more powerful client?",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "blocked": false
+  },
+  {
+    "id": "gq-054",
+    "category": "professional",
+    "query": "Two senior members of my team are fighting and dividing the team",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "blocked": false
+  },
+  {
+    "id": "gq-055",
+    "category": "professional",
+    "query": "I have been offered a bribe to approve a contract",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "blocked": false
+  },
+  {
+    "id": "gq-056",
+    "category": "professional",
+    "query": "I am afraid to speak up in meetings even when I know the answer",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "blocked": false
+  },
+  {
+    "id": "gq-057",
+    "category": "professional",
+    "query": "How do I reward good work fairly in my team?",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "blocked": false
+  },
+  {
+    "id": "gq-058",
+    "category": "professional",
+    "query": "My work feels meaningless and I only do it for the money",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "blocked": false
+  },
+  {
+    "id": "gq-059",
+    "category": "professional",
+    "query": "Should I report my friend at work who is stealing from the company?",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "blocked": false
+  },
+  {
+    "id": "gq-060",
+    "category": "professional",
+    "query": "How do I plan my finances when my income is uncertain?",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "blocked": false
+  },
+  {
+    "id": "gq-061",
+    "category": "statecraft",
+    "query": "What qualities should a king or leader cultivate in himself?",
+    "expected_intent": "scripture_question",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gq-062",
+    "category": "statecraft",
+    "query": "How should a ruler collect taxes without harming the people?",
+    "expected_intent": "scripture_question",
+    "predicted_intent": "professional_dilemma",
+    "blocked": false
+  },
+  {
+    "id": "gq-063",
+    "category": "statecraft",
+    "query": "How should a state protect itself against famine and disaster?",
+    "expected_intent": "scripture_question",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gq-064",
+    "category": "statecraft",
+    "query": "What are the duties of a king towards his subjects?",
+    "expected_intent": "scripture_question",
+    "predicted_intent": "scripture_question",
+    "blocked": false
+  },
+  {
+    "id": "gq-065",
+    "category": "statecraft",
+    "query": "How should a leader test the loyalty of his ministers?",
+    "expected_intent": "scripture_question",
+    "predicted_intent": "professional_dilemma",
+    "blocked": false
+  },
+  {
+    "id": "gq-066",
+    "category": "statecraft",
+    "query": "When is it wise to form an alliance with a neighbouring state?",
+    "expected_intent": "scripture_question",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gq-067",
+    "category": "statecraft",
+    "query": "How should judges settle disputes fairly?",
+    "expected_intent": "scripture_question",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gq-068",
+    "category": "statecraft",
+    "query": "How should the treasury be managed and guarded?",
+    "expected_intent": "scripture_question",
+    "predicted_intent": "professional_dilemma",
+    "blocked": false
+  },
+  {
+    "id": "gq-069",
+    "category": "statecraft",
+    "query": "What causes rebellion among the people and how can it be prevented?",
+    "expected_intent": "scripture_question",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gq-070",
+    "category": "statecraft",
+    "query": "How should a king train and educate a prince?",
+    "expected_intent": "scripture_question",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gq-071",
+    "category": "statecraft",
+    "query": "What is the role of spies in running a kingdom?",
+    "expected_intent": "scripture_question",
+    "predicted_intent": "other",
+    "blocked": false
+  },
+  {
+    "id": "gq-072",
+    "category": "statecraft",
+    "query": "How should trade and merchants be regulated?",
+    "expected_intent": "scripture_question",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gq-073",
+    "category": "statecraft",
+    "query": "How should a weak kingdom behave towards a stronger one?",
+    "expected_intent": "scripture_question",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gq-074",
+    "category": "statecraft",
+    "query": "What punishment is appropriate for officials who take bribes?",
+    "expected_intent": "scripture_question",
+    "predicted_intent": "professional_dilemma",
+    "blocked": false
+  },
+  {
+    "id": "gq-075",
+    "category": "statecraft",
+    "query": "How should agriculture and irrigation be supported by the state?",
+    "expected_intent": "scripture_question",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gq-076",
+    "category": "statecraft",
+    "query": "What should a leader do when advisers give conflicting counsel?",
+    "expected_intent": "scripture_question",
+    "predicted_intent": "professional_dilemma",
+    "blocked": false
+  },
+  {
+    "id": "gq-077",
+    "category": "relationship",
+    "query": "My partner and I keep fighting about small things",
+    "expected_intent": "emotional_support",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gq-078",
+    "category": "relationship",
+    "query": "How do I set boundaries with parents who control my life decisions?",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gq-079",
+    "category": "relationship",
+    "query": "My best friend stopped talking to me and I do not know why",
+    "expected_intent": "emotional_support",
+    "predicted_intent": "emotional_support",
+    "blocked": false
+  },
+  {
+    "id": "gq-080",
+    "category": "relationship",
+    "query": "I went through a breakup and cannot stop thinking about my ex",
+    "expected_intent": "emotional_support",
+    "predicted_intent": "emotional_support",
+    "blocked": false
+  },
+  {
+    "id": "gq-081",
+    "category": "relationship",
+    "query": "My siblings and I are fighting over our inheritance",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "professional_dilemma",
+    "blocked": false
+  },
+  {
+    "id": "gq-082",
+    "category": "relationship",
+    "query": "How can I be a better parent to my teenage child?",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gq-083",
+    "category": "relationship",
+    "query": "Should I stay in a friendship that only takes from me?",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gq-084",
+    "category": "relationship",
+    "query": "My in-laws do not accept me",
+    "expected_intent": "emotional_support",
+    "predicted_intent": "emotional_support",
+    "blocked": false
+  },
+  {
+    "id": "gq-085",
+    "category": "relationship",
+    "query": "How do I rebuild trust after I lied to someone I love?",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gq-086",
+    "category": "relationship",
+    "query": "I am attached to someone who does not feel the same way",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "emotional_support",
+    "blocked": false
+  },
+  {
+    "id": "gq-087",
+    "category": "relationship",
+    "query": "How do I care for my ageing parents without losing myself?",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gq-088",
+    "category": "relationship",
+    "query": "My friend is making bad choices; should I intervene?",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gq-089",
+    "category": "hinglish",
+    "query": "Mujhe bahut akela mehsoos hota hai, kya karun?",
+    "expected_intent": "emotional_support",
+    "predicted_intent": "emotional_support",
+    "blocked": false
+  },
+  {
+    "id": "gq-090",
+    "category": "hinglish",
+    "query": "Exam mein fail ho gaya, ab kya karu samajh nahi aa raha",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gq-091",
+    "category": "hinglish",
+    "query": "Boss har baat pe daant ta hai, job chhod du kya?",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "blocked": false
+  },
+  {
+    "id": "gq-092",
+    "category": "hinglish",
+    "query": "Gussa bahut aata hai, control kaise karu?",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gq-093",
+    "category": "hinglish",
+    "query": "Papa ki death ke baad sab khali lagta hai",
+    "expected_intent": "emotional_support",
+    "predicted_intent": "emotional_support",
+    "blocked": false
+  },
+  {
+    "id": "gq-094",
+    "category": "hinglish",
+    "query": "Result ki chinta chhod ke kaam kaise karu?",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "other",
+    "blocked": false
+  },
+  {
+    "id": "gq-095",
+    "category": "hinglish",
+    "query": "Dost ne dhokha diya, maaf karu ya nahi?",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gq-096",
+    "category": "hinglish",
+    "query": "Team ko kaise lead karu jab koi sunta hi nahi?",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "blocked": false
+  },
+  {
+    "id": "gq-097",
+    "category": "hinglish",
+    "query": "Mann shant nahi rehta, dhyan kaise lagaun?",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gq-098",
+    "category": "hinglish",
+    "query": "Shaadi ke liye ghar wale pressure daal rahe hain",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  },
+  {
+    "id": "gq-099",
+    "category": "hinglish",
+    "query": "Business partner pe bharosa karu ya nahi?",
+    "expected_intent": "professional_dilemma",
+    "predicted_intent": "professional_dilemma",
+    "blocked": false
+  },
+  {
+    "id": "gq-100",
+    "category": "hinglish",
+    "query": "Apna kartavya kaise pehchanu?",
+    "expected_intent": "seek_guidance",
+    "predicted_intent": "seek_guidance",
+    "blocked": false
+  }
+]

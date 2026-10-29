@@ -1,0 +1,602 @@
+[
+  {
+    "id": "gp-001",
+    "category": "emotional",
+    "expected_intent": "seek_guidance",
+    "query": "I feel like a failure after my exam results"
+  },
+  {
+    "id": "gp-002",
+    "category": "emotional",
+    "expected_intent": "emotional_support",
+    "query": "My father passed away last month and I cannot stop crying"
+  },
+  {
+    "id": "gp-003",
+    "category": "emotional",
+    "expected_intent": "emotional_support",
+    "query": "I am anxious all the time about my future and cannot sleep"
+  },
+  {
+    "id": "gp-004",
+    "category": "emotional",
+    "expected_intent": "emotional_support",
+    "query": "I hate myself for the mistakes I have made"
+  },
+  {
+    "id": "gp-005",
+    "category": "emotional",
+    "expected_intent": "seek_guidance",
+    "query": "Nothing I do seems to matter. What is the point of any of this?"
+  },
+  {
+    "id": "gp-006",
+    "category": "emotional",
+    "expected_intent": "emotional_support",
+    "query": "I am jealous of my friends who are doing better than me"
+  },
+  {
+    "id": "gp-007",
+    "category": "emotional",
+    "expected_intent": "seek_guidance",
+    "query": "How do I stop worrying about things I cannot control?"
+  },
+  {
+    "id": "gp-008",
+    "category": "emotional",
+    "expected_intent": "seek_guidance",
+    "query": "I feel restless and my mind never settles"
+  },
+  {
+    "id": "gp-009",
+    "category": "emotional",
+    "expected_intent": "emotional_support",
+    "query": "I am afraid of dying"
+  },
+  {
+    "id": "gp-010",
+    "category": "emotional",
+    "expected_intent": "seek_guidance",
+    "query": "I keep chasing success but I never feel satisfied"
+  },
+  {
+    "id": "gp-011",
+    "category": "emotional",
+    "expected_intent": "seek_guidance",
+    "query": "How do I find peace when everything around me is chaotic?"
+  },
+  {
+    "id": "gp-012",
+    "category": "emotional",
+    "expected_intent": "emotional_support",
+    "query": "I feel alone even when I am surrounded by people"
+  },
+  {
+    "id": "gp-013",
+    "category": "professional",
+    "expected_intent": "professional_dilemma",
+    "query": "My manager takes credit for my work and plays politics"
+  },
+  {
+    "id": "gp-014",
+    "category": "professional",
+    "expected_intent": "professional_dilemma",
+    "query": "Should I quit my stable job to join a startup?"
+  },
+  {
+    "id": "gp-015",
+    "category": "professional",
+    "expected_intent": "professional_dilemma",
+    "query": "I am working sixteen hours a day and I am burnt out"
+  },
+  {
+    "id": "gp-016",
+    "category": "professional",
+    "expected_intent": "professional_dilemma",
+    "query": "A colleague keeps provoking me in meetings and I want to lash out"
+  },
+  {
+    "id": "gp-017",
+    "category": "professional",
+    "expected_intent": "professional_dilemma",
+    "query": "There is corruption in my department but reporting it could cost my job"
+  },
+  {
+    "id": "gp-018",
+    "category": "professional",
+    "expected_intent": "professional_dilemma",
+    "query": "I did not get the promotion I deserved"
+  },
+  {
+    "id": "gp-019",
+    "category": "professional",
+    "expected_intent": "professional_dilemma",
+    "query": "How do I decide whom to trust with responsibility in my team?"
+  },
+  {
+    "id": "gp-020",
+    "category": "professional",
+    "expected_intent": "professional_dilemma",
+    "query": "My boss micromanages every small thing I do"
+  },
+  {
+    "id": "gp-021",
+    "category": "professional",
+    "expected_intent": "professional_dilemma",
+    "query": "Should I take a job that pays more but bores me?"
+  },
+  {
+    "id": "gp-022",
+    "category": "professional",
+    "expected_intent": "professional_dilemma",
+    "query": "I made a costly mistake at work and I am terrified of the consequences"
+  },
+  {
+    "id": "gp-023",
+    "category": "professional",
+    "expected_intent": "professional_dilemma",
+    "query": "My team keeps missing deadlines and I do not know how to fix it"
+  },
+  {
+    "id": "gp-024",
+    "category": "professional",
+    "expected_intent": "professional_dilemma",
+    "query": "I have to dismiss someone from my team for the first time"
+  },
+  {
+    "id": "gp-025",
+    "category": "statecraft",
+    "expected_intent": "professional_dilemma",
+    "query": "How should a leader choose ministers and advisers?"
+  },
+  {
+    "id": "gp-026",
+    "category": "statecraft",
+    "expected_intent": "professional_dilemma",
+    "query": "How do I audit the people who handle money in my organisation?"
+  },
+  {
+    "id": "gp-027",
+    "category": "statecraft",
+    "expected_intent": "professional_dilemma",
+    "query": "When should I make peace with a rival instead of fighting?"
+  },
+  {
+    "id": "gp-028",
+    "category": "statecraft",
+    "expected_intent": "professional_dilemma",
+    "query": "How should a ruler divide and organise his working day?"
+  },
+  {
+    "id": "gp-029",
+    "category": "statecraft",
+    "expected_intent": "professional_dilemma",
+    "query": "How do I detect and handle a conspiracy inside my own camp?"
+  },
+  {
+    "id": "gp-030",
+    "category": "statecraft",
+    "expected_intent": "professional_dilemma",
+    "query": "What makes a treaty or an alliance worth entering?"
+  },
+  {
+    "id": "gp-031",
+    "category": "statecraft",
+    "expected_intent": "professional_dilemma",
+    "query": "How should punishment be applied so it is neither too harsh nor too lenient?"
+  },
+  {
+    "id": "gp-032",
+    "category": "statecraft",
+    "expected_intent": "professional_dilemma",
+    "query": "How do I gather reliable information about what is really happening?"
+  },
+  {
+    "id": "gp-033",
+    "category": "relationship",
+    "expected_intent": "seek_guidance",
+    "query": "My parents want me to marry someone I do not love"
+  },
+  {
+    "id": "gp-034",
+    "category": "relationship",
+    "expected_intent": "seek_guidance",
+    "query": "I had a bitter fight with my brother over family property"
+  },
+  {
+    "id": "gp-035",
+    "category": "relationship",
+    "expected_intent": "seek_guidance",
+    "query": "My wife and I keep arguing about money"
+  },
+  {
+    "id": "gp-036",
+    "category": "relationship",
+    "expected_intent": "seek_guidance",
+    "query": "How do I care for my ageing parents without resenting them?"
+  },
+  {
+    "id": "gp-037",
+    "category": "hinglish",
+    "expected_intent": "emotional_support",
+    "query": "mujhe lagta hai sab kuch meri galti hai, I can't focus on anything"
+  },
+  {
+    "id": "gp-038",
+    "category": "hinglish",
+    "expected_intent": "professional_dilemma",
+    "query": "office mein sab log politics karte hain, main kya karun"
+  },
+  {
+    "id": "gp-039",
+    "category": "hinglish",
+    "expected_intent": "seek_guidance",
+    "query": "papa chahte hain main unka business sambhalun but mera mann nahi hai"
+  },
+  {
+    "id": "gp-040",
+    "category": "hinglish",
+    "expected_intent": "emotional_support",
+    "query": "bahut tension hai exam ka, neend nahi aati raat ko"
+  },
+  {
+    "id": "gq-041",
+    "category": "emotional",
+    "expected_intent": "emotional_support",
+    "query": "I compare myself with everyone on social media and feel worthless"
+  },
+  {
+    "id": "gq-042",
+    "category": "emotional",
+    "expected_intent": "emotional_support",
+    "query": "I get angry very quickly and later regret what I said"
+  },
+  {
+    "id": "gq-043",
+    "category": "emotional",
+    "expected_intent": "seek_guidance",
+    "query": "I cannot let go of a mistake I made years ago"
+  },
+  {
+    "id": "gq-044",
+    "category": "emotional",
+    "expected_intent": "emotional_support",
+    "query": "My mother is seriously ill and I am scared of losing her"
+  },
+  {
+    "id": "gq-045",
+    "category": "emotional",
+    "expected_intent": "seek_guidance",
+    "query": "I have everything I wanted and still feel empty inside"
+  },
+  {
+    "id": "gq-046",
+    "category": "emotional",
+    "expected_intent": "seek_guidance",
+    "query": "How do I stay calm when people criticise me?"
+  },
+  {
+    "id": "gq-047",
+    "category": "emotional",
+    "expected_intent": "emotional_support",
+    "query": "I feel guilty for being happy when others around me are suffering"
+  },
+  {
+    "id": "gq-048",
+    "category": "emotional",
+    "expected_intent": "seek_guidance",
+    "query": "I procrastinate on everything important and hate myself for it"
+  },
+  {
+    "id": "gq-049",
+    "category": "emotional",
+    "expected_intent": "seek_guidance",
+    "query": "How can I stop craving things that are bad for me?"
+  },
+  {
+    "id": "gq-050",
+    "category": "emotional",
+    "expected_intent": "emotional_support",
+    "query": "I feel nobody understands what I am going through"
+  },
+  {
+    "id": "gq-051",
+    "category": "professional",
+    "expected_intent": "professional_dilemma",
+    "query": "My startup is failing and I have to tell my investors"
+  },
+  {
+    "id": "gq-052",
+    "category": "professional",
+    "expected_intent": "professional_dilemma",
+    "query": "I was asked to hide a product defect from customers"
+  },
+  {
+    "id": "gq-053",
+    "category": "professional",
+    "expected_intent": "professional_dilemma",
+    "query": "How should I negotiate with a much more powerful client?"
+  },
+  {
+    "id": "gq-054",
+    "category": "professional",
+    "expected_intent": "professional_dilemma",
+    "query": "Two senior members of my team are fighting and dividing the team"
+  },
+  {
+    "id": "gq-055",
+    "category": "professional",
+    "expected_intent": "professional_dilemma",
+    "query": "I have been offered a bribe to approve a contract"
+  },
+  {
+    "id": "gq-056",
+    "category": "professional",
+    "expected_intent": "professional_dilemma",
+    "query": "I am afraid to speak up in meetings even when I know the answer"
+  },
+  {
+    "id": "gq-057",
+    "category": "professional",
+    "expected_intent": "professional_dilemma",
+    "query": "How do I reward good work fairly in my team?"
+  },
+  {
+    "id": "gq-058",
+    "category": "professional",
+    "expected_intent": "professional_dilemma",
+    "query": "My work feels meaningless and I only do it for the money"
+  },
+  {
+    "id": "gq-059",
+    "category": "professional",
+    "expected_intent": "professional_dilemma",
+    "query": "Should I report my friend at work who is stealing from the company?"
+  },
+  {
+    "id": "gq-060",
+    "category": "professional",
+    "expected_intent": "professional_dilemma",
+    "query": "How do I plan my finances when my income is uncertain?"
+  },
+  {
+    "id": "gq-061",
+    "category": "statecraft",
+    "expected_intent": "scripture_question",
+    "query": "What qualities should a king or leader cultivate in himself?"
+  },
+  {
+    "id": "gq-062",
+    "category": "statecraft",
+    "expected_intent": "scripture_question",
+    "query": "How should a ruler collect taxes without harming the people?"
+  },
+  {
+    "id": "gq-063",
+    "category": "statecraft",
+    "expected_intent": "scripture_question",
+    "query": "How should a state protect itself against famine and disaster?"
+  },
+  {
+    "id": "gq-064",
+    "category": "statecraft",
+    "expected_intent": "scripture_question",
+    "query": "What are the duties of a king towards his subjects?"
+  },
+  {
+    "id": "gq-065",
+    "category": "statecraft",
+    "expected_intent": "scripture_question",
+    "query": "How should a leader test the loyalty of his ministers?"
+  },
+  {
+    "id": "gq-066",
+    "category": "statecraft",
+    "expected_intent": "scripture_question",
+    "query": "When is it wise to form an alliance with a neighbouring state?"
+  },
+  {
+    "id": "gq-067",
+    "category": "statecraft",
+    "expected_intent": "scripture_question",
+    "query": "How should judges settle disputes fairly?"
+  },
+  {
+    "id": "gq-068",
+    "category": "statecraft",
+    "expected_intent": "scripture_question",
+    "query": "How should the treasury be managed and guarded?"
+  },
+  {
+    "id": "gq-069",
+    "category": "statecraft",
+    "expected_intent": "scripture_question",
+    "query": "What causes rebellion among the people and how can it be prevented?"
+  },
+  {
+    "id": "gq-070",
+    "category": "statecraft",
+    "expected_intent": "scripture_question",
+    "query": "How should a king train and educate a prince?"
+  },
+  {
+    "id": "gq-071",
+    "category": "statecraft",
+    "expected_intent": "scripture_question",
+    "query": "What is the role of spies in running a kingdom?"
+  },
+  {
+    "id": "gq-072",
+    "category": "statecraft",
+    "expected_intent": "scripture_question",
+    "query": "How should trade and merchants be regulated?"
+  },
+  {
+    "id": "gq-073",
+    "category": "statecraft",
+    "expected_intent": "scripture_question",
+    "query": "How should a weak kingdom behave towards a stronger one?"
+  },
+  {
+    "id": "gq-074",
+    "category": "statecraft",
+    "expected_intent": "scripture_question",
+    "query": "What punishment is appropriate for officials who take bribes?"
+  },
+  {
+    "id": "gq-075",
+    "category": "statecraft",
+    "expected_intent": "scripture_question",
+    "query": "How should agriculture and irrigation be supported by the state?"
+  },
+  {
+    "id": "gq-076",
+    "category": "statecraft",
+    "expected_intent": "scripture_question",
+    "query": "What should a leader do when advisers give conflicting counsel?"
+  },
+  {
+    "id": "gq-077",
+    "category": "relationship",
+    "expected_intent": "emotional_support",
+    "query": "My partner and I keep fighting about small things"
+  },
+  {
+    "id": "gq-078",
+    "category": "relationship",
+    "expected_intent": "seek_guidance",
+    "query": "How do I set boundaries with parents who control my life decisions?"
+  },
+  {
+    "id": "gq-079",
+    "category": "relationship",
+    "expected_intent": "emotional_support",
+    "query": "My best friend stopped talking to me and I do not know why"
+  },
+  {
+    "id": "gq-080",
+    "category": "relationship",
+    "expected_intent": "emotional_support",
+    "query": "I went through a breakup and cannot stop thinking about my ex"
+  },
+  {
+    "id": "gq-081",
+    "category": "relationship",
+    "expected_intent": "seek_guidance",
+    "query": "My siblings and I are fighting over our inheritance"
+  },
+  {
+    "id": "gq-082",
+    "category": "relationship",
+    "expected_intent": "seek_guidance",
+    "query": "How can I be a better parent to my teenage child?"
+  },
+  {
+    "id": "gq-083",
+    "category": "relationship",
+    "expected_intent": "seek_guidance",
+    "query": "Should I stay in a friendship that only takes from me?"
+  },
+  {
+    "id": "gq-084",
+    "category": "relationship",
+    "expected_intent": "emotional_support",
+    "query": "My in-laws do not accept me"
+  },
+  {
+    "id": "gq-085",
+    "category": "relationship",
+    "expected_intent": "seek_guidance",
+    "query": "How do I rebuild trust after I lied to someone I love?"
+  },
+  {
+    "id": "gq-086",
+    "category": "relationship",
+    "expected_intent": "seek_guidance",
+    "query": "I am attached to someone who does not feel the same way"
+  },
+  {
+    "id": "gq-087",
+    "category": "relationship",
+    "expected_intent": "seek_guidance",
+    "query": "How do I care for my ageing parents without losing myself?"
+  },
+  {
+    "id": "gq-088",
+    "category": "relationship",
+    "expected_intent": "seek_guidance",
+    "query": "My friend is making bad choices; should I intervene?"
+  },
+  {
+    "id": "gq-089",
+    "category": "hinglish",
+    "expected_intent": "emotional_support",
+    "query": "Mujhe bahut akela mehsoos hota hai, kya karun?"
+  },
+  {
+    "id": "gq-090",
+    "category": "hinglish",
+    "expected_intent": "seek_guidance",
+    "query": "Exam mein fail ho gaya, ab kya karu samajh nahi aa raha"
+  },
+  {
+    "id": "gq-091",
+    "category": "hinglish",
+    "expected_intent": "professional_dilemma",
+    "query": "Boss har baat pe daant ta hai, job chhod du kya?"
+  },
+  {
+    "id": "gq-092",
+    "category": "hinglish",
+    "expected_intent": "seek_guidance",
+    "query": "Gussa bahut aata hai, control kaise karu?"
+  },
+  {
+    "id": "gq-093",
+    "category": "hinglish",
+    "expected_intent": "emotional_support",
+    "query": "Papa ki death ke baad sab khali lagta hai"
+  },
+  {
+    "id": "gq-094",
+    "category": "hinglish",
+    "expected_intent": "seek_guidance",
+    "query": "Result ki chinta chhod ke kaam kaise karu?"
+  },
+  {
+    "id": "gq-095",
+    "category": "hinglish",
+    "expected_intent": "seek_guidance",
+    "query": "Dost ne dhokha diya, maaf karu ya nahi?"
+  },
+  {
+    "id": "gq-096",
+    "category": "hinglish",
+    "expected_intent": "professional_dilemma",
+    "query": "Team ko kaise lead karu jab koi sunta hi nahi?"
+  },
+  {
+    "id": "gq-097",
+    "category": "hinglish",
+    "expected_intent": "seek_guidance",
+    "query": "Mann shant nahi rehta, dhyan kaise lagaun?"
+  },
+  {
+    "id": "gq-098",
+    "category": "hinglish",
+    "expected_intent": "seek_guidance",
+    "query": "Shaadi ke liye ghar wale pressure daal rahe hain"
+  },
+  {
+    "id": "gq-099",
+    "category": "hinglish",
+    "expected_intent": "professional_dilemma",
+    "query": "Business partner pe bharosa karu ya nahi?"
+  },
+  {
+    "id": "gq-100",
+    "category": "hinglish",
+    "expected_intent": "seek_guidance",
+    "query": "Apna kartavya kaise pehchanu?"
+  }
+]

@@ -1,0 +1,152 @@
+[
+  {
+    "answer_id": "A01",
+    "source_id": "gp-002",
+    "category": "gold/emotional"
+  },
+  {
+    "answer_id": "A02",
+    "source_id": "gp-037",
+    "category": "gold/hinglish"
+  },
+  {
+    "answer_id": "A03",
+    "source_id": "gp-022",
+    "category": "gold/professional"
+  },
+  {
+    "answer_id": "A04",
+    "source_id": "gp-033",
+    "category": "gold/relationship"
+  },
+  {
+    "answer_id": "A05",
+    "source_id": "gp-030",
+    "category": "gold/statecraft"
+  },
+  {
+    "answer_id": "A06",
+    "source_id": "gp-006",
+    "category": "gold/emotional"
+  },
+  {
+    "answer_id": "A07",
+    "source_id": "gp-039",
+    "category": "gold/hinglish"
+  },
+  {
+    "answer_id": "A08",
+    "source_id": "gp-020",
+    "category": "gold/professional"
+  },
+  {
+    "answer_id": "A09",
+    "source_id": "gp-035",
+    "category": "gold/relationship"
+  },
+  {
+    "answer_id": "A10",
+    "source_id": "gp-026",
+    "category": "gold/statecraft"
+  },
+  {
+    "answer_id": "A11",
+    "source_id": "gp-010",
+    "category": "gold/emotional"
+  },
+  {
+    "answer_id": "A12",
+    "source_id": "gp-038",
+    "category": "gold/hinglish"
+  },
+  {
+    "answer_id": "A13",
+    "source_id": "gp-016",
+    "category": "gold/professional"
+  },
+  {
+    "answer_id": "A14",
+    "source_id": "gp-034",
+    "category": "gold/relationship"
+  },
+  {
+    "answer_id": "A15",
+    "source_id": "gp-028",
+    "category": "gold/statecraft"
+  },
+  {
+    "answer_id": "A16",
+    "source_id": "gp-012",
+    "category": "gold/emotional"
+  },
+  {
+    "answer_id": "A17",
+    "source_id": "gp-040",
+    "category": "gold/hinglish"
+  },
+  {
+    "answer_id": "A18",
+    "source_id": "gp-013",
+    "category": "gold/professional"
+  },
+  {
+    "answer_id": "A19",
+    "source_id": "gp-036",
+    "category": "gold/relationship"
+  },
+  {
+    "answer_id": "A20",
+    "source_id": "gp-027",
+    "category": "gold/statecraft"
+  },
+  {
+    "answer_id": "A21",
+    "source_id": "gp-008",
+    "category": "gold/emotional"
+  },
+  {
+    "answer_id": "A22",
+    "source_id": "gp-014",
+    "category": "gold/professional"
+  },
+  {
+    "answer_id": "A23",
+    "source_id": "gp-029",
+    "category": "gold/statecraft"
+  },
+  {
+    "answer_id": "A24",
+    "source_id": "gp-005",
+    "category": "gold/emotional"
+  },
+  {
+    "answer_id": "A25",
+    "source_id": "gp-021",
+    "category": "gold/professional"
+  },
+  {
+    "answer_id": "A26",
+    "source_id": "gp-031",
+    "category": "gold/statecraft"
+  },
+  {
+    "answer_id": "A27",
+    "source_id": "gp-011",
+    "category": "gold/emotional"
+  },
+  {
+    "answer_id": "A28",
+    "source_id": "gp-015",
+    "category": "gold/professional"
+  },
+  {
+    "answer_id": "A29",
+    "source_id": "gp-032",
+    "category": "gold/statecraft"
+  },
+  {
+    "answer_id": "A30",
+    "source_id": "gp-004",
+    "category": "gold/emotional"
+  }
+]
