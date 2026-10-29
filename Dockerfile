@@ -53,6 +53,14 @@ EXPOSE 8000
 # A platform may supply $PORT; the default keeps `docker run` working unchanged.
 ENV PORT=8000
 
+# Which commit this image was built from, reported by GET /health as
+# `build_sha` and checked by scripts/prod_smoke.py. Until 30 Sep 2026 nothing
+# recorded what production was running: /health said "0.1.0" for every commit.
+# docker-compose.vm.yml passes it from the shell; a plain `docker build` without
+# `--build-arg GIT_SHA=...` gets "unknown", which the smoke test reports as such.
+ARG GIT_SHA=unknown
+ENV GITAGUIDE_BUILD_SHA=${GIT_SHA}
+
 # Two memory settings, both measured under the free tier's 512 MB on 7 Sep 2026.
 #
 # MALLOC_ARENA_MAX=2: glibc gives each thread its own malloc arena, and the

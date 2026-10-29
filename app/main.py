@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.beta import router as beta_router
 from app.api.concurrency import PipelineGate
 from app.api.ratelimit import build_rate_limiter
-from app.api.routes import router
+from app.api.routes import research_router, router
 from app.config import Settings, get_settings
 from app.db import build_repository
 from app.embeddings import build_embedder
@@ -129,6 +129,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
     else:
         logger.warning("RATE LIMITING IS DISABLED; the NIM budget is unprotected")
+    if settings.is_prod:
+        logger.info(
+            "environment=prod: the research surface (POST /chat, GET /explain, "
+            "GET /safety/logs) and the OpenAPI pages are not mounted"
+        )
     logger.info("pipeline ready: %s", await orchestrator.health())
 
     try:
@@ -149,6 +154,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "and the Arthashastra."
         ),
         lifespan=lifespan,
+        # The OpenAPI pages publish the whole route table. Nothing a tester uses
+        # reads them, so in prod they do not exist rather than exist unread.
+        docs_url=None if settings.is_prod else "/docs",
+        redoc_url=None if settings.is_prod else "/redoc",
+        openapi_url=None if settings.is_prod else "/openapi.json",
     )
     app.add_middleware(
         CORSMiddleware,
@@ -161,7 +171,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # the whole app rather than only the parts create_app touches.
     app.state.settings = settings
     app.include_router(router)
-    # The beta UI's flat envelope, served alongside the research surface.
+    # The research surface - the full trace, stored traces by message id, the
+    # safety log - is for the eval scripts and a developer's explanation panel.
+    # In prod it is not mounted at all: see app/api/routes.py for what those
+    # three routes chained into on the deployed service on 19 Sep 2026.
+    if not settings.is_prod:
+        app.include_router(research_router)
+    # The beta UI's flat envelope: everything the frontend actually calls.
     app.include_router(beta_router)
     return app
 
