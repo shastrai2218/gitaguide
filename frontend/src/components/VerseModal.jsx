@@ -72,6 +72,10 @@ export default function VerseModal({ citation, onClose }) {
             <p className="verse-modal-sanskrit">{citation.text_sanskrit}</p>
           )}
 
+          {citation.transliteration && (
+            <p className="verse-modal-transliteration">{citation.transliteration}</p>
+          )}
+
           {citation.text ? (
             <blockquote className="verse-modal-text">
               {citation.text}
@@ -86,19 +90,6 @@ export default function VerseModal({ citation, onClose }) {
             <div className="verse-modal-why-box">
               <span className="verse-modal-why-label">Why retrieved:</span>
               <p className="verse-modal-why">{citation.why}</p>
-            </div>
-          )}
-
-          {citation.url && (
-            <div className="verse-modal-footer-link">
-              <a
-                href={citation.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="verse-modal-external-link"
-              >
-                Read {heading} on vedabase.io →
-              </a>
             </div>
           )}
         </div>
@@ -116,4 +107,3 @@ export default function VerseModal({ citation, onClose }) {
     </div>
   )
 }
-

@@ -235,6 +235,8 @@ function normaliseCitations(raw) {
       label: item?.label ?? '',
       ref: item?.ref ?? '',
       text: item?.text ?? '',
+      text_sanskrit: item?.text_sanskrit ?? '',
+      transliteration: item?.transliteration ?? '',
       url: safeUrl(item?.url),
       why: item?.why ?? '',
     }))

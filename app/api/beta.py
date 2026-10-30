@@ -108,6 +108,8 @@ class BetaCitation(BaseModel):
     #: Full human citation, e.g. "Bhagavad Gita 2.47 (BG-2.47)".
     ref: str
     text: str
+    text_sanskrit: str = ""
+    transliteration: str = ""
     #: Deep link to the authoritative edition, or "" when there is none.
     #: See :mod:`app.pipeline.references` for why the Gita has one.
     url: str = ""
@@ -248,6 +250,8 @@ def _citations_for(result: GuidanceResult) -> list[BetaCitation]:
                 label=reference_label(verse.id),
                 ref=verse.citation,
                 text=verse.text_english,
+                text_sanskrit=verse.text_sanskrit,
+                transliteration=verse.transliteration,
                 url=reference_url(verse.id, verse.source),
                 why=why_by_id.get(verse_id, ""),
             )

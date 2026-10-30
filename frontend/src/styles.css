@@ -1702,6 +1702,17 @@ textarea {
   gap: 1.1rem;
 }
 
+.verse-modal-transliteration {
+  font-family: var(--font-serif);
+  font-size: 0.94rem;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  margin: 0;
+  white-space: pre-line;
+  font-style: italic;
+  padding-left: 0.85rem;
+}
+
 .verse-modal-sanskrit {
   font-family: var(--font-serif);
   font-style: italic;
