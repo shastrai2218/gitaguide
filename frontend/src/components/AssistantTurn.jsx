@@ -3,26 +3,16 @@ import { SHOW_META } from '../api.js'
 import Commentary from './Commentary.jsx'
 import FeedbackControl from './FeedbackControl.jsx'
 import MetaLine from './MetaLine.jsx'
+import PracticeCard from './PracticeCard.jsx'
 import VerseModal from './VerseModal.jsx'
+import { downloadShareCard } from '../utils/shareCard.js'
 
 /**
  * A completed assistant turn.
- *
- * Two renderings, chosen by `turn.blocked`:
- *
- * * **blocked** — the input safety gate short-circuited before retrieval and
- *   generation ran. The backend's own crisis text is shown in a calm panel with
- *   the helplines beneath it. There are no citations to show.
- * * **normal** — commentary against the marigold rule. Verse numbers mentioned
- *   in the text are interactive hyperlinks that open a pop-up modal with the
- *   full verse text, sanskrit, and context on click. No separate section is
- *   rendered beneath the paragraph.
- *
- * `onRegenerate` is only ever passed for the most recent turn (App.jsx decides
- * that), so at most one turn in the transcript can show the control.
  */
 export default function AssistantTurn({ turn, onRegenerate, busy }) {
   const [selectedVerse, setSelectedVerse] = useState(null)
+  const [isDownloading, setIsDownloading] = useState(false)
 
   if (turn.blocked) {
     return (
@@ -39,6 +29,22 @@ export default function AssistantTurn({ turn, onRegenerate, busy }) {
     )
   }
 
+  function handleDownloadCard() {
+    setIsDownloading(true)
+    try {
+      const primaryVerse = turn.citations && turn.citations[0]
+      downloadShareCard({
+        replyText: turn.reply,
+        verse: primaryVerse,
+        emotionLabel: turn.emotion?.label,
+      })
+    } catch (e) {
+      console.error('Failed to generate card:', e)
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
   return (
     <div className="turn">
       <div className="commentary">
@@ -49,6 +55,11 @@ export default function AssistantTurn({ turn, onRegenerate, busy }) {
         />
       </div>
 
+      {/* Practical micro-reflection card tailored to the emotional state */}
+      {!turn.blocked && (
+        <PracticeCard emotion={turn.emotion} />
+      )}
+
       {selectedVerse && (
         <VerseModal
           citation={selectedVerse}
@@ -57,8 +68,33 @@ export default function AssistantTurn({ turn, onRegenerate, busy }) {
       )}
 
       {SHOW_META && <MetaLine turn={turn} />}
+
       <div className="turn-footer">
         <FeedbackControl messageId={turn.messageId} />
+
+        <button
+          type="button"
+          className="share-card-button"
+          onClick={handleDownloadCard}
+          disabled={isDownloading}
+          title="Download a beautiful wisdom card to share or save"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+            <polyline points="16 6 12 2 8 6" />
+            <line x1="12" y1="2" x2="12" y2="15" />
+          </svg>
+          {isDownloading ? 'Saving…' : 'Share Card'}
+        </button>
+
         {onRegenerate && (
           <button
             type="button"
@@ -66,19 +102,19 @@ export default function AssistantTurn({ turn, onRegenerate, busy }) {
             onClick={onRegenerate}
             disabled={busy}
           >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M21 12a9 9 0 1 1-3-6.7" />
-                <path d="M21 3v6h-6" />
-              </svg>
-              Regenerate
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M21 12a9 9 0 1 1-3-6.7" />
+              <path d="M21 3v6h-6" />
+            </svg>
+            Regenerate
           </button>
         )}
       </div>

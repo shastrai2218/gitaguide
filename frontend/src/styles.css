@@ -1833,3 +1833,169 @@ textarea {
     transform: translateY(0) scale(1);
   }
 }
+
+/* ==================================== Voice input, Share Card & Practice === */
+
+.composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.voice-button {
+  background: none;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  color: var(--ink-soft);
+  cursor: pointer;
+  padding: 0.5rem 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 180ms var(--ease-out);
+}
+
+.voice-button svg {
+  width: 17px;
+  height: 17px;
+}
+
+.voice-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-deep);
+  background: var(--accent-tint);
+}
+
+.voice-button.listening {
+  background: rgba(176, 141, 87, 0.2);
+  border-color: var(--gold);
+  color: var(--gold);
+  animation: pulseMic 1.2s infinite alternate ease-in-out;
+}
+
+@keyframes pulseMic {
+  0% { transform: scale(1); box-shadow: 0 0 0 rgba(176, 141, 87, 0); }
+  100% { transform: scale(1.05); box-shadow: 0 0 10px rgba(176, 141, 87, 0.4); }
+}
+
+/* Practice Card */
+.practice-card-container {
+  margin-top: 1rem;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  background: var(--panel);
+  overflow: hidden;
+  transition: border-color 200ms var(--ease-out);
+}
+
+.practice-card-container:hover {
+  border-color: #d1c6ad;
+}
+
+.practice-card-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.95rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-sans);
+  font-size: 0.84rem;
+  color: var(--ink);
+  transition: background 150ms var(--ease-out);
+}
+
+.practice-card-toggle:hover {
+  background: rgba(124, 152, 133, 0.08);
+}
+
+.practice-card-sparkle {
+  color: var(--gold);
+  font-size: 0.95rem;
+  margin-right: 0.4rem;
+}
+
+.practice-card-title {
+  flex: 1;
+}
+
+.practice-card-title em {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--accent-deep);
+}
+
+.practice-chevron {
+  width: 14px;
+  height: 14px;
+  color: var(--ink-soft);
+  transition: transform 200ms var(--ease-out);
+}
+
+.practice-chevron.rotated {
+  transform: rotate(180deg);
+}
+
+.practice-card-content {
+  padding: 0.85rem 1.1rem 1rem;
+  border-top: 1px solid var(--hair);
+  background: var(--page);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  animation: fadeIn 180ms var(--ease-out);
+}
+
+.practice-quote {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--accent-deep);
+  margin: 0;
+}
+
+.practice-steps {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.practice-step-item {
+  font-family: var(--font-sans);
+  font-size: 0.83rem;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+/* Share card button */
+.share-card-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 0.2rem 0.75rem;
+  transition: all 200ms var(--ease-out);
+}
+
+.share-card-button svg {
+  width: 13px;
+  height: 13px;
+}
+
+.share-card-button:hover:not(:disabled) {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: var(--gold-tint);
+}
