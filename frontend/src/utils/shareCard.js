@@ -136,3 +136,4 @@ export function downloadShareCard({ replyText, verse, emotionLabel }) {
   link.href = canvas.toDataURL('image/png')
   link.click()
 }
+

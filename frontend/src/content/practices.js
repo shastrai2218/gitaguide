@@ -83,3 +83,4 @@ export function getPracticeForEmotion(emotionLabel) {
   }
   return PRACTICE_CATALOG.default
 }
+
