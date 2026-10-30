@@ -269,8 +269,9 @@ async def test_emotions_are_always_passed(neo4j_settings: Settings) -> None:
 
     # ...and an empty list when no emotion was detected, never a missing key.
     await retriever.retrieve("what is dharma")
-    assert stub.calls[1]["query_params"] == {"emotions": []}
+    assert stub.calls[1]["query_params"]["emotions"] == []
     assert "emotions" in DEFAULT_QUERY_PARAMS
+    assert "themes" in DEFAULT_QUERY_PARAMS
 
 
 async def test_candidates_are_actually_built(neo4j_settings: Settings) -> None:

@@ -55,7 +55,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import numpy as np
+try:
+    import numpy as np
+except ImportError:  # pragma: no cover
+    np = None
 
 from app.config import PROJECT_ROOT, Settings, get_settings
 from app.pipeline.emotion import EmotionDetector

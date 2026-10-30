@@ -90,6 +90,14 @@ INTENT_CUES: tuple[tuple[str, IntentLabel, float], ...] = (
     (r"\b(?:sad|lonely|alone|depressed|anxious|anxiety|grief|grieving|crying|cry|empty|numb|"
      r"heartbroken|hopeless|worthless|exhausted|burnt ?out|overwhelmed|ashamed|guilty|"
      r"betrayed|hurt(?:ing)?|miss (?:him|her|them|my))\b", IntentLabel.EMOTIONAL_SUPPORT, 0.55),
+    # "console" = consolation/comfort, never a programming console
+    (r"\b(?:consol(?:e(?:d|s)?|ation|ing|ing me)?|comfort(?:ed|ing)?|solace|soothe|soothing|"
+     r"reassur(?:e|ance|ing)|calm(?:ed|ing)? (?:me|my mind|down)|want to calm|need to calm)\b",
+     IntentLabel.EMOTIONAL_SUPPORT, 0.7),
+    # Frustration, disappointment, emotional distress
+    (r"\b(?:frustrat(?:ed|ing|ion)|disappoint(?:ed|ing|ment)|angry|anger|upset|fed up|"
+     r"annoyed|irritat(?:ed|ing)|stressed|stress(?:ful)?|disheartened|let down)\b",
+     IntentLabel.EMOTIONAL_SUPPORT, 0.55),
     (r"\b(?:passed away|died|lost my (?:father|mother|mom|dad|wife|husband|son|daughter|"
      r"friend|brother|sister))\b", IntentLabel.EMOTIONAL_SUPPORT, 0.8),
     (r"\b(?:panic|panicking|cannot stop (?:thinking|crying)|can(?:no|')?t stop (?:thinking|crying)|"
@@ -209,6 +217,7 @@ def build_intent_prompt(text: str, emotion: EmotionResult | None = None) -> str:
         "discussion are not crisis unless the speaker also expresses current personal risk.\n"
         "- Work, money, career and leadership problems are professional_dilemma even when "
         "they are emotional.\n"
+        "- Requests for comfort, consolation, soothing, calming down, or emotional solace (e.g., 'i need console', 'console me', 'how to calm my mind') are emotional_support or seek_guidance, never other or technical requests.\n"
         "- A statement explicitly bounded to leaving or being replaced on a team, project, or "
         "work role because of skills or fit is professional_dilemma, not perceived "
         "burdensomeness about the person's life. This exception is only for that explicit "
