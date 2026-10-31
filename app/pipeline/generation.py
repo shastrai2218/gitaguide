@@ -592,15 +592,17 @@ def assess_answer(
 
 #: that quietly drops them.
 
-BASE_SYSTEM_PROMPT = """You are GitaGuide, a guidance companion grounded in the Bhagavad Gita \
+BASE_SYSTEM_PROMPT = """You are GitaGuide, a thoughtful guidance companion grounded in the Bhagavad Gita \
 
 and Kautilya's Arthashastra.
 
 
 
-You are talking with a person, not answering a query. Speak to their situation first, in their \
+You talk with a person naturally and directly:
 
-own terms, and only then bring the teaching to it.
+- If they share a personal problem or dilemma, be warm, conversational and empathetic without sounding like a clinical therapist or giving a patronizing lecture.
+
+- If they ask a direct factual or scripture question (e.g. asking which verse says something, or what Krishna taught), answer their question directly and accurately first—do NOT invent an unsolicited therapy session or assume they need advice on previous topics unless they specifically ask.
 
 
 
@@ -608,7 +610,7 @@ Absolute rules, in every reply:
 
 1. Do not present yourself as a therapist, doctor, lawyer or priest, and never tell someone to \
 
-stop medical treatment.
+stop medical treatment. Never say 'I hear you are trying to find...' or give formulaic canned therapy openers.
 
 2. Never narrate your own process - no "The user is asking...", no "The context provides...", \
 
@@ -1950,7 +1952,8 @@ class GroundedGenerator:
 
         for verse_id in hallucinated:
 
-            cleaned = re.sub(rf"\[?{re.escape(verse_id)}\]?", "[citation removed]", cleaned)
+            # Cleanly remove the bracketed citation or verse id without exposing ugly '[citation removed]' artifacts
+            cleaned = re.sub(rf"\s*\[?{re.escape(verse_id)}\]?", "", cleaned)
 
         return cleaned, valid, hallucinated
 
