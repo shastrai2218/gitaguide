@@ -33,10 +33,13 @@ class OpenAIProvider(LLMProvider):
         if self._client is None:
             from openai import AsyncOpenAI
 
-            self._client = AsyncOpenAI(
-                api_key=self.settings.openai_api_key,
-                timeout=self.settings.llm_timeout_seconds,
-            )
+            client_kwargs = {
+                "api_key": self.settings.openai_api_key,
+                "timeout": self.settings.llm_timeout_seconds,
+            }
+            if self.settings.openai_base_url:
+                client_kwargs["base_url"] = self.settings.openai_base_url
+            self._client = AsyncOpenAI(**client_kwargs)
         return self._client
 
     async def complete(
