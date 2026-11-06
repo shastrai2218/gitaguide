@@ -28,15 +28,14 @@ Covers:
 import asyncio
 import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from app.config import get_settings
-from app.db.repository import InMemoryRepository, MessageRecord
+from app.db.repository import InMemoryRepository
 from app.llm.fake import FakeLLMProvider
 from app.pipeline.orchestrator import build_orchestrator
-from app.pipeline.memory import ConversationMemory
 from app.pipeline.schemas import UserTurn
 
 logging.basicConfig(level=logging.WARNING)
@@ -68,7 +67,7 @@ class UnseenConversation:
 
 def generate_unseen_suite() -> list[UnseenConversation]:
     suite: list[UnseenConversation] = []
-    
+
     domains = [
         ("multitopic_simultaneous", "Multiple simultaneous problems (e.g., job loss + sick relative + debt)"),
         ("rapid_topic_switching", "Rapid topic switching (career -> relationship -> health -> hobby)"),
@@ -177,7 +176,7 @@ async def run_memory_stress_test(orch: Any) -> dict[str, Any]:
         # Milestone: User correction at turn 7 ("My co-founder owns 30%, not 40%")
         # Assistant suggestion at turn 8 ("You could take a walk to clear your head")
         # User acknowledgment at turn 9 ("ok thanks")
-        
+
         milestones_verified = {
             "no_fabricated_facts": True,
             "no_suggestion_as_commitment": True,
@@ -212,7 +211,7 @@ async def run_memory_stress_test(orch: Any) -> dict[str, Any]:
                 msg = f"Turn {t}: continuing the discussion on startup runway and milestones."
 
             user_turn = UserTurn(message=msg, session_id=session_id)
-            res = await orch.handle_turn(user_turn)
+            await orch.handle_turn(user_turn)
 
         mem = await orch.memory.load(session_id)
         rendered_history = mem.render()
@@ -274,7 +273,6 @@ async def main():
 
     domain_stats = {}
     total_correct_context = 0
-    total_relevant_responses = 0
 
     for conv in unseen_suite:
         dom = conv.domain
@@ -283,7 +281,7 @@ async def main():
         domain_stats[dom]["conversations"] += 1
 
         session_id = f"eval_unseen_{conv.conv_id}"
-        for turn_idx, t in enumerate(conv.turns, 1):
+        for _turn_idx, t in enumerate(conv.turns, 1):
             user_turn = UserTurn(message=t.message, session_id=session_id)
             res = await orch.handle_turn(user_turn)
 
@@ -293,11 +291,7 @@ async def main():
 
             # Check contextual fidelity
             is_appropriate = True
-            if t.is_clarification_or_multi and getattr(res, "is_multi_topic", False):
-                is_appropriate = True
-            elif not t.scripture_appropriate and strat in {"practical", "general_assistance"}:
-                is_appropriate = True
-            elif t.scripture_appropriate and strat in {"hybrid", "scripture_grounded"}:
+            if (t.is_clarification_or_multi and getattr(res, "is_multi_topic", False)) or (not t.scripture_appropriate and strat in {"practical", "general_assistance"}) or (t.scripture_appropriate and strat in {"hybrid", "scripture_grounded"}):
                 is_appropriate = True
 
             if is_appropriate:

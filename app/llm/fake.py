@@ -28,33 +28,18 @@ line.  Deterministic by construction, which is what the unit tests rely on.
 
 from __future__ import annotations
 
-
-
 import json
-
 import re
-
 from collections.abc import Sequence
 
-
-
 from app.llm.base import (
-
     TASK_ANSWER,
-
     TASK_INTENT,
-
     TASK_ROUTE,
-
     TASK_SUMMARY,
-
     LLMProvider,
-
     LLMResponse,
-
 )
-
-
 
 TASK_MARKER_RE = re.compile(r"^TASK:\s*([a-z_]+)", re.IGNORECASE | re.MULTILINE)
 

@@ -106,63 +106,33 @@ answer, then serves the overload reply rather than word salad.
 
 from __future__ import annotations
 
-
-
 import logging
-
 import re
-
 import time
-
 from collections.abc import Collection, Sequence
-
 from dataclasses import dataclass
 
-
-
 from app import telemetry
-
 from app.config import Settings, get_settings
-
 from app.llm.base import TASK_ANSWER, BudgetExhaustedError, LLMError, LLMProvider, LLMResponse
-
 from app.pipeline.memory import MemoryContext
-
 from app.pipeline.register import detect_register, register_instruction
-
 from app.pipeline.router import Route
-
 from app.pipeline.schemas import (
-
     EmotionResult,
-
     GenerationResult,
-
     IntentLabel,
-
     IntentResult,
-
     RetrievalTrace,
-
     RetrievedVerse,
-
 )
-
 from app.pipeline.textutils import WHY_HEADING_RE as _WHY_HEADING_RE
-
 from app.pipeline.tiers import (
-
     CONVERSATIONAL_RULES,
-
     GUIDANCE_TIER,
-
     ReplyTier,
-
 )
-
 from corpus.schemas import VERSE_ID_RE, ScriptureSource, extract_verse_ids
-
-
 
 logger = logging.getLogger(__name__)
 

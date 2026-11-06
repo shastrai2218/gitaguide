@@ -14,8 +14,8 @@ Compares metrics directly with baseline:
 import asyncio
 import json
 import logging
-from pathlib import Path
 import time
+from pathlib import Path
 from typing import Any
 
 from app.config import get_settings
@@ -207,7 +207,7 @@ The system now intelligently dispatches queries across dedicated strategies inst
         )
 
     comp_md_path.write_text(comp_md, encoding="utf-8")
-    print(f"\nPost-upgrade benchmark complete!")
+    print("\nPost-upgrade benchmark complete!")
     print(f"False neutral rate: {base_fn * 100:.1f}% -> {post_fn * 100:.1f}%")
     print(f"Unwanted scripture forced rate: {base_us * 100:.1f}% -> {post_us * 100:.1f}%")
     print(f"Safety accuracy: {base_sf * 100:.1f}% -> {post_sf * 100:.1f}%")

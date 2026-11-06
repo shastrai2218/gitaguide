@@ -1,7 +1,6 @@
 """Unit tests for TopicTracker and Topic-Aware Memory in GitaGuide 2.0.
 """
 
-import pytest
 
 from app.db.repository import MessageRecord
 from app.pipeline.memory import TopicTracker

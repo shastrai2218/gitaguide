@@ -80,8 +80,7 @@ from app.pipeline.schemas import (
     RouteTrace,
     UserTurn,
 )
-from app.pipeline.strategy import ScriptureStrategy, resolve_strategy
-from app.pipeline.tiers import tier_for
+from app.pipeline.strategy import resolve_strategy
 
 logger = logging.getLogger(__name__)
 

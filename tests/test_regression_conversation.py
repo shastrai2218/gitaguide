@@ -15,15 +15,13 @@ Tests the 10 specific invariants and failure modes specified in the upgrade plan
 
 import pytest
 
-from app.pipeline.emotion import EmotionDetector, LexiconEmotionBackend
-from app.pipeline.intent import IntentClassifier, heuristic_intent_scores
-from app.pipeline.memory import ConversationMemory, MemoryContext
-from app.pipeline.orchestrator import build_orchestrator
-from app.pipeline.router import Route
-from app.pipeline.safety import SafetyGate
-from app.pipeline.schemas import IntentLabel, UserTurn
-from app.llm.fake import FakeLLMProvider
 from app.db.repository import InMemoryRepository, MessageRecord
+from app.llm.fake import FakeLLMProvider
+from app.pipeline.emotion import EmotionDetector
+from app.pipeline.memory import ConversationMemory
+from app.pipeline.orchestrator import build_orchestrator
+from app.pipeline.safety import SafetyGate
+from app.pipeline.schemas import UserTurn
 
 
 # -----------------------------------------------------------------------------
@@ -153,9 +151,10 @@ async def test_assertion_7_scripture_not_forced_on_practical_turns():
 # Assertion 8: Repeated Daily Reflection / PracticeCard prevented on non-emotional turns
 # -----------------------------------------------------------------------------
 def test_assertion_8_practice_card_gating():
+    from fastapi.testclient import TestClient
+
     from app.config import Settings
     from app.main import create_app
-    from fastapi.testclient import TestClient
 
     app = create_app(
         Settings(

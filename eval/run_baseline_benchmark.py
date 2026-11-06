@@ -23,7 +23,6 @@ from typing import Any
 from app.config import get_settings
 from app.db.repository import InMemoryRepository
 from app.llm.fake import FakeLLMProvider
-from app.pipeline.emotion import EmotionDetector
 from app.pipeline.orchestrator import build_orchestrator
 from app.pipeline.schemas import UserTurn
 from eval.benchmark_data import BENCHMARK_SUITE, BenchmarkConversation
@@ -93,7 +92,6 @@ async def main():
     false_neutral_count = 0
     unwanted_scripture_count = 0
     safety_mismatch_count = 0
-    intent_matches = 0
 
     category_stats: dict[str, dict[str, int]] = {}
 
@@ -166,7 +164,7 @@ async def main():
         md_content += f"| {cat} | {stats['turns']} | {stats['false_neutrals']} | {stats['unwanted_scriptures']} | {stats['safety_errors']} |\n"
 
     md_path.write_text(md_content, encoding="utf-8")
-    print(f"\nBaseline benchmark complete!")
+    print("\nBaseline benchmark complete!")
     print(f"False neutral rate: {report['overall_metrics']['false_neutral_rate'] * 100:.1f}%")
     print(f"Unwanted scripture forced rate: {report['overall_metrics']['unwanted_scripture_rate'] * 100:.1f}%")
     print(f"Safety accuracy: {report['overall_metrics']['safety_accuracy'] * 100:.1f}%")

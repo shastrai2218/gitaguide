@@ -140,39 +140,21 @@ failure increments ``intent_router_fallback`` and logs at warning level.
 
 from __future__ import annotations
 
-
-
 import asyncio
-
 import json
-
 import logging
-
 import re
-
 import time
-
 import unicodedata
-
 from dataclasses import dataclass, field
-
 from enum import Enum
-
 from pathlib import Path
-
 from typing import Any
 
-
-
 from app import telemetry
-
 from app.config import PROJECT_ROOT, Settings, get_settings
-
 from app.llm.base import TASK_ROUTE, LLMProvider
-
 from app.pipeline.memory import MemoryContext
-
-
 
 logger = logging.getLogger(__name__)
 

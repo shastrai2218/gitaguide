@@ -16,7 +16,6 @@ import pytest
 from app.config import Settings
 from app.db.repository import InMemoryRepository, MessageRecord
 from app.pipeline.memory import ConversationMemory, TopicTracker
-from app.pipeline.schemas import TopicStatus
 
 
 @pytest.fixture
@@ -110,8 +109,8 @@ def test_quantitative_facts_preserved_and_corrections_tracked() -> None:
     ctx = TopicTracker.extract_from_messages(messages)
     assert len(ctx.quantitative_facts) >= 2
     # Older fact with 1 cr should be superseded by the correction
-    fact_1cr = [f for f in ctx.quantitative_facts if "1 cr" in f.numerical_value or "1 cr" in f.fact][0]
-    fact_80l = [f for f in ctx.quantitative_facts if "80 lakh" in f.numerical_value or "80 lakh" in f.fact][0]
+    fact_1cr = next(f for f in ctx.quantitative_facts if "1 cr" in f.numerical_value or "1 cr" in f.fact)
+    fact_80l = next(f for f in ctx.quantitative_facts if "80 lakh" in f.numerical_value or "80 lakh" in f.fact)
     assert fact_1cr.is_superseded is True
     assert fact_80l.is_correction is True
     assert fact_80l.is_superseded is False
