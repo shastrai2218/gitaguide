@@ -1,4 +1,5 @@
 import { ClerkProvider } from '@clerk/clerk-react'
+import { Analytics } from '@vercel/analytics/react'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
@@ -20,9 +21,15 @@ const page =
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     {CLERK_ENABLED ? (
-      <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY}>{page}</ClerkProvider>
+      <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY}>
+        {page}
+        <Analytics />
+      </ClerkProvider>
     ) : (
-      page
+      <>
+        {page}
+        <Analytics />
+      </>
     )}
   </StrictMode>,
 )
