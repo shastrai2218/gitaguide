@@ -126,7 +126,7 @@ class LexiconEmotionBackend(EmotionBackend):
             (r"\b(?:want to die|end my life|kill myself|no reason to live)\b", 0.88),
         ),
         "sadness": (
-            (r"\b(?:sad|unhappy|down|low|miserable|heartbroken|depressed|crying|cry|tears)\b", 0.62),
+            (r"\b(?:sad|unhappy|low|miserable|heartbroken|depressed|crying|cry|tears|feeling down)\b|(?<!shut )(?<!calm )(?<!sit )(?<!slow )\bdown\b", 0.62),
             (r"\b(?:lonely|alone|empty|numb)\b", 0.58),
             (r"\b(?:hopeless|worthless|pointless|no reason to live|want to die|end my life|kill myself)\b", 0.92),
         ),
@@ -175,7 +175,7 @@ class LexiconEmotionBackend(EmotionBackend):
             (r"\b(?:thank you|thanks|grateful|gratitude)\b", 0.70),
         ),
         "joy": (
-            (r"\b(?:happy|glad|delighted|excited|great news|joy)\b", 0.66),
+            (r"\b(?:happy|glad|delighted|excited|great news|joy|thrilled|ecstatic)\b", 0.75),
         ),
         "relief": (
             (r"\b(?:relieved|relief|finally over|at peace)\b", 0.62),
@@ -354,6 +354,143 @@ def compute_intensity(labels: Sequence[EmotionScore], text: str = "") -> float:
     return round(min(1.0, max(0.0, primary + support + lexical)), 4)
 
 
+
+#: Contextual distress cues to augment ONNX / Lexicon when models yield false neutrals
+# on informal text, Hinglish, or situational distress phrasing.
+INFORMAL_DISTRESS_CUES: tuple[tuple[re.Pattern[str], tuple[tuple[str, float], ...], str], ...] = (
+    # Betrayal & relationship conflict
+    (
+        re.compile(r"\b(?:cheated|cheating|infidelity|betrayed|broken trust|two[- ]timing)\b", re.I),
+        (("anger", 0.72), ("sadness", 0.62), ("disgust", 0.55)),
+        "betrayal_infidelity",
+    ),
+    (
+        re.compile(r"\b(?:broke up|breakup|dumped me|heartbroken|left me|hasnt replied.*spiraling)\b", re.I),
+        (("sadness", 0.78), ("grief", 0.58), ("disappointment", 0.55)),
+        "relationship_breakup",
+    ),
+    # Anxiety, panic, overwhelm, nervous tension
+    (
+        re.compile(r"\b(?:anxiety|anxious|stress\w*|tense|panicking|panic|overwhelmed|restless|darr lag|tension ho|ashant|spiraling|can'?t relax|mind keeps buzzing|brain feels frozen|piling up|frozen)\b", re.I),
+        (("nervousness", 0.75), ("fear", 0.58)),
+        "anxiety_stress",
+    ),
+    # Insomnia & sleep anxiety
+    (
+        re.compile(r"\b(?:can'?t sleep|insomnia|sleepless|more awake i feel|late night thoughts|racing thoughts at night)\b", re.I),
+        (("nervousness", 0.65), ("disappointment", 0.45)),
+        "insomnia_distress",
+    ),
+    # Performance pressure, exams, interviews, deadlines
+    (
+        re.compile(r"\b(?:board exams?|final round interview|road test|appraisal|presentation|assignments? due|dissertation|pressure is immense|failed twice|methodology needs major revisions)\b", re.I),
+        (("nervousness", 0.72), ("fear", 0.55)),
+        "performance_pressure",
+    ),
+    # Imposter syndrome & social comparison
+    (
+        re.compile(r"\b(?:find out i dont belong|don'?t belong|imposter|everyone on linkedin|batchmates are married|behind everyone|getting promoted and buying)\b", re.I),
+        (("disappointment", 0.70), ("sadness", 0.60), ("nervousness", 0.52)),
+        "social_comparison_inadequacy",
+    ),
+    # Bereavement & loss (including pets)
+    (
+        re.compile(r"\b(?:passed away|died|death of|lost my|grieving|mourning|put (?:our|my) .* to sleep|funeral)\b", re.I),
+        (("grief", 0.88), ("sadness", 0.80)),
+        "grief_bereavement",
+    ),
+    # Loneliness, isolation & social exclusion
+    (
+        re.compile(r"\b(?:lonely|alone|empty inside|numb|koi dost nahi|akelapan|met up without inviting|without inviting me|excluded|left out)\b", re.I),
+        (("sadness", 0.72), ("disappointment", 0.55)),
+        "loneliness_isolation",
+    ),
+    # Apathy, depression, creative freeze
+    (
+        re.compile(r"\b(?:like a robot|motions like a robot|haven'?t written.*in .*months?|lost all motivation|zero motivation|numbness)\b", re.I),
+        (("sadness", 0.75), ("disappointment", 0.60)),
+        "apathy_depression",
+    ),
+    # Public embarrassment & shame
+    (
+        re.compile(r"\b(?:feel exposed|sarcastic comments|posted online without context|humiliated|laughing at me|mocking me)\b", re.I),
+        (("embarrassment", 0.76), ("nervousness", 0.60)),
+        "public_embarrassment",
+    ),
+    # Financial distress & debt pressure
+    (
+        re.compile(r"\b(?:rent is due|down to my last|last 500|money is stucked|stuck money|loan of|pay back the loan|not paying us|unpaid invoice|debt|broke|auction notice|loan default|default on (?:the )?loan|foreclosure)\b", re.I),
+        (("fear", 0.72), ("nervousness", 0.68)),
+        "financial_distress",
+    ),
+    # Anger, fraud, robbery, injustice
+    (
+        re.compile(r"\b(?:furious|unfair|robbed|siphoned|stole|fraud|looted|blood is boiling|dimag kharab|cheated us)\b", re.I),
+        (("anger", 0.78), ("annoyance", 0.65)),
+        "anger_injustice",
+    ),
+    # Medical emergencies & insurance rejections
+    (
+        re.compile(
+            r"\b(?:hospital\s+(?:bill|admiss|den|refus)|icu|cashless\s+(?:claim|denied|rejected)|"
+            r"insurance\s+(?:claim|denied|rejected|refused)|medical\s+emergency|"
+            r"chemo|dialysis|emergency\s+surgery|oxygen\s+level)\b",
+            re.I,
+        ),
+        (("fear", 0.74), ("nervousness", 0.68), ("sadness", 0.58)),
+        "medical_emergency_catastrophe",
+    ),
+    # Extortion & bribe demands
+    (
+        re.compile(
+            r"\b(?:demanding\s+(?:a\s+)?bribe|extortion|hafta|protection\s+money|"
+            r"threatened\s+to\s+(?:cancel|revoke|demolish|shut\s+down)|threatened\s+my\s+business|"
+            r"police\s+(?:harassment|threaten)|corrupt\s+offic)\b",
+            re.I,
+        ),
+        (("fear", 0.72), ("anger", 0.70), ("nervousness", 0.65)),
+        "extortion_bribe_distress",
+    ),
+    # Contractor fraud, eviction, disinheritance
+    (
+        re.compile(
+            r"\b(?:disinherited|cut\s+out\s+of\s+(?:the\s+)?will|landlord\s+(?:evict|threw\s+out|locked)|"
+            r"notice\s+to\s+vacate|vanished\s+with\s+(?:the\s+)?advance|absconded\s+with|"
+            r"contractor\s+(?:cheated|scam|vanished|stole)|deposit\s+(?:forfeited|stolen))\b",
+            re.I,
+        ),
+        (("anger", 0.74), ("sadness", 0.68), ("fear", 0.60)),
+        "fraud_eviction_disinheritance",
+    ),
+    # Workplace wrongful termination / retaliation
+    (
+        re.compile(
+            r"\b(?:terminated\s+(?:without\s+(?:cause|notice)|unfairly)|fired\s+on\s+the\s+spot|"
+            r"whistleblow(?:er|ing)\s+retaliation|forced\s+to\s+resign|sham\s+investigation|"
+            r"escorted\s+out\s+of\s+the\s+building|revoked\s+my\s+visa)\b",
+            re.I,
+        ),
+        (("anger", 0.72), ("fear", 0.70), ("disappointment", 0.65)),
+        "wrongful_termination_retaliation",
+    ),
+    # Academic failure / career disqualification
+    (
+        re.compile(
+            r"\b(?:failed\s+(?:upsc|prelims|mains|gate|jee|neet|board)|disqualified|"
+            r"didn'?t\s+clear\s+the\s+cutoff|rejected\s+after\s+final\s+round|"
+            r"offer\s+(?:revoked|rescinded)|admission\s+cancelled)\b",
+            re.I,
+        ),
+        (("disappointment", 0.78), ("sadness", 0.72), ("nervousness", 0.58)),
+        "academic_career_disqualification",
+    ),
+)
+
+PURE_GREETING_RE = re.compile(
+    r"^\s*(?:hi|hello|hey|namaste|kem cho|kya haal hai|good (?:morning|evening|afternoon|night))[!.,?\s]*$",
+    re.I,
+)
+
 class EmotionDetector:
     """Stage-1 detector; picks a backend from settings and stays lazy.
 
@@ -422,15 +559,55 @@ class EmotionDetector:
             batches = backend.predict(texts)
 
         elapsed = (time.perf_counter() - started) * 1000.0
-        return [
-            EmotionResult(
-                labels=list(labels),
-                intensity=compute_intensity(labels, text),
-                backend=backend.name,
-                latency_ms=round(elapsed / len(texts), 3),
+        results: list[EmotionResult] = []
+        for text, labels in zip(texts, batches, strict=True):
+            current_scores = [EmotionScore(emotion=item.emotion, score=item.score) for item in labels]
+            inferred_scores: list[EmotionScore] = []
+            final_labels = list(current_scores)
+            inferred_flag = False
+            inferred_source = ""
+
+            dominant = current_scores[0].emotion if current_scores else "neutral"
+            dominant_score = current_scores[0].score if current_scores else 0.0
+
+            # Distinguish pure greetings from emotional disclosures
+            is_pure_greeting = bool(PURE_GREETING_RE.match(text.strip()))
+
+            # If current message is neutral/weak AND not a pure greeting, check conversational distress cues
+            if not is_pure_greeting and (dominant == "neutral" or dominant_score < 0.65):
+                for pattern, score_tuples, source_name in INFORMAL_DISTRESS_CUES:
+                    if pattern.search(text):
+                        inferred_scores = [
+                            EmotionScore(emotion=emo, score=sc) for emo, sc in score_tuples
+                        ]
+                        inferred_flag = True
+                        inferred_source = source_name
+                        # Calibrated merge: inferred scores lead, existing labels follow
+                        existing_non_neutral = [s for s in current_scores if s.emotion != "neutral"]
+                        merged_dict: dict[str, float] = {}
+                        for item in inferred_scores:
+                            merged_dict[item.emotion] = item.score
+                        for item in existing_non_neutral:
+                            if item.emotion not in merged_dict:
+                                merged_dict[item.emotion] = item.score
+                        merged_ranked = sorted(merged_dict.items(), key=lambda kv: -kv[1])
+                        final_labels = [EmotionScore(emotion=e, score=s) for e, s in merged_ranked[:5]]
+                        break
+
+            intensity = compute_intensity(final_labels, text)
+            results.append(
+                EmotionResult(
+                    labels=final_labels,
+                    intensity=intensity,
+                    backend=backend.name,
+                    latency_ms=round(elapsed / len(texts), 3),
+                    current_labels=current_scores,
+                    inferred_labels=inferred_scores,
+                    inferred=inferred_flag,
+                    inferred_from=inferred_source,
+                )
             )
-            for text, labels in zip(texts, batches, strict=True)
-        ]
+        return results
 
     async def adetect(self, text: str) -> EmotionResult:
         """Async wrapper (inference is CPU-bound but sub-100ms on INT8)."""

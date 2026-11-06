@@ -48,6 +48,7 @@ from app.pipeline.schemas import (
 )
 from app.pipeline.textutils import (
     has_academic_framing,
+    has_explicit_non_suicide,
     is_negated,
     is_third_party_past,
 )
@@ -166,10 +167,17 @@ RULES: tuple[SafetyRule, ...] = (
         "suicide_explicit",
         SafetyCategory.SUICIDAL_IDEATION,
         r"\b(?:kill(?:ing)? myself|killing my self|end(?:ing)? my life|take my own life|"
-        r"took my own life|commit(?:ting)? suicide|attempt(?:ed|ing)? suicide|"
-        r"hang myself|hanging myself|jump off (?:a|the) (?:building|bridge|roof|terrace)|"
+        r"took my own life|hang myself|hanging myself|"
+        r"jump off (?:a|the) (?:building|bridge|roof|terrace)|"
         r"shoot myself|drown myself|slit my wrists?)\b",
         "explicit statement of suicidal action",
+    ),
+    _rule(
+        "commit_suicide",
+        SafetyCategory.SUICIDAL_IDEATION,
+        r"\b(?:commit(?:ting|ted)? suicide|attempt(?:ed|ing)? suicide)\b",
+        "statement referencing committing or attempting suicide",
+        negatable=True,
     ),
     _rule(
         "suicide_terms",
@@ -194,9 +202,10 @@ RULES: tuple[SafetyRule, ...] = (
     _rule(
         "perceived_burdensomeness",
         SafetyCategory.SUICIDAL_IDEATION,
-        r"\b(?:everyone|everybody|people|my family|they) (?:would|would all|'d) "
-        r"be better off without me\b",
-        "user believes other people would be better off without them",
+        r"\b(?:everyone(?:\s+in\s+my\s+family)?|everybody|people|my family|they)\s+(?:would|would all|'d)\s+"
+        r"(?:be\s+)?(?:(?:so\s+much|much|far)\s+)?better off\s+(?:without me|if i\s+(?:just\s+)?(?:didn't|did not|wasn't|was not|never)\s+"
+        r"(?:wake up|wake|exist|stay alive)|if i\s+(?:died|was dead|were dead))\b",
+        "user believes other people would be better off without them or if they did not wake up",
         negatable=True,
     ),
     _rule(
@@ -221,9 +230,11 @@ RULES: tuple[SafetyRule, ...] = (
     _rule(
         "hinglish_wish_not_to_live",
         SafetyCategory.SUICIDAL_IDEATION,
-        r"\b(?:(?:mujhe (?:ab )?|mera )?jeene ka mann nahi (?:hai|karta)|"
-        r"mujhe (?:ab )?jeena nahi (?:hai|chahta|chahti))\b",
+        r"\b(?:(?:mujhe (?:ab )?|mera )?jeene ka (?:bilkul |koi |koyi )?mann nahi (?:hai|karta|kar raha)|"
+        r"sab khatam karne ka mann (?:hai|karta|kar raha)|"
+        r"mujhe (?:ab )?(?:bilkul )?jeena nahi (?:hai|chahta|chahti))\b",
         "Hinglish expression of not wanting to live",
+        negatable=True,
     ),
     _rule(
         "hinglish_end_everything",
@@ -243,7 +254,9 @@ RULES: tuple[SafetyRule, ...] = (
         "plan_or_means",
         SafetyCategory.SUICIDAL_IDEATION,
         r"\b(?:wrote (?:my|a) (?:suicide )?note|left a note for my family|"
-        r"saying goodbye (?:to everyone|forever)|last (?:night|day) on earth|"
+        r"this is my (?:final|last) message(?: to (?:anyone|everyone|you all))?|"
+        r"goodbye (?:forever|to everyone)|saying goodbye (?:to everyone|forever)|"
+        r"last (?:night|day) on earth|"
         r"bought (?:a rope|pills|poison)|stockpil(?:ed|ing) pills|"
         r"planned how (?:i|to) (?:will |would )?(?:die|do it))\b",
         "indication of a plan, means or goodbye",
@@ -252,7 +265,8 @@ RULES: tuple[SafetyRule, ...] = (
     _rule(
         "self_harm",
         SafetyCategory.SELF_HARM,
-        r"\b(?:self[- ]?harm(?:ing)?|cut(?:ting)? myself|burn(?:ing)? myself|"
+        r"\b(?:self[- ]?harm(?:ing)?|cut(?:ting)? (?:myself|my (?:wrists?|arms?|thighs?|legs?|body))|"
+        r"slit(?:ting)? my wrists?|burn(?:ing)? myself|"
         r"hurt(?:ing)? myself|punish(?:ing)? my body|starv(?:e|ing) myself|"
         r"hit(?:ting)? myself)\b",
         "self-harm behaviour",
@@ -261,8 +275,9 @@ RULES: tuple[SafetyRule, ...] = (
     _rule(
         "harm_others",
         SafetyCategory.HARM_TO_OTHERS,
-        r"\b(?:kill (?:him|her|them|my (?:boss|wife|husband|father|mother|colleague))|"
-        r"murder (?:him|her|them)|stab (?:him|her|them)|shoot (?:him|her|them|up)|"
+        r"\b(?:kill (?:him|her|them|my (?:boss|wife|husband|father|mother|colleague|coworker|family))|"
+        r"murder (?:him|her|them)|stab (?:him|her|them)|"
+        r"(?:going to )?shoot (?:him|her|them|up|my (?:boss|colleague|coworker|wife|husband|father|mother|partner|family|teacher))|"
         r"make them (?:pay with|bleed)|hurt (?:him|her|them) badly|"
         r"burn (?:his|her|their) house)\b",
         "threat of violence toward another person",
@@ -271,12 +286,17 @@ RULES: tuple[SafetyRule, ...] = (
     _rule(
         "abuse_victim",
         SafetyCategory.ABUSE_OR_VIOLENCE,
-        r"\b(?:(?:he|she|they|my (?:husband|wife|father|mother|partner|boss|in[- ]?laws?)) "
-        r"(?:beats?|beat|hits?|hit|hurts?|chokes?|threatens? to kill) me|"
+        r"\b(?:(?:(?:he|she|my (?:husband|wife|father|mother|partner|boss|in[- ]?laws?)) "
+        r"(?:(?:is|are) (?:beating|hitting|choking|hurting|attacking)|beats?|beat|hits?|hit|chokes?|threatens? to kill) me|"
+        r"they (?:(?:are|is) (?:beating|hitting|choking|attacking)|beats?|beat|hits?|hit|chokes?|threaten to kill) me|"
+        r"(?:he|she|my (?:husband|wife|father|mother|partner)) hurts? me(?! first\b)(?! (?:emotionally|mentally|financially)))|"
+        r"\blocked me (?:in|inside) (?:the )?(?:bathroom|room|house|closet)\b|"
         r"being (?:abused|assaulted|molested)|domestic (?:violence|abuse)|"
         r"i was (?:raped|assaulted|molested)|"
+        r"\btouches? me inappropriately\b|\btouching me inappropriately\b|\btouched me inappropriately\b|\bchild (?:sexual )?abuse\b|"
         r"threatens? to kill me)\b",
         "user reports being harmed by someone",
+        negatable=True,
     ),
     # ---- medical emergency ------------------------------------------------
     _rule(
@@ -506,17 +526,18 @@ class SafetyGate:
     ) -> list[SafetyTrigger]:
         triggers: list[SafetyTrigger] = []
         academic = has_academic_framing(text) or is_third_party_past(text)
+        non_suicide = has_explicit_non_suicide(text)
         for rule in rules:
             match = rule.pattern.search(text)
             if not match:
                 continue
-            if (
-                rule.negatable
-                and rule.category not in HARD_CATEGORIES
-                and (self._is_negated(text, match.start()) or academic)
-            ):
-                logger.debug("safety rule %s suppressed (negated/academic context)", rule.name)
-                continue
+            if rule.negatable and rule.category not in HARD_CATEGORIES:
+                if self._is_negated(text, match.start(), match.end()) or academic:
+                    logger.debug("safety rule %s suppressed (negated/academic context)", rule.name)
+                    continue
+                if non_suicide and rule.category is SafetyCategory.SUICIDAL_IDEATION:
+                    logger.debug("safety rule %s suppressed (explicit non-suicide statement)", rule.name)
+                    continue
             triggers.append(
                 SafetyTrigger(
                     layer=layer,
@@ -529,9 +550,9 @@ class SafetyGate:
         return triggers
 
     @staticmethod
-    def _is_negated(text: str, match_start: int) -> bool:
-        """True if a negation token sits just before the matched cue."""
-        return is_negated(text, match_start)
+    def _is_negated(text: str, match_start: int, match_end: int | None = None) -> bool:
+        """True if a negation token sits just before or after the matched cue."""
+        return is_negated(text, match_start, match_end)
 
     # ------------------------------------------------------------ risk policy
     def _run_risk_policy(

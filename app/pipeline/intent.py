@@ -90,19 +90,34 @@ INTENT_CUES: tuple[tuple[str, IntentLabel, float], ...] = (
     (r"\b(?:sad|lonely|alone|depressed|anxious|anxiety|grief|grieving|crying|cry|empty|numb|"
      r"heartbroken|hopeless|worthless|exhausted|burnt ?out|overwhelmed|ashamed|guilty|"
      r"betrayed|hurt(?:ing)?|miss (?:him|her|them|my))\b", IntentLabel.EMOTIONAL_SUPPORT, 0.55),
+    # "console" = consolation/comfort, never a programming console
+    (r"\b(?:consol(?:e(?:d|s)?|ation|ing|ing me)?|comfort(?:ed|ing)?|solace|soothe|soothing|"
+     r"reassur(?:e|ance|ing)|calm(?:ed|ing)? (?:me|my mind|down)|want to calm|need to calm)\b",
+     IntentLabel.EMOTIONAL_SUPPORT, 0.7),
+    # Frustration, disappointment, emotional distress
+    (r"\b(?:frustrat(?:ed|ing|ion)|disappoint(?:ed|ing|ment)|angry|anger|upset|fed up|"
+     r"annoyed|irritat(?:ed|ing)|stressed|stress(?:ful)?|disheartened|let down)\b",
+     IntentLabel.EMOTIONAL_SUPPORT, 0.55),
     (r"\b(?:passed away|died|lost my (?:father|mother|mom|dad|wife|husband|son|daughter|"
      r"friend|brother|sister))\b", IntentLabel.EMOTIONAL_SUPPORT, 0.8),
     (r"\b(?:panic|panicking|cannot stop (?:thinking|crying)|can(?:no|')?t stop (?:thinking|crying)|"
      r"obsess\w*|hate myself|blame myself|forgive myself|not good enough)\b",
      IntentLabel.EMOTIONAL_SUPPORT, 0.6),
+    # financial distress & money obligations
+    (r"\b(?:loan|crore|1 cr|lakh|debt|money is stucked?|stuck(?:ed)?|bank|owing|borrowed|repay|pay back|defaul|interest rate|bankruptcy)\w*\b",
+     IntentLabel.PROFESSIONAL_DILEMMA, 0.70),
+    # relationship conflict & heartbreak
+    (r"\b(?:broke up|breakup|cheated|cheating|infidelity|ex[- ]?(?:girlfriend|boyfriend|partner)|fianc[eé]|divorce|dumped me)\b",
+     IntentLabel.EMOTIONAL_SUPPORT, 0.75),
     # seek guidance
     (r"\b(?:what should i do|should i|how do i|how should i|help me (?:decide|choose)|"
      r"advice|advise|guide me|what would you do|i (?:am|'m) (?:torn|conflicted|stuck)|"
      r"can(?:no|')?t decide)\b", IntentLabel.SEEK_GUIDANCE, 0.6),
     (r"\b(?:marriage|family|parents|relationship|friendship|studies|exam|health|"
      r"purpose in life|meaning of my life)\b", IntentLabel.SEEK_GUIDANCE, 0.35),
-    # other / small talk
-    (r"^\s*(?:hi|hello|hey|namaste|good (?:morning|evening))\b", IntentLabel.OTHER, 0.9),
+    # other / small talk (pure greeting only - does not swallow sentences with real content)
+    (r"^\s*(?:hi|hello|hey|namaste|good (?:morning|evening|afternoon|night))[!.,?\s]*$", IntentLabel.OTHER, 0.95),
+    (r"^\s*(?:hi|hello|hey|namaste)[,\s]+", IntentLabel.OTHER, 0.15),
     (r"\b(?:who (?:are|made) you|what can you do|how do you work|thank you|thanks)\b",
      IntentLabel.OTHER, 0.7),
 )
@@ -209,6 +224,7 @@ def build_intent_prompt(text: str, emotion: EmotionResult | None = None) -> str:
         "discussion are not crisis unless the speaker also expresses current personal risk.\n"
         "- Work, money, career and leadership problems are professional_dilemma even when "
         "they are emotional.\n"
+        "- Requests for comfort, consolation, soothing, calming down, or emotional solace (e.g., 'i need console', 'console me', 'how to calm my mind') are emotional_support or seek_guidance, never other or technical requests.\n"
         "- A statement explicitly bounded to leaving or being replaced on a team, project, or "
         "work role because of skills or fit is professional_dilemma, not perceived "
         "burdensomeness about the person's life. This exception is only for that explicit "
@@ -380,6 +396,19 @@ class IntentClassifier:
         scores = self._apply_emotion_nudge(scores, emotion)
         best_label, best_score = max(scores.items(), key=lambda kv: kv[1])
 
+        # Multi-label secondary intents (> 0.15)
+        secondary = [label for label, s in scores.items() if s >= 0.15 and label != best_label]
+
+        # Hierarchical category mapping
+        cat_map = {
+            IntentLabel.CRISIS.value: "crisis",
+            IntentLabel.SCRIPTURE_QUESTION.value: "scripture",
+            IntentLabel.PROFESSIONAL_DILEMMA.value: "professional",
+            IntentLabel.EMOTIONAL_SUPPORT.value: "emotional",
+            IntentLabel.SEEK_GUIDANCE.value: "guidance",
+            IntentLabel.OTHER.value: "general",
+        }
+
         return IntentResult(
             intent=IntentLabel(best_label),
             confidence=round(best_score, 4),
@@ -396,6 +425,9 @@ class IntentClassifier:
             semantic_finish_reason=attempt.finish_reason,
             semantic_prompt_tokens=attempt.prompt_tokens,
             semantic_completion_tokens=attempt.completion_tokens,
+            secondary_intents=secondary,
+            hierarchical_category=cat_map.get(best_label, "general"),
+            needs_clarification=len(secondary) >= 2,
         )
 
     # ------------------------------------------------------------- helpers

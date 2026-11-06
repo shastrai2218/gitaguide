@@ -193,9 +193,12 @@ WHERE e.name IN $emotions
 WITH v, search_score, collect(DISTINCT e.name) AS matched_emotions
 OPTIONAL MATCH (v)-[:HAS_THEME]->(t:Theme)
 WITH v, search_score, matched_emotions, collect(DISTINCT t.name) AS themes
+OPTIONAL MATCH (v)-[:HAS_THEME]->(mt:Theme)
+WHERE ($themes IS NOT NULL AND size($themes) > 0 AND mt.name IN $themes)
+WITH v, search_score, matched_emotions, themes, collect(DISTINCT mt.name) AS matched_themes
 OPTIONAL MATCH (v)-[:RELATED_TO]-(sibling:Verse)-[:ADDRESSES_EMOTION]->(se:Emotion)
 WHERE se.name IN $emotions
-WITH v, search_score, matched_emotions, themes,
+WITH v, search_score, matched_emotions, themes, matched_themes,
      collect(DISTINCT {id: sibling.id, via: se.name})[..3] AS related_via_emotion
 RETURN
     v.id              AS id,
@@ -210,6 +213,7 @@ RETURN
     v.citation        AS citation,
     themes            AS themes,
     matched_emotions  AS matched_emotions,
+    matched_themes    AS matched_themes,
     related_via_emotion AS related_via_emotion,
     search_score      AS search_score,
     {
@@ -225,6 +229,7 @@ RETURN
         citation: v.citation,
         themes: themes,
         matched_emotions: matched_emotions,
+        matched_themes: matched_themes,
         related_via_emotion: related_via_emotion,
         search_score: search_score
     }                 AS metadata

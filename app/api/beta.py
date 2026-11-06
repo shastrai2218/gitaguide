@@ -108,6 +108,8 @@ class BetaCitation(BaseModel):
     #: Full human citation, e.g. "Bhagavad Gita 2.47 (BG-2.47)".
     ref: str
     text: str
+    text_sanskrit: str = ""
+    transliteration: str = ""
     #: Deep link to the authoritative edition, or "" when there is none.
     #: See :mod:`app.pipeline.references` for why the Gita has one.
     url: str = ""
@@ -144,6 +146,7 @@ class BetaChatResponse(BaseModel):
     message_id: str = ""
     reply: str
     blocked: bool = False
+    show_practice: bool = False
     emotion: BetaEmotion = Field(default_factory=BetaEmotion)
     intent: BetaIntent = Field(default_factory=BetaIntent)
     citations: list[BetaCitation] = Field(default_factory=list)
@@ -248,6 +251,8 @@ def _citations_for(result: GuidanceResult) -> list[BetaCitation]:
                 label=reference_label(verse.id),
                 ref=verse.citation,
                 text=verse.text_english,
+                text_sanskrit=verse.text_sanskrit,
+                transliteration=verse.transliteration,
                 url=reference_url(verse.id, verse.source),
                 why=why_by_id.get(verse_id, ""),
             )
@@ -399,10 +404,17 @@ async def beta_chat(
         await orchestrator.repository.claim_session(result.session_id, current_user_id)
 
     generation = result.generation
+    show_practice = (
+        not result.crisis
+        and not result.output_safety.blocked
+        and result.route.route not in {"greeting", "ack_or_close", "meta"}
+        and (result.emotion.dominant != "neutral" and result.emotion.intensity >= 0.35)
+    )
     return BetaChatResponse(
         message_id=result.message_id,
         reply=result.answer,
         blocked=result.crisis,
+        show_practice=show_practice,
         emotion=BetaEmotion(
             label=result.emotion.dominant, score=result.emotion.dominant_score
         ),

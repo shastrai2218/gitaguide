@@ -23,7 +23,21 @@ WHY_HEADING_RE = re.compile(r"^#{1,6}\s*why this verse\b", re.IGNORECASE | re.MU
 #: Negation tokens that neutralise a following cue ("I am *not* suicidal").
 NEGATION_RE = re.compile(
     r"\b(?:not|never|no|n't|nt|dont|don't|doesnt|doesn't|didnt|didn't|wont|won't|"
-    r"wouldn't|isn't|aren't|neither|nor|hardly|rarely)\b",
+    r"wouldn't|isn't|aren't|neither|nor|hardly|rarely|nahi|nahin|mat)\b",
+    re.IGNORECASE,
+)
+
+#: Post-negation tokens in Hinglish and English that immediately follow a cue
+#: ("suicide nahi karunga", "suicide is not an option").
+POST_NEGATION_RE = re.compile(
+    r"^\s*(?:is\s+(?:not|never)|nahi\s+(?:karunga|karungi|karenge|karega|karegi|karta|karti|karna)|nahin\s+(?:karunga|karungi|karenge|karega|karegi|karta|karti|karna))\b",
+    re.IGNORECASE,
+)
+
+#: Explicit statement disclaiming suicide despite experiencing emotional pain.
+EXPLICIT_NON_SUICIDE_RE = re.compile(
+    r"\b(?:par |lekin |but )?(?:suicide|jaan|khudkushi)\s+nahi\s+(?:karunga|karungi|karenge|karega|karegi|karta|karti)\b|"
+    r"\b(?:i (?:will not|won't|am not going to|wont) (?:commit suicide|kill myself))\b",
     re.IGNORECASE,
 )
 
@@ -34,7 +48,10 @@ NEGATION_WINDOW_CHARS = 28
 ACADEMIC_CONTEXT_RE = re.compile(
     r"(?:my (?:thesis|dissertation|paper|research|assignment)|"
     r"for (?:a|my) (?:class|course|project|exam)|"
-    r"(?:red[- ]?team|test case|unit test|dataset|corpus)\b)",
+    r"(?:red[- ]?team|test case|unit test|dataset|corpus)\b|"
+    r"\b(?:in (?:roman|ancient|greek|indian|vedic|world|medieval|modern)?\s*history|historically|historical(?:ly)? context)\b|"
+    r"\b(?:why did|how did)\s+(?:seneca|socrates|cleopatra|nero|caesar|van gogh|hemingway)\b|"
+    r"\b(?:seneca|socrates|cleopatra|van gogh|hemingway)\b)",
     re.IGNORECASE,
 )
 
@@ -66,10 +83,26 @@ def is_third_party_past(text: str) -> bool:
     return bool(THIRD_PARTY_RE.search(text)) and bool(RECOVERY_RE.search(text))
 
 
-def is_negated(text: str, match_start: int, window: int = NEGATION_WINDOW_CHARS) -> bool:
-    """True when a negation token sits immediately before ``match_start``."""
+def is_negated(
+    text: str,
+    match_start: int,
+    match_end: int | None = None,
+    window: int = NEGATION_WINDOW_CHARS,
+) -> bool:
+    """True when a negation token sits immediately before or after the matched cue."""
     prefix = text[max(0, match_start - window) : match_start]
-    return bool(NEGATION_RE.search(prefix))
+    if bool(NEGATION_RE.search(prefix)):
+        return True
+    if match_end is not None:
+        suffix = text[match_end : min(len(text), match_end + window)]
+        if bool(POST_NEGATION_RE.search(suffix)):
+            return True
+    return False
+
+
+def has_explicit_non_suicide(text: str) -> bool:
+    """True if user explicitly states they will not commit suicide."""
+    return bool(EXPLICIT_NON_SUICIDE_RE.search(text))
 
 
 def has_academic_framing(text: str) -> bool:

@@ -92,15 +92,11 @@ def build_router_llm(settings: Settings | None = None) -> LLMProvider | None:
     if not settings.router_model_enabled:
         logger.info("router model stage disabled; stage-1 lexicon only")
         return None
-    if settings.resolved_llm_provider is LLMProviderName.FAKE:
+    if settings.resolved_llm_provider is LLMProviderName.FAKE or settings.mock_mode:
         return FakeLLMProvider()
-    if settings.resolved_llm_provider is not LLMProviderName.NVIDIA:
-        # Routing on a paid provider is not something to switch on implicitly.
-        logger.info("no NIM configured; router runs on the stage-1 lexicon only")
-        return None
     try:
         provider = build_single_provider(
-            LLMProviderName.NVIDIA, settings, model=settings.router_model
+            settings.resolved_llm_provider, settings, model=settings.router_model
         )
     except LLMError as exc:
         logger.warning("router model unavailable (%s); stage-1 lexicon only", exc)

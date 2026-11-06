@@ -269,15 +269,16 @@ class SqlAlchemyRepository(Repository):
         self, session_id: str, limit: int = 20, newest_first: bool = False
     ) -> list[MessageRecord]:
         async with self.session_factory() as session:
-            order = desc(Message.created_at) if newest_first else Message.created_at
             statement = (
                 select(Message)
                 .where(Message.session_id == session_id)
-                .order_by(order)
+                .order_by(desc(Message.created_at))
                 .limit(limit)
             )
             rows: Sequence[Message] = (await session.execute(statement)).scalars().all()
             records = [self._to_message_record(row) for row in rows]
+            if not newest_first:
+                records.reverse()
             return records
 
     # ------------------------------------------------------------- safety

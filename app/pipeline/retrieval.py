@@ -358,9 +358,10 @@ class InMemoryHybridRetriever(HybridRetriever):
         # Expanded separately rather than reusing `expanded`: the emotion and
         # intent terms are added per query, and the rewrite is a different
         # query.
-        expanded_vector = (
-            expand_query(vector_query, emotion, intent) if vector_query else expanded
-        )
+        # Vector leg must be clean (unpolluted by appended emotion/intent text)
+        # to avoid semantic drift and low similarity against verses.
+        clean_vector = vector_query.strip() if vector_query else query.strip()
+        expanded_vector = clean_vector
 
         vector_scores = self._vector_scores(expanded_vector)
         fulltext_scores = self._fulltext_scores(expanded)
@@ -486,7 +487,7 @@ class RetrievalError(RuntimeError):
 #: and Cypher cannot default a missing parameter, so every call site starts from
 #: this dict. Omitting it produces ``ParameterMissing`` at the driver, which is
 #: exactly the failure this constant exists to prevent.
-DEFAULT_QUERY_PARAMS: dict[str, Any] = {"emotions": []}
+DEFAULT_QUERY_PARAMS: dict[str, Any] = {"emotions": [], "themes": []}
 
 #: Columns the retrieval query returns; used by the result formatter and to
 #: sanity-check that the query and the parser still agree.
@@ -649,14 +650,17 @@ class Neo4jHybridRetriever(HybridRetriever):
         started = time.perf_counter()
         settings = self.settings
         expanded = expand_query(query, emotion, intent)
-        expanded_vector = (
-            expand_query(vector_query, emotion, intent) if vector_query else expanded
-        )
+        # Vector leg must be clean (unpolluted by appended emotion/intent text)
+        # to avoid semantic drift and low similarity against verses.
+        clean_vector = vector_query.strip() if vector_query else query.strip()
+        expanded_vector = clean_vector
         emotions = emotion.top_emotions(settings.emotion_top_k) if emotion else []
 
         # Always a complete parameter set: the retrieval query requires
-        # $emotions and Cypher cannot default it.
-        query_params = {**DEFAULT_QUERY_PARAMS, "emotions": emotions}
+        # $emotions and $themes (Cypher cannot default them).
+        from corpus.tagging import tag_themes
+        matched_query_themes = tag_themes(query) or []
+        query_params = {**DEFAULT_QUERY_PARAMS, "emotions": emotions, "themes": matched_query_themes}
         candidate_k = settings.retrieval_candidate_k
 
         items = self._search(
@@ -936,6 +940,18 @@ def _record_to_retrieved_verse(record: Mapping[str, Any], emotions: Sequence[str
                 description=(
                     f"detected emotion '{matched}' "
                     f"<-[:{REL_ADDRESSES_EMOTION}]- ({verse.id})"
+                ),
+                hops=1,
+            )
+        )
+    for theme_match in record.get("matched_themes") or []:
+        paths.append(
+            GraphPath(
+                nodes=[verse.id, str(theme_match)],
+                relationships=[REL_HAS_THEME],
+                description=(
+                    f"({verse.id}) -[:{REL_HAS_THEME}]-> "
+                    f"theme '{theme_match}'"
                 ),
                 hops=1,
             )

@@ -149,6 +149,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-5"
     openai_api_key: str = ""
+    openai_base_url: str = ""
     openai_model: str = "gpt-4o-mini"
     #: Generation defaults (Nemotron 3 answers comfortably inside 1200 tokens).
     llm_max_tokens: int = 1200

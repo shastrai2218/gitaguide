@@ -17,6 +17,7 @@ own inputs, scores and the reason it made a decision.
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
@@ -50,6 +51,12 @@ class EmotionResult(BaseModel):
     intensity: float = Field(default=0.0, ge=0.0, le=1.0)
     backend: str = "unknown"
     latency_ms: float = 0.0
+    current_labels: list[EmotionScore] = Field(default_factory=list)
+    inferred_labels: list[EmotionScore] = Field(default_factory=list)
+    historical_emotions: list[str] = Field(default_factory=list)
+    emotional_trajectory: str = "stable"
+    inferred: bool = False
+    inferred_from: str = ""
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -122,6 +129,9 @@ class IntentResult(BaseModel):
     semantic_finish_reason: str = ""
     semantic_prompt_tokens: int = Field(default=0, ge=0)
     semantic_completion_tokens: int = Field(default=0, ge=0)
+    secondary_intents: list[str] = Field(default_factory=list)
+    hierarchical_category: str = "general"
+    needs_clarification: bool = False
 
 
 # ---------------------------------------------------------------------- safety
@@ -285,6 +295,78 @@ class RetrievalTrace(BaseModel):
         return [item.verse_id for item in self.results]
 
 
+# ---------------------------------------------------------------------- topics
+class TopicStatus(str, Enum):
+    ACTIVE = "active"
+    PAUSED = "paused"
+    RESOLVED = "resolved"
+    HISTORICAL = "historical"
+
+
+class DecisionRecord(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
+    topic_id: str
+    user_decision: str
+    source_message_id: str = ""
+    source_turn: int = 1
+    confirmed: bool = True
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
+    is_superseded: bool = False
+    superseded_by: str | None = None
+    superseded_reason: str = ""
+
+
+class QuantitativeFact(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
+    topic_id: str
+    fact: str
+    numerical_value: str = ""
+    source_turn: int = 1
+    is_correction: bool = False
+    is_superseded: bool = False
+    created_at: datetime = Field(default_factory=_utcnow)
+
+
+class QuestionStatus(BaseModel):
+    question: str
+    topic_id: str = ""
+    source_turn: int = 1
+    resolved: bool = False
+    resolved_turn: int | None = None
+    answer_summary: str = ""
+
+
+class TopicRecord(BaseModel):
+    topic_id: str
+    name: str
+    category: str
+    status: TopicStatus = TopicStatus.ACTIVE
+    user_facts: list[str] = Field(default_factory=list)
+    user_emotions: list[str] = Field(default_factory=list)
+    inferred_emotions: list[str] = Field(default_factory=list)
+    user_decisions: list[str] = Field(default_factory=list)
+    assistant_recommendations: list[str] = Field(default_factory=list)
+    decisions: list[DecisionRecord] = Field(default_factory=list)
+    quantitative_facts: list[QuantitativeFact] = Field(default_factory=list)
+    turn_introduced: int = 1
+    last_active_turn: int = 1
+
+
+class TopicContext(BaseModel):
+    active_topics: list[TopicRecord] = Field(default_factory=list)
+    paused_topics: list[TopicRecord] = Field(default_factory=list)
+    resolved_topics: list[TopicRecord] = Field(default_factory=list)
+    decision_ledger: list[DecisionRecord] = Field(default_factory=list)
+    quantitative_facts: list[QuantitativeFact] = Field(default_factory=list)
+    questions: list[QuestionStatus] = Field(default_factory=list)
+    unanswered_questions: list[str] = Field(default_factory=list)
+    resolved_questions: list[str] = Field(default_factory=list)
+    unconfirmed_assumptions: list[str] = Field(default_factory=list)
+    active_topic_id: str | None = None
+    is_multi_topic: bool = False
+
+
 # ---------------------------------------------------------------------- memory
 class MemoryTrace(BaseModel):
     """What stage 4 actually put into the generation prompt.
@@ -434,6 +516,9 @@ class GuidanceResult(BaseModel):
     stages_run: list[str] = Field(default_factory=list)
     total_latency_ms: float = 0.0
     created_at: datetime = Field(default_factory=_utcnow)
+    scripture_strategy: str = "hybrid"
+    active_topics: list[str] = Field(default_factory=list)
+    is_multi_topic: bool = False
 
     @property
     def citations(self) -> list[str]:
