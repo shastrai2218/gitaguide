@@ -80,6 +80,7 @@ from app.pipeline.schemas import (
     RouteTrace,
     UserTurn,
 )
+from app.pipeline.strategy import ScriptureStrategy, resolve_strategy
 from app.pipeline.tiers import tier_for
 
 logger = logging.getLogger(__name__)
@@ -228,7 +229,8 @@ class GuidanceOrchestrator:
         with timer(STAGE_ROUTER):
             decision: RouteDecision = await self.router.route(message, memory_context)
         stages.append(STAGE_ROUTER)
-        tier = tier_for(decision.route)
+        # 4c. strategy: determine whether scripture is relevant, or if practical/general assistance is needed
+        strategy, tier = resolve_strategy(message, decision.route, intent, memory_context)
 
         # 5. retrieval, now conditional: a greeting gets no verse. The tier
         # decides (app.pipeline.tiers), and it also carries the word budget
@@ -322,6 +324,9 @@ class GuidanceOrchestrator:
             memory_summary=summary or memory_context.summary,
             stages_run=stages,
             total_latency_ms=round((time.perf_counter() - started) * 1000, 2),
+            scripture_strategy=strategy.value,
+            active_topics=[t.name for t in (memory_context.topic_context.active_topics if memory_context.topic_context else [])],
+            is_multi_topic=bool(memory_context.topic_context and memory_context.topic_context.is_multi_topic),
         )
 
     # ------------------------------------------------------------- helpers
@@ -507,5 +512,8 @@ def build_orchestrator(
         memory=ConversationMemory(repository=repository, llm=llm, settings=settings),
         repository=repository,
         settings=settings,
-        router=ConversationRouter(llm=build_router_llm(settings), settings=settings),
+        router=ConversationRouter(
+            llm=llm if (llm is not None and getattr(llm, "is_fake", False)) else build_router_llm(settings),
+            settings=settings,
+        ),
     )

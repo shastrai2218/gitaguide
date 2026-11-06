@@ -1892,6 +1892,27 @@ textarea {
   border-color: #d1c6ad;
 }
 
+.practice-card-header {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.practice-card-dismiss {
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  transition: color 150ms var(--ease-out);
+}
+
+.practice-card-dismiss:hover {
+  color: var(--ink);
+}
+
 .practice-card-toggle {
   width: 100%;
   display: flex;

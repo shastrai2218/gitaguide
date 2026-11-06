@@ -166,6 +166,7 @@ function normaliseTurn(body) {
     messageId: typeof body.message_id === 'string' ? body.message_id : null,
     reply: typeof body.reply === 'string' ? body.reply : '',
     blocked,
+    showPractice: Boolean(body?.show_practice),
     emotion: {
       label: emotion.label ?? null,
       score: typeof emotion.score === 'number' ? emotion.score : null,
@@ -598,6 +599,7 @@ async function postChatMock(sessionId, message, signal) {
         + 'how commentary sits against the marigold rule, and how the verse '
         + 'leaves below break the column.',
     blocked: crisis,
+    show_practice: !crisis,
     emotion: { label: crisis ? 'sadness' : 'annoyance', score: crisis ? 0.91 : 0.62 },
     intent: {
       label: crisis ? 'crisis' : 'workplace_conflict',

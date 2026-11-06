@@ -56,7 +56,7 @@ export default function AssistantTurn({ turn, onRegenerate, busy }) {
       </div>
 
       {/* Practical micro-reflection card tailored to the emotional state */}
-      {!turn.blocked && (
+      {!turn.blocked && turn.showPractice && (
         <PracticeCard emotion={turn.emotion} />
       )}
 

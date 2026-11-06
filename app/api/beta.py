@@ -146,6 +146,7 @@ class BetaChatResponse(BaseModel):
     message_id: str = ""
     reply: str
     blocked: bool = False
+    show_practice: bool = False
     emotion: BetaEmotion = Field(default_factory=BetaEmotion)
     intent: BetaIntent = Field(default_factory=BetaIntent)
     citations: list[BetaCitation] = Field(default_factory=list)
@@ -403,10 +404,17 @@ async def beta_chat(
         await orchestrator.repository.claim_session(result.session_id, current_user_id)
 
     generation = result.generation
+    show_practice = (
+        not result.crisis
+        and not result.output_safety.blocked
+        and result.route.route not in {"greeting", "ack_or_close", "meta"}
+        and (result.emotion.dominant != "neutral" and result.emotion.intensity >= 0.35)
+    )
     return BetaChatResponse(
         message_id=result.message_id,
         reply=result.answer,
         blocked=result.crisis,
+        show_practice=show_practice,
         emotion=BetaEmotion(
             label=result.emotion.dominant, score=result.emotion.dominant_score
         ),

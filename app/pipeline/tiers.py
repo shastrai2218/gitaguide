@@ -340,7 +340,7 @@ Shape:
 
 - If they asked a direct scripture question or asked where a teaching is found, answer it directly in the first sentence with the verse ID and its translation.
 
-- If they described a dilemma or personal struggle, open conversationally with the key insight—avoid robotic therapy clichés like 'I hear you' or 'It sounds like'.
+- If they described a dilemma or personal struggle, open conversationally with the core takeaway first—avoid robotic therapy clichés like 'I hear you' or 'It sounds like'.
 
 - Then three or four sentences explaining the core philosophical meaning of the verse before connecting it to everyday conduct in concrete terms. Name at most two verses by id.
 
@@ -361,6 +361,35 @@ answer twice as long and no more useful. Say what the verse means in your own wo
 )
 
 
+
+
+PRACTICAL_GUIDANCE_TIER = ReplyTier(
+    route=Route.GUIDANCE,
+    retrieves=False,
+    max_verses=0,
+    min_words=30,
+    max_words=120,
+    guard_floor=10,
+    instruction="""They need practical guidance, emotional listening, or clarification across active topics without quoting scripture.
+
+- Acknowledge their situation with warm, thoughtful empathy—avoid robotic clichés like 'I hear you'.
+- If multiple topics exist in conversation context, acknowledge both or ask gently which one they want to address first.
+- Offer 1 or 2 concrete, practical steps or perspectives.
+- Do NOT cite a verse, quote Sanskrit, or force philosophical lectures into this reply. Answering with clear human practical reasoning is correct.""",
+)
+
+GENERAL_ASSISTANCE_TIER = ReplyTier(
+    route=Route.GUIDANCE,
+    retrieves=False,
+    max_verses=0,
+    min_words=30,
+    max_words=120,
+    guard_floor=10,
+    instruction="""They asked an everyday assistance, productivity, or reasoning question.
+
+- Answer directly, clearly and practically in a structured manner.
+- Do NOT cite a verse id and do not force scripture into this reply. Answering directly without scripture is correct.""",
+)
 
 OUT_OF_SCOPE_TIER = ReplyTier(
 
